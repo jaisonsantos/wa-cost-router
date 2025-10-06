@@ -1,3 +1,4 @@
+[Docs](../overview/README.md) › [Segurança](./SECURITY.md)
 # Segurança & Hardening
 
 ## Estado Atual
@@ -23,7 +24,7 @@
 5. **Rate limiting**
    - Middleware com Redis limitando requests por org e por rota crítica.
 6. **Secrets & Config**
-   - Enforce override de `JWT_SECRET`/`APP_SECRET_KEY` em produção.
+   - Enforce override de `JWT_SECRET`/`APP_SECRET_KEY` em produção (ver backlog P1 "enforce secret strength").
    - TLS obrigatório; CORS configurável via env.
 
 ## Ações Futuras
@@ -39,3 +40,9 @@
 - **Idempotência**: enviar mesma chave duas vezes (ver job único).
 - **Injection**: payload malicioso em `variables` (validar escapes).
 - **Rate limit**: stress `POST /messages/send` após implementar limitação.
+
+## Veja também
+
+- [Operações & runbooks](../operations/OPERATIONS.md)
+- [Backlog priorizado](../backlog/README.md)
+- [Coleção Postman](../postman/README.md)

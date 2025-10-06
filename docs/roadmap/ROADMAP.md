@@ -1,3 +1,4 @@
+[Docs](../overview/README.md) › [Roadmap](./ROADMAP.md)
 # Roadmap
 
 ## Fase 1 – Hardening (Mês 1)
@@ -32,3 +33,9 @@
 - Migration base (pré-Fase 1).
 - Time jurídico para LGPD/contratos (Fase 3).
 - Contas de teste Stripe e provedores WhatsApp.
+
+## Veja também
+
+- [Backlog priorizado](../backlog/README.md)
+- [Pricing & Billing](../pricing/PRICING_BILLING.md)
+- [Segurança](../security/SECURITY.md)

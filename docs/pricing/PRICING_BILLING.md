@@ -1,3 +1,4 @@
+[Docs](../overview/README.md) › [Pricing](./PRICING_BILLING.md)
 # Pricing & Billing (Stripe)
 
 ## Objetivo
@@ -37,3 +38,9 @@ Implementar cobrança recorrente com medição de uso (mensagens enviadas) e imp
 - Lidar com retries de webhook (idempotência com `event_id`).
 - Sincronizar status do cliente (bloquear envios em caso de inadimplência).
 - Armazenar `price_table_version` utilizado para auditorias de cobrança.
+
+## Veja também
+
+- [Roadmap](../roadmap/ROADMAP.md)
+- [Backlog priorizado](../backlog/README.md)
+- [Referência da API](../api/API_REFERENCE.md)

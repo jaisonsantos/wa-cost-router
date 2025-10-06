@@ -21,14 +21,14 @@ def seed_providers():
                 type="whatsapp",
                 base_url="https://waba.360dialog.io/v1",
                 status="active",
-                metadata={"description": "360Dialog WhatsApp Business API"}
+                meta={"description": "360Dialog WhatsApp Business API"}
             ),
             Provider(
                 name="gupshup",
                 type="whatsapp",
                 base_url="https://api.gupshup.io/sm/api/v1",
                 status="active",
-                metadata={"description": "Gupshup WhatsApp Business API"}
+                meta={"description": "Gupshup WhatsApp Business API"}
             )
         ]
         

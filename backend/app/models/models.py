@@ -59,14 +59,14 @@ class WAConnection(Base):
 
 class WATemplate(Base):
     __tablename__ = "wa_template"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False)
     name = Column(String, nullable=False)
     category = Column(String, nullable=False)
     language = Column(String, nullable=False)
     status = Column(String, nullable=False)
-    metadata = Column(JSON)
+    meta = Column("metadata", JSON)
 
 class MessageEvent(Base):
     __tablename__ = "message_event"
@@ -152,14 +152,14 @@ class AttemptStatusEnum(str, enum.Enum):
 
 class Provider(Base):
     __tablename__ = "provider"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
     type = Column(String, nullable=False)
     status = Column(String, default="active")
     base_url = Column(String)
-    metadata = Column(JSON)
+    meta = Column("metadata", JSON)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     __table_args__ = (UniqueConstraint('org_id', 'name', name='_org_provider_name_uc'),)
