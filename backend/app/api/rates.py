@@ -20,7 +20,10 @@ class RateResponse(BaseModel):
     currency: str
 
 @router.get("/", response_model=list[RateResponse])
-def list_rates(db: Session = Depends(get_db)):
+def list_rates(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     rates = db.query(RateCard).order_by(RateCard.effective_from.desc()).limit(100).all()
     return [
         RateResponse(

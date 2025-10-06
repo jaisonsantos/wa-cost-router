@@ -36,16 +36,31 @@ class RoutingEngine:
                 # Regra aplicável, extrair ação
                 provider_id = rule.actions_json.get("primary_provider")
                 fallback_chain = rule.actions_json.get("fallback_chain", [])
-                
+
                 if provider_id:
-                    estimated_cost = self._get_estimated_cost(provider_id, country_iso, category)
-                    
+                    provider = self._get_provider(provider_id)
+                    if not provider:
+                        logger.warning(
+                            "Routing rule %s references provider %s not available for org %s",
+                            rule.id,
+                            provider_id,
+                            self.org_id,
+                        )
+                        continue
+
+                    estimated_cost = self._get_estimated_cost(provider, country_iso, category)
+                    valid_fallbacks = [
+                        fb
+                        for fb in fallback_chain
+                        if self._get_provider(fb) is not None
+                    ]
+
                     return {
-                        "provider_id": provider_id,
-                        "fallback_chain": fallback_chain,
+                        "provider_id": str(provider.id),
+                        "fallback_chain": valid_fallbacks,
                         "estimated_cost": estimated_cost,
                         "rule_id": str(rule.id),
-                        "rule_name": rule.name
+                        "rule_name": rule.name,
                     }
         
         # 3. Fallback: escolher provedor mais barato
@@ -87,30 +102,46 @@ class RoutingEngine:
         
         return True
     
-    def _get_estimated_cost(self, provider_id: str, country_iso: str, category: str) -> int:
+    def _get_provider(self, provider_id: str) -> Optional[Provider]:
+        return (
+            self.db.query(Provider)
+            .filter(
+                Provider.id == provider_id,
+                Provider.org_id == self.org_id,
+                Provider.status == "active",
+            )
+            .first()
+        )
+
+    def _get_estimated_cost(self, provider: Provider, country_iso: str, category: str) -> int:
         """Busca custo estimado para o provedor"""
-        provider = self.db.query(Provider).filter(Provider.id == provider_id).first()
-        if not provider:
-            return 0
-        
-        # Buscar no RateCard
-        rate = self.db.query(RateCard).filter(
-            RateCard.source == provider.name,
-            RateCard.country_iso == country_iso,
-            RateCard.category == category
-        ).order_by(RateCard.effective_from.desc()).first()
-        
+        rate = (
+            self.db.query(RateCard)
+            .filter(
+                RateCard.source == provider.name,
+                RateCard.country_iso == country_iso,
+                RateCard.category == category,
+            )
+            .order_by(RateCard.effective_from.desc())
+            .first()
+        )
+
         return rate.unit_cost_minor if rate else 0
     
     def _find_cheapest_provider(self, country_iso: str, category: str) -> Optional[Dict[str, Any]]:
         """Encontra o provedor mais barato para país/categoria"""
-        rates = self.db.query(RateCard, Provider).join(
-            Provider, RateCard.source == Provider.name
-        ).filter(
-            RateCard.country_iso == country_iso,
-            RateCard.category == category,
-            Provider.status == "active"
-        ).order_by(RateCard.unit_cost_minor.asc()).first()
+        rates = (
+            self.db.query(RateCard, Provider)
+            .join(Provider, RateCard.source == Provider.name)
+            .filter(
+                Provider.org_id == self.org_id,
+                RateCard.country_iso == country_iso,
+                RateCard.category == category,
+                Provider.status == "active",
+            )
+            .order_by(RateCard.unit_cost_minor.asc())
+            .first()
+        )
         
         if rates:
             rate, provider = rates
@@ -123,9 +154,17 @@ class RoutingEngine:
     
     def calculate_baseline_cost(self, country_iso: str, category: str) -> int:
         """Calcula custo baseline (mais caro) para economia"""
-        rates = self.db.query(RateCard).filter(
-            RateCard.country_iso == country_iso,
-            RateCard.category == category
-        ).order_by(RateCard.unit_cost_minor.desc()).first()
-        
-        return rates.unit_cost_minor if rates else 0
+        rate = (
+            self.db.query(RateCard)
+            .join(Provider, RateCard.source == Provider.name)
+            .filter(
+                Provider.org_id == self.org_id,
+                RateCard.country_iso == country_iso,
+                RateCard.category == category,
+                Provider.status == "active",
+            )
+            .order_by(RateCard.unit_cost_minor.desc())
+            .first()
+        )
+
+        return rate.unit_cost_minor if rate else 0

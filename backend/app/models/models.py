@@ -1,4 +1,15 @@
-from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, JSON, Enum, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    String,
+    Boolean,
+    Integer,
+    DateTime,
+    ForeignKey,
+    JSON,
+    Enum,
+    UniqueConstraint,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
@@ -155,19 +166,19 @@ class Provider(Base):
 
 class ProviderCredential(Base):
     __tablename__ = "provider_credential"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False)
     provider_id = Column(UUID(as_uuid=True), ForeignKey("provider.id"), nullable=False)
-    credentials_encrypted = Column(JSON, nullable=False)
+    credentials_encrypted = Column(Text, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     __table_args__ = (UniqueConstraint('org_id', 'provider_id', name='_org_provider_uc'),)
 
 class MessageJob(Base):
     __tablename__ = "message_job"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
     idempotency_key = Column(String, nullable=False, index=True)
@@ -181,8 +192,6 @@ class MessageJob(Base):
     
     __table_args__ = (UniqueConstraint('org_id', 'idempotency_key', name='_org_idempotency_uc'),)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
-    __table_args__ = (UniqueConstraint('org_id', 'idempotency_key', name='_org_idemp_uc'),)
 
 class DeliveryAttempt(Base):
     __tablename__ = "delivery_attempt"
