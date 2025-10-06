@@ -1,0 +1,597 @@
+{
+  "info": {
+    "name": "WA Cost Router",
+    "_postman_id": "4f6d5d8b-1d2c-4a8d-9b1e-0c1234567890",
+    "description": "Coleção completa da API WA Cost Router para desenvolvimento local.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Auth - Register",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const uniqueEmail = `postman+${Date.now()}@demo.local`;",
+                  "pm.environment.set('email', uniqueEmail);",
+                  "pm.environment.unset('token');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
+                  "if (data.access_token) { pm.environment.set('token', data.access_token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"org_name\": \"Postman Org\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Auth - Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
+                  "if (data.access_token) { pm.environment.set('token', data.access_token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Organization",
+      "item": [
+        {
+          "name": "Organization - Current",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
+                  "if (data.id) { pm.environment.set('org_id', data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/orgs/current",
+              "host": ["{{base_url}}"],
+              "path": ["orgs", "current"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Providers",
+      "item": [
+        {
+          "name": "Providers - List",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/providers",
+              "host": ["{{base_url}}"],
+              "path": ["providers"]
+            }
+          }
+        },
+        {
+          "name": "Providers - Create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
+                  "if (data.id) { pm.environment.set('provider_id', data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"360dialog\",\n  \"type\": \"whatsapp\",\n  \"base_url\": \"https://waba.360dialog.io\",\n  \"metadata\": {\n    \"region\": \"eu\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/providers",
+              "host": ["{{base_url}}"],
+              "path": ["providers"]
+            }
+          }
+        },
+        {
+          "name": "Providers - Save Credentials",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider_id\": \"{{provider_id}}\",\n  \"credentials\": {\n    \"access_token\": \"fake-360-token\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/providers/credentials",
+              "host": ["{{base_url}}"],
+              "path": ["providers", "credentials"]
+            }
+          }
+        },
+        {
+          "name": "Providers - Health Check",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/providers/{{provider_id}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["providers", "{{provider_id}}", "health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rules",
+      "item": [
+        {
+          "name": "Rules - List",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/rules",
+              "host": ["{{base_url}}"],
+              "path": ["rules"]
+            }
+          }
+        },
+        {
+          "name": "Rules - Create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
+                  "if (data.id) { pm.environment.set('rule_id', data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Route BR Marketing\",\n  \"is_enabled\": true,\n  \"conditions\": [\n    {\n      \"type\": \"country\",\n      \"values\": [\"BR\"]\n    },\n    {\n      \"type\": \"category\",\n      \"values\": [\"MARKETING\"]\n    }\n  ],\n  \"actions\": {\n    \"primary_provider\": \"{{provider_id}}\",\n    \"fallback_chain\": []\n  },\n  \"priority\": 10\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rules",
+              "host": ["{{base_url}}"],
+              "path": ["rules"]
+            }
+          }
+        },
+        {
+          "name": "Rules - Update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Route BR Marketing\",\n  \"is_enabled\": true,\n  \"conditions\": [\n    {\n      \"type\": \"country\",\n      \"values\": [\"BR\"]\n    },\n    {\n      \"type\": \"category\",\n      \"values\": [\"MARKETING\"]\n    }\n  ],\n  \"actions\": {\n    \"primary_provider\": \"{{provider_id}}\",\n    \"fallback_chain\": []\n  },\n  \"priority\": 20\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rules/{{rule_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["rules", "{{rule_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Rules - Toggle (disable)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
+                  "pm.expect(data.is_enabled).to.eql(false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/rules/{{rule_id}}/toggle",
+              "host": ["{{base_url}}"],
+              "path": ["rules", "{{rule_id}}", "toggle"]
+            }
+          }
+        },
+        {
+          "name": "Rules - Toggle (enable)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
+                  "pm.expect(data.is_enabled).to.eql(true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/rules/{{rule_id}}/toggle",
+              "host": ["{{base_url}}"],
+              "path": ["rules", "{{rule_id}}", "toggle"]
+            }
+          }
+        },
+        {
+          "name": "Rules - Simulate Advanced",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"countries\": [\"BR\"],\n  \"volumes\": {\n    \"BR\": 100\n  },\n  \"category\": \"MARKETING\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rules/simulate-advanced",
+              "host": ["{{base_url}}"],
+              "path": ["rules", "simulate-advanced"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "Messages - Send",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
+                  "if (data.job_id) { pm.environment.set('job_id', data.job_id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"postman-{{$timestamp}}\",\n  \"to_number\": \"+5511999999999\",\n  \"template_id\": \"welcome\",\n  \"template_category\": \"MARKETING\",\n  \"variables\": {\n    \"body_params\": [\"John\"]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/messages/send",
+              "host": ["{{base_url}}"],
+              "path": ["messages", "send"]
+            }
+          }
+        },
+        {
+          "name": "Messages - Jobs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/messages/jobs",
+              "host": ["{{base_url}}"],
+              "path": ["messages", "jobs"]
+            }
+          }
+        },
+        {
+          "name": "Messages - Job Detail",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/messages/jobs/{{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["messages", "jobs", "{{job_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rates",
+      "item": [
+        {
+          "name": "Rates - List",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/rates",
+              "host": ["{{base_url}}"],
+              "path": ["rates"]
+            }
+          }
+        },
+        {
+          "name": "Rates - Import CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "multipart/form-data"}
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "{{rates_csv_path}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/rates/import_csv",
+              "host": ["{{base_url}}"],
+              "path": ["rates", "import_csv"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Reports - Summary",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reports/summary?from=2024-01-01T00:00:00Z&to=2025-01-01T00:00:00Z",
+              "host": ["{{base_url}}"],
+              "path": ["reports", "summary"],
+              "query": [
+                {"key": "from", "value": "2024-01-01T00:00:00Z"},
+                {"key": "to", "value": "2025-01-01T00:00:00Z"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reports - Dashboard Metrics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reports/dashboard-metrics?days=7",
+              "host": ["{{base_url}}"],
+              "path": ["reports", "dashboard-metrics"],
+              "query": [
+                {"key": "days", "value": "7"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reports - Provider Metrics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reports/provider-metrics?days=7",
+              "host": ["{{base_url}}"],
+              "path": ["reports", "provider-metrics"],
+              "query": [
+                {"key": "days", "value": "7"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Integrations",
+      "item": [
+        {
+          "name": "WA - Create Connection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"business_id\": \"{{wa_business_id}}\",\n  \"phone_id\": \"{{wa_phone_id}}\",\n  \"access_token\": \"{{wa_access_token}}\",\n  \"webhook_verify_token\": \"{{wa_verify_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/integrations/wa/connections",
+              "host": ["{{base_url}}"],
+              "path": ["integrations", "wa", "connections"]
+            }
+          }
+        },
+        {
+          "name": "WA - Webhook Verify",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/integrations/wa/webhook?hub.mode=subscribe&hub.verify_token={{wa_verify_token}}&hub.challenge=12345",
+              "host": ["{{base_url}}"],
+              "path": ["integrations", "wa", "webhook"],
+              "query": [
+                {"key": "hub.mode", "value": "subscribe"},
+                {"key": "hub.verify_token", "value": "{{wa_verify_token}}"},
+                {"key": "hub.challenge", "value": "12345"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "WA - Webhook Receive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entry\": [\n    {\n      \"changes\": [\n        {\n          \"value\": {\n            \"messages\": [\n              {\n                \"id\": \"msg-postman-{{$timestamp}}\",\n                \"from\": \"{{wa_phone_id}}\",\n                \"text\": \"hello\"\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/integrations/wa/webhook",
+              "host": ["{{base_url}}"],
+              "path": ["integrations", "wa", "webhook"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Admin - Health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/admin/health",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "health"]
+            }
+          }
+        },
+        {
+          "name": "Admin - Metrics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/admin/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "metrics"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cleanup",
+      "item": [
+        {
+          "name": "Providers - Delete Credentials",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/providers/{{provider_id}}/credentials",
+              "host": ["{{base_url}}"],
+              "path": ["providers", "{{provider_id}}", "credentials"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const token = pm.environment.get('token');",
+          "if (token) {",
+          "  pm.request.headers.upsert({ key: 'Authorization', value: `Bearer ${token}` });",
+          "} else {",
+          "  pm.request.headers.remove('Authorization');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Status code is 2xx', function () {",
+          "  pm.expect(pm.response.code).to.be.within(200, 299);",
+          "});"
+        ]
+      }
+    }
+  ]
+}

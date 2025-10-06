@@ -73,7 +73,7 @@ def create_provider(
         name=data.name,
         type=data.type,
         base_url=data.base_url,
-        metadata=data.metadata
+        meta=data.metadata
     )
     db.add(provider)
     db.commit()

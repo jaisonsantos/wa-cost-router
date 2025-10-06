@@ -1,3 +1,4 @@
+[Docs](../overview/README.md) › [Arquitetura](./ARCHITECTURE.md) › Modelagem de Dados
 # Modelagem de Dados
 
 ## Principais Entidades
@@ -42,6 +43,13 @@ rate_card (global, referenciado por nome do provider)
 
 ## Observações
 
-- Migration 002 converte credenciais para texto criptografado.
-- `rate_card` deveria incluir `org_id` se houver tarifas específicas por tenant.
-- `provider_response` e `variables` precisam de sanitização/anonimização.
+- `000_base_schema` cria todas as tabelas atuais; consulte [guia de migrations](../operations/MIGRATIONS.md) antes de alterar o schema.
+- Migration `002_encrypt_provider_credentials` converte credenciais para texto criptografado com Fernet.
+- `rate_card` continua global; backlog P2 cobre escopo por organização.
+- `provider_response` e `variables` exigem sanitização/anonimização (ver backlog P1 sanitização PII).
+
+## Veja também
+
+- [Arquitetura de alto nível](./ARCHITECTURE.md)
+- [Guia de migrations](../operations/MIGRATIONS.md)
+- [Backlog priorizado](../backlog/README.md)

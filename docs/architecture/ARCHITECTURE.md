@@ -1,3 +1,4 @@
+[Docs](../overview/README.md) › [Arquitetura](./ARCHITECTURE.md)
 # Arquitetura
 
 ```
@@ -22,3 +23,9 @@ Fluxo de envio:
 2. `RoutingEngine.select_provider()` -> `ProviderCredential` -> `ProviderConnector.send_message()`.
 3. `DeliveryAttempt` + `CostRecord`.
 4. Job atualizado (delivered/delivered_with_fallback/failed_final).
+
+## Veja também
+
+- [Modelagem de dados](./DATA_MODEL.md)
+- [Referência da API](../api/API_REFERENCE.md)
+- [Operações](../operations/OPERATIONS.md)

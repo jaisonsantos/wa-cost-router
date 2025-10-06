@@ -1,0 +1,43 @@
+---
+title: "Alinhar contratos API ↔ Frontend"
+type: feature
+prio: P3
+estimate: "3d"
+owner: "unassigned"
+depends_on: []
+---
+
+## Contexto
+
+Alguns endpoints (`/messages/jobs`, `/rules/simulate-advanced`) retornam campos que divergem do esperado pela SPA (ver nota em [AGENTE](../overview/AGENTE.md)). Precisamos consolidar contratos e documentar breaking changes.
+
+## Escopo
+
+- Mapear payloads consumidos pelo frontend (`src/hooks/useApi.ts`) e compará-los com respostas reais.
+- Ajustar serializers ou normalizações no frontend para garantir compatibilidade.
+- Criar documentação de contratos (OpenAPI/TypeScript types compartilhados).
+- Atualizar coleção Postman com exemplos que reflitam contratos finais.
+
+## Acceptance Criteria
+
+- Não há mais `TODO`/comentários no frontend sobre contratos divergentes.
+- Tests de integração/Storybook validam fluxos principais com dados reais.
+- Documentação em [API Reference](../api/API_REFERENCE.md) destaca campos críticos para o FE.
+
+## Subtasks
+
+- [ ] Levantar endpoints críticos e campos usados no frontend (`src/hooks/useApi.ts`).
+- [ ] Ajustar responses ou adaptadores no backend para refletir o contrato combinado.
+- [ ] Atualizar tipos TypeScript no frontend (interfaces/models).
+- [ ] Revisar Postman e docs para garantir consistência.
+
+## Referências
+
+- [API Reference](../api/API_REFERENCE.md)
+- [Visão geral](../overview/README.md)
+- Código frontend: [`src/hooks/useApi.ts`](../../src/hooks/useApi.ts)
+
+## Out of Scope
+
+- Refatoração completa do frontend (layout/UX) – foco em contratos de dados.
+- Implementação de schema registry automatizado (avaliar futuramente).

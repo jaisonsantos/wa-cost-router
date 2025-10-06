@@ -1,3 +1,4 @@
+[Docs](./README.md) › AGENTE
 # AGENTE.md
 
 ## 1. Resumo Executivo
@@ -864,3 +865,7 @@ Implementar cobrança recorrente com medição de uso (mensagens enviadas) e imp
 ---
 
 *Fim do relatório do agente técnico.*
+
+## Veja também
+- [Visão geral](./README.md)
+- [Backlog priorizado](../backlog/README.md)
