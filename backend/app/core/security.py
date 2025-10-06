@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-from passlib.handlers import bcrypt as passlib_bcrypt
 from cryptography.fernet import Fernet
 import base64
 import hashlib
@@ -10,6 +9,19 @@ from typing import Any, Dict
 from app.core.config import settings
 from importlib import metadata
 from types import SimpleNamespace
+import bcrypt as pyca_bcrypt
+
+
+if not hasattr(pyca_bcrypt, "__about__"):
+    version = getattr(pyca_bcrypt, "__version__", None)
+    if version is None:
+        try:
+            version = metadata.version("bcrypt")
+        except metadata.PackageNotFoundError:  # pragma: no cover - defensive
+            version = None
+    pyca_bcrypt.__about__ = SimpleNamespace(__version__=version)
+
+from passlib.handlers import bcrypt as passlib_bcrypt
 
 # passlib 1.7.x expects pyca/bcrypt to expose a ``__about__`` module attribute
 # and silently truncates long passwords when probing for the historic wraparound
