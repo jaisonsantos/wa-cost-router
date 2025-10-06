@@ -17,7 +17,7 @@ depends_on = None
 
 
 def upgrade():
-    role_enum = sa.Enum("owner", "member", name="roleenum")
+    role_enum = sa.Enum("owner", "member", name="roleenum", create_type=False)
     job_status_enum = sa.Enum(
         "pending",
         "processing",
@@ -26,8 +26,15 @@ def upgrade():
         "failed",
         "failed_final",
         name="jobstatusenum",
+        create_type=False,
     )
-    attempt_status_enum = sa.Enum("success", "failed", "timeout", name="attemptstatusenum")
+    attempt_status_enum = sa.Enum(
+        "success",
+        "failed",
+        "timeout",
+        name="attemptstatusenum",
+        create_type=False,
+    )
 
     role_enum.create(op.get_bind(), checkfirst=True)
     job_status_enum.create(op.get_bind(), checkfirst=True)
@@ -349,7 +356,13 @@ def downgrade():
     op.drop_table("user")
     op.drop_table("organization")
 
-    attempt_status_enum = sa.Enum("success", "failed", "timeout", name="attemptstatusenum")
+    attempt_status_enum = sa.Enum(
+        "success",
+        "failed",
+        "timeout",
+        name="attemptstatusenum",
+        create_type=False,
+    )
     job_status_enum = sa.Enum(
         "pending",
         "processing",
@@ -358,8 +371,9 @@ def downgrade():
         "failed",
         "failed_final",
         name="jobstatusenum",
+        create_type=False,
     )
-    role_enum = sa.Enum("owner", "member", name="roleenum")
+    role_enum = sa.Enum("owner", "member", name="roleenum", create_type=False)
 
     attempt_status_enum.drop(op.get_bind(), checkfirst=True)
     job_status_enum.drop(op.get_bind(), checkfirst=True)
