@@ -16,6 +16,27 @@ branch_labels = None
 depends_on = None
 
 
+def _create_enum_if_not_exists(enum_type: sa.Enum) -> None:
+    enum_name = enum_type.name
+    enum_values = ", ".join(f"'{value}'" for value in enum_type.enums)
+
+    op.execute(
+        sa.text(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_type WHERE typname = :enum_name
+                ) THEN
+                    EXECUTE format('CREATE TYPE %I AS ENUM (%s)', :enum_name, :enum_values);
+                END IF;
+            END
+            $$;
+            """
+        ).bindparams(enum_name=enum_name, enum_values=enum_values)
+    )
+
+
 def upgrade():
     role_enum = sa.Enum("owner", "member", name="roleenum", create_type=False)
     job_status_enum = sa.Enum(
@@ -36,9 +57,9 @@ def upgrade():
         create_type=False,
     )
 
-    role_enum.create(op.get_bind(), checkfirst=True)
-    job_status_enum.create(op.get_bind(), checkfirst=True)
-    attempt_status_enum.create(op.get_bind(), checkfirst=True)
+    _create_enum_if_not_exists(role_enum)
+    _create_enum_if_not_exists(job_status_enum)
+    _create_enum_if_not_exists(attempt_status_enum)
 
     op.create_table(
         "organization",
@@ -356,25 +377,5 @@ def downgrade():
     op.drop_table("user")
     op.drop_table("organization")
 
-    attempt_status_enum = sa.Enum(
-        "success",
-        "failed",
-        "timeout",
-        name="attemptstatusenum",
-        create_type=False,
-    )
-    job_status_enum = sa.Enum(
-        "pending",
-        "processing",
-        "delivered",
-        "delivered_with_fallback",
-        "failed",
-        "failed_final",
-        name="jobstatusenum",
-        create_type=False,
-    )
-    role_enum = sa.Enum("owner", "member", name="roleenum", create_type=False)
-
-    attempt_status_enum.drop(op.get_bind(), checkfirst=True)
-    job_status_enum.drop(op.get_bind(), checkfirst=True)
-    role_enum.drop(op.get_bind(), checkfirst=True)
+    for enum_name in ("attemptstatusenum", "jobstatusenum", "roleenum"):
+        op.execute(sa.text(f"DROP TYPE IF EXISTS {enum_name};"))
