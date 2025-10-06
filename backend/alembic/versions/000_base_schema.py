@@ -16,7 +16,7 @@ branch_labels = None
 depends_on = None
 
 
-def _create_enum_if_not_exists(enum_type: sa.Enum) -> None:
+def _create_enum_if_not_exists(enum_type: postgresql.ENUM) -> None:
     enum_name = enum_type.name
     enum_values = ", ".join(f"'{value}'" for value in enum_type.enums)
 
@@ -38,8 +38,8 @@ def _create_enum_if_not_exists(enum_type: sa.Enum) -> None:
 
 
 def upgrade():
-    role_enum = sa.Enum("owner", "member", name="roleenum", create_type=False)
-    job_status_enum = sa.Enum(
+    role_enum = postgresql.ENUM("owner", "member", name="roleenum", create_type=False)
+    job_status_enum = postgresql.ENUM(
         "pending",
         "processing",
         "delivered",
@@ -49,7 +49,7 @@ def upgrade():
         name="jobstatusenum",
         create_type=False,
     )
-    attempt_status_enum = sa.Enum(
+    attempt_status_enum = postgresql.ENUM(
         "success",
         "failed",
         "timeout",
