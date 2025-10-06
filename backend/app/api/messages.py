@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 from app.core.database import get_db
@@ -10,6 +11,7 @@ from app.models.models import (
 )
 from app.services.routing_engine import RoutingEngine
 from app.services.provider_connectors import get_connector
+from app.core.security import decrypt_credentials
 import logging
 import asyncio
 
@@ -127,21 +129,30 @@ async def _attempt_delivery_with_fallback(
             ProviderCredential.provider_id == provider_id,
             ProviderCredential.is_active == True
         ).first()
-        
+
         if not credential:
             logger.warning(f"No credentials for provider {provider_id}")
             continue
-        
-        provider = db.query(Provider).filter(Provider.id == provider_id).first()
+
+        provider = db.query(Provider).filter(
+            Provider.id == provider_id,
+            Provider.org_id == org_id,
+        ).first()
         if not provider:
             continue
-        
+
+        try:
+            credentials_payload = decrypt_credentials(credential.credentials_encrypted)
+        except Exception as exc:
+            logger.error(f"Invalid credentials payload for provider {provider_id}: {exc}")
+            continue
+
         # Tentar envio com retries
         for retry in range(3):
             try:
                 connector = get_connector(
                     provider.name,
-                    credential.credentials_encrypted,
+                    credentials_payload,
                     provider.base_url
                 )
                 
@@ -245,23 +256,38 @@ def list_message_jobs(
     )
     
     if status:
-        query = query.filter(MessageJob.status == status)
-    
+        try:
+            status_enum = JobStatusEnum(status)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid status filter")
+        query = query.filter(MessageJob.status == status_enum)
+
     jobs = query.order_by(MessageJob.created_at.desc()).limit(100).all()
-    
-    return {
-        "jobs": [
-            {
-                "id": str(job.id),
-                "status": job.status.value,
-                "to_number": job.to_number,
-                "template_id": job.template_id,
-                "country_iso": job.country_iso,
-                "created_at": job.created_at.isoformat()
-            }
-            for job in jobs
-        ]
-    }
+
+    job_ids = [job.id for job in jobs]
+    cost_map: Dict[str, int] = {}
+    if job_ids:
+        cost_rows = (
+            db.query(CostRecord.message_job_id, func.sum(CostRecord.price_eur))
+            .filter(CostRecord.message_job_id.in_(job_ids))
+            .group_by(CostRecord.message_job_id)
+            .all()
+        )
+        cost_map = {str(job_id): total or 0 for job_id, total in cost_rows}
+
+    return [
+        {
+            "id": str(job.id),
+            "status": job.status.value,
+            "to_number": job.to_number,
+            "template_id": job.template_id,
+            "template_category": job.template_category,
+            "country_iso": job.country_iso,
+            "created_at": job.created_at.isoformat(),
+            "total_cost_minor": cost_map.get(str(job.id)),
+        }
+        for job in jobs
+    ]
 
 @router.get("/jobs/{job_id}")
 def get_job_status(
@@ -278,23 +304,40 @@ def get_job_status(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    attempts = db.query(DeliveryAttempt).filter(
-        DeliveryAttempt.message_job_id == job.id
-    ).all()
-    
+    attempts = (
+        db.query(DeliveryAttempt, Provider)
+        .join(Provider, DeliveryAttempt.provider_id == Provider.id)
+        .filter(DeliveryAttempt.message_job_id == job.id)
+        .order_by(DeliveryAttempt.attempt_number.asc())
+        .all()
+    )
+
+    total_cost = (
+        db.query(func.sum(CostRecord.price_eur))
+        .filter(CostRecord.message_job_id == job.id)
+        .scalar()
+    )
+
     return {
         "id": str(job.id),
         "status": job.status.value,
         "to_number": job.to_number,
         "template_id": job.template_id,
+        "template_category": job.template_category,
+        "country_iso": job.country_iso,
+        "created_at": job.created_at.isoformat(),
+        "total_cost_minor": total_cost or 0,
         "attempts": [
             {
+                "id": str(a.id),
                 "attempt_number": a.attempt_number,
                 "status": a.status.value,
                 "provider_id": str(a.provider_id),
+                "provider_name": provider.name,
                 "latency_ms": a.latency_ms,
-                "error_code": a.error_code
+                "error_code": a.error_code,
+                "error_message": a.error_message,
             }
-            for a in attempts
-        ]
+            for a, provider in attempts
+        ],
     }

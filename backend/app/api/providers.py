@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.api.dependencies import get_current_user
 from app.models.models import Provider, ProviderCredential
 from app.services.provider_connectors import get_connector
+from app.core.security import encrypt_credentials, decrypt_credentials
 import logging
 
 router = APIRouter()
@@ -26,7 +27,9 @@ class ProviderResponse(BaseModel):
     name: str
     type: str
     status: str
+    is_configured: bool
     has_credentials: bool
+    avg_latency_ms: Optional[float] = None
 
 @router.get("/", response_model=List[ProviderResponse])
 def list_providers(
@@ -52,7 +55,8 @@ def list_providers(
             name=p.name,
             type=p.type,
             status=p.status,
-            has_credentials=has_creds
+            has_credentials=has_creds,
+            is_configured=has_creds,
         ))
     
     return result
@@ -91,7 +95,10 @@ def set_provider_credentials(
 ):
     """Configura credenciais do provedor para a org"""
     # Verificar se provider existe
-    provider = db.query(Provider).filter(Provider.id == data.provider_id).first()
+    provider = db.query(Provider).filter(
+        Provider.id == data.provider_id,
+        Provider.org_id == current_user["org_id"],
+    ).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
     
@@ -103,14 +110,14 @@ def set_provider_credentials(
     
     if existing:
         # Atualizar
-        existing.credentials_encrypted = data.credentials
+        existing.credentials_encrypted = encrypt_credentials(data.credentials)
         existing.is_active = True
     else:
         # Criar novo
         credential = ProviderCredential(
             org_id=current_user["org_id"],
             provider_id=data.provider_id,
-            credentials_encrypted=data.credentials
+            credentials_encrypted=encrypt_credentials(data.credentials)
         )
         db.add(credential)
     
@@ -124,7 +131,10 @@ async def check_provider_health(
     db: Session = Depends(get_db)
 ):
     """Testa conectividade com o provedor"""
-    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    provider = db.query(Provider).filter(
+        Provider.id == provider_id,
+        Provider.org_id == current_user["org_id"],
+    ).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
     
@@ -140,8 +150,8 @@ async def check_provider_health(
     try:
         connector = get_connector(
             provider.name,
-            credential.credentials_encrypted,
-            provider.base_url
+            decrypt_credentials(credential.credentials_encrypted),
+            provider.base_url,
         )
         
         health = await connector.health_check()

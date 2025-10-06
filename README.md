@@ -1,73 +1,61 @@
-# Welcome to your Lovable project
+# WA Cost Router
 
-## Project info
+> Roteamento inteligente de mensagens WhatsApp com economia de custos e métricas em tempo real.
 
-**URL**: https://lovable.dev/projects/2185dfa4-b487-4f0c-b728-88162fbccd0f
+[![Docker](https://img.shields.io/badge/Docker-ready-blue)](#quick-start) [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## How can I edit this code?
+## Quick Start
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/2185dfa4-b487-4f0c-b728-88162fbccd0f) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+git clone <repo>
+cd wa-cost-router
+cp backend/.env.example backend/.env  # preencha secrets
+docker-compose up -d --build
 ```
 
-**Edit a file directly in GitHub**
+- API: http://localhost:8000
+- Frontend: http://localhost:8080
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Endpoints Essenciais
 
-**Use GitHub Codespaces**
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| POST | `/messages/send` | Envio com idempotência e fallback |
+| GET | `/messages/jobs` | Histórico de jobs da organização |
+| GET | `/reports/dashboard-metrics` | Métricas de custo e sucesso |
+| POST | `/rules/simulate-advanced` | Simulador de economia |
+| POST | `/providers/credentials` | Configuração de provedores |
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Mais detalhes em [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md).
 
-## What technologies are used for this project?
+## Demo rápida
 
-This project is built with:
+```bash
+# Simulação
+curl -X POST http://localhost:8000/rules/simulate-advanced \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"countries":["BR"],"volumes":{"BR":1000},"category":"marketing"}'
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Envio idempotente
+curl -X POST http://localhost:8000/messages/send \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"idempotency_key":"demo-1","to_number":"+5511999999999","template_id":"welcome","template_category":"marketing","variables":{}}'
 
-## How can I deploy this project?
+# Consulta de job
+curl http://localhost:8000/messages/jobs/$JOB_ID \
+  -H "Authorization: Bearer $TOKEN"
+```
 
-Simply open [Lovable](https://lovable.dev/projects/2185dfa4-b487-4f0c-b728-88162fbccd0f) and click on Share -> Publish.
+## Documentação
 
-## Can I connect a custom domain to my Lovable project?
+- [Arquitetura](docs/ARCHITECTURE.md)
+- [Modelagem de Dados](docs/DATA_MODEL.md)
+- [Operações](docs/OPERATIONS.md)
+- [Segurança](docs/SECURITY.md)
+- [Roadmap](docs/ROADMAP.md)
 
-Yes, you can!
+## Licença
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+MIT.

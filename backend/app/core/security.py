@@ -4,6 +4,8 @@ from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 import base64
 import hashlib
+import json
+from typing import Any, Dict
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -39,3 +41,15 @@ def encrypt_token(token: str) -> str:
 
 def decrypt_token(encrypted: str) -> str:
     return fernet.decrypt(encrypted.encode()).decode()
+
+
+def encrypt_credentials(data: Dict[str, Any]) -> str:
+    """Encrypt arbitrary credential payloads using Fernet."""
+    plaintext = json.dumps(data, sort_keys=True).encode()
+    return fernet.encrypt(plaintext).decode()
+
+
+def decrypt_credentials(ciphertext: str) -> Dict[str, Any]:
+    """Decrypt previously encrypted credential payloads."""
+    plaintext = fernet.decrypt(ciphertext.encode()).decode()
+    return json.loads(plaintext)
