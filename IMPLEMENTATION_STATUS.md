@@ -40,7 +40,7 @@
 - ✅ Toggle de regras funcional
 - ✅ Botão de simulação implementado
 - ✅ Exibição dinâmica de condições e ações
-- ⏳ **PENDENTE:** Formulário de criação/edição de regras (UI builder)
+- ✅ Formulário de criação/edição de regras (UI builder) com seleção de países, categorias, templates e fallback
 
 ### 2.2 Página de Configurações
 - ✅ Hook `useCreateWAConnection()` para adicionar conexão WhatsApp

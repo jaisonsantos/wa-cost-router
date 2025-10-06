@@ -6,15 +6,33 @@
 
 ## Quick Start
 
-```bash
-git clone <repo>
-cd wa-cost-router
-cp backend/.env.example backend/.env  # preencha secrets
-docker-compose up -d --build
-```
+1. Clone o repositório e configure as variáveis locais:
+
+   ```bash
+   git clone <repo>
+   cd wa-cost-router
+   cp backend/.env.example backend/.env  # preencha secrets
+   ```
+
+2. Suba o ambiente com o Makefile (atalhos para o `docker-compose`):
+
+   ```bash
+   make dev        # build + sobe tudo em foreground
+   # ou
+   make up         # sobe em background
+   ```
+
+3. Aplique migrations/seeds quando necessário:
+
+   ```bash
+   make migrate
+   make seed-providers
+   ```
 
 - API: http://localhost:8000
 - Frontend: http://localhost:8080
+
+Para mais comandos (logs, shells, limpeza) consulte a [referência do Makefile](#makefile) e `docs/OPERATIONS.md`.
 
 ## Endpoints Essenciais
 
@@ -55,6 +73,23 @@ curl http://localhost:8000/messages/jobs/$JOB_ID \
 - [Operações](docs/OPERATIONS.md)
 - [Segurança](docs/SECURITY.md)
 - [Roadmap](docs/ROADMAP.md)
+
+## Makefile
+
+O repositório agora inclui um `Makefile` com os comandos mais comuns:
+
+| Comando | Descrição |
+| --- | --- |
+| `make dev` | Builda e sobe todos os serviços em foreground |
+| `make up` | Sobe os serviços em modo detach |
+| `make down` | Derruba os serviços |
+| `make logs` / `make logs-api` / `make logs-web` | Acompanha logs |
+| `make migrate` | Executa as migrations Alembic |
+| `make seed` / `make seed-providers` | Popula dados demo e provedores |
+| `make clean` | Remove containers e volumes |
+| `make shell-api` / `make shell-db` | Abre shell no container API ou psql |
+
+Rode `make help` para listar todos os alvos disponíveis.
 
 ## Licença
 

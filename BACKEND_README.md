@@ -3,15 +3,22 @@
 ## 🚀 Quick Start
 
 ```bash
-# Clone and start all services
-docker-compose up -d --build
+# Clone and install frontend deps (opcional para rodar lint/local dev)
+git clone <repo>
+cd wa-cost-router
+npm install
 
-# Check logs
-docker-compose logs -f api
+# Subir stack via Makefile (atalhos para docker-compose)
+make dev           # build + sobe em foreground
+# ou
+make up            # sobe em background
 
-# Stop all services
-docker-compose down
+# Logs e shutdown
+make logs-api
+make down
 ```
+
+Os comandos originais com `docker-compose` continuam válidos; consulte `make help` para a lista completa de atalhos.
 
 The API will be available at `http://localhost:8000`  
 The web frontend will be at `http://localhost:8080`
