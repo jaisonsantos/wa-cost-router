@@ -111,6 +111,11 @@ docker-compose run --rm api alembic upgrade head
 docker-compose logs api
 ```
 
+### Erro: "ModuleNotFoundError: No module named 'app'"
+- Atualize o repositório para a versão mais recente (o diretório `backend/app` agora é um pacote Python).
+- Rebuild da imagem: `docker compose build api` ou `make build`.
+- Remova containers antigos antes de subir novamente (`make down && make dev`).
+
 ## 🎯 Próximos Passos
 
 Após executar as migrations com sucesso:

@@ -9,6 +9,7 @@ Este documento acompanha a evolução incremental das entregas. Cada entrada reg
 | 2025-10-06 | baseline   | Base documental do MVP consolidada (estado descrito em `MVP_IMPLEMENTATION_STATUS.md`). |
 | 2025-10-06 | completed  | Builder visual de regras entregue no frontend, alinhando contratos da API e adicionando formulário completo de criação/edição. |
 | 2025-10-07 | completed  | Padronizado fluxo local com novo Makefile, revisão de runbooks e README para iniciar stack rapidamente. |
+| 2025-10-07 | fix        | Corrigido bootstrap local adicionando pacote Python explícito e removendo `version` obsoleto do `docker-compose.yml`. |
 
 ## Estado Atual
 

@@ -1,5 +1,9 @@
 # Changelog
 
+# v0.1.3 (2025-10-07)
+- Corrigido erro `ModuleNotFoundError: app` ao rodar migrations dentro do container, garantindo que Alembic enxergue os módulos do backend.
+- Removido atributo `version` obsoleto do `docker-compose.yml` para evitar avisos nas versões recentes do Docker Compose.
+
 # v0.1.2 (2025-10-07)
 - Adicionado `Makefile` com atalhos para subir stack, logs, migrations e seeds.
 - Atualizados README, BACKEND_README e docs de operações com referência aos novos comandos.
