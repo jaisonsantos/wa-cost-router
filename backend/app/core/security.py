@@ -1,12 +1,63 @@
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from passlib.context import CryptContext
+from passlib.handlers import bcrypt as passlib_bcrypt
 from cryptography.fernet import Fernet
 import base64
 import hashlib
 import json
 from typing import Any, Dict
 from app.core.config import settings
+from importlib import metadata
+from types import SimpleNamespace
+
+# passlib 1.7.x expects pyca/bcrypt to expose a ``__about__`` module attribute
+# and silently truncates long passwords when probing for the historic wraparound
+# bug.  bcrypt 4.1 removed ``__about__`` and now raises ``ValueError`` for
+# passwords longer than 72 bytes, which breaks passlib's backend detection.
+# We patch the imported module here so passlib can continue to operate with
+# newer bcrypt releases without forcing a hard pin at the package level.
+
+_bcrypt_backend = getattr(passlib_bcrypt, "_bcrypt", None)
+
+if _bcrypt_backend is not None and not hasattr(_bcrypt_backend, "__about__"):
+    version = getattr(_bcrypt_backend, "__version__", None)
+    if version is None:
+        try:
+            version = metadata.version("bcrypt")
+        except metadata.PackageNotFoundError:  # pragma: no cover - defensive
+            version = None
+    _bcrypt_backend.__about__ = SimpleNamespace(__version__=version)
+
+_bcrypt_backend_cls = getattr(passlib_bcrypt, "_BcryptBackend", None)
+
+if _bcrypt_backend_cls is not None:
+    load_backend = _bcrypt_backend_cls.__dict__.get("_load_backend_mixin")
+    if isinstance(load_backend, classmethod):
+        _original_load_backend = load_backend.__func__
+
+        def _safe_load_backend(mixin_cls, name, dryrun):
+            try:
+                return _original_load_backend(mixin_cls, name, dryrun)
+            except ValueError as exc:
+                if "password cannot be longer than 72 bytes" in str(exc):
+                    return mixin_cls._finalize_backend_mixin(name, dryrun)
+                raise
+
+        _bcrypt_backend_cls._load_backend_mixin = classmethod(_safe_load_backend)
+
+    calc_checksum = _bcrypt_backend_cls.__dict__.get("_calc_checksum")
+    if calc_checksum is not None:
+        def _safe_calc_checksum(self, secret):
+            try:
+                return calc_checksum(self, secret)
+            except ValueError as exc:
+                if "password cannot be longer than 72 bytes" in str(exc):
+                    secret = secret[:72]
+                    return calc_checksum(self, secret)
+                raise
+
+        _bcrypt_backend_cls._calc_checksum = _safe_calc_checksum
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
