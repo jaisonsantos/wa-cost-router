@@ -89,6 +89,13 @@
    - ✅ Top países e templates
    - ✅ Alertas e recomendações
 
+5. **✅ Página /rules** (Builder de Regras)
+   - ✅ Listagem ordenada por prioridade com dados reais da API
+   - ✅ Formulário visual para criar/editar regras (países, categorias, templates)
+   - ✅ Seleção de provedor primário e fallback com validação
+   - ✅ Toggle imediato de ativação/desativação
+   - ✅ Integração com simulador avançado e toasts de feedback
+
 ### ✅ API Client & Hooks (Todos Implementados)
 - ✅ `api.sendMessage()`
 - ✅ `api.getMessageJobs()`
