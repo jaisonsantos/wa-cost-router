@@ -1,5 +1,12 @@
 .PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web lint lint-fix frontend-dev install migrate seed seed-providers clean shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env ci ci-backend ci-frontend ci-e2e
+# Prefer the standalone docker-compose binary when available and fall back to
+# the Docker CLI plugin (`docker compose`). This mirrors the default GitHub
+# Actions environment which only ships the plugin.
+ifeq ($(shell command -v docker-compose >/dev/null 2>&1 && echo found),found)
 DC ?= docker-compose
+else
+DC ?= docker compose
+endif
 
 help: ## Show this help message
 	@echo "Usage: make [target]"
