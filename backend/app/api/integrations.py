@@ -1,13 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+import hashlib
+import hmac
+import json
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
 import logging
 from app.core.database import get_db
-from app.core.security import encrypt_token
+from app.core.security import decrypt_token, encrypt_token
 from app.api.dependencies import get_current_user
 from app.models.models import WAConnection, MessageEvent
-from app.core.config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -45,17 +50,101 @@ def create_connection(
 def webhook_verify(
     mode: str = Query(alias="hub.mode"),
     token: str = Query(alias="hub.verify_token"),
-    challenge: str = Query(alias="hub.challenge")
+    challenge: str = Query(alias="hub.challenge"),
+    db: Session = Depends(get_db),
 ):
-    if mode == "subscribe" and token == settings.WA_VERIFY_TOKEN:
-        return int(challenge)
-    raise HTTPException(status_code=403, detail="Verification failed")
+    if mode != "subscribe":
+        raise HTTPException(status_code=403, detail="Verification failed")
+
+    connection_exists = (
+        db.query(WAConnection.id)
+        .filter(
+            WAConnection.webhook_verify_token == token,
+            WAConnection.status == "active",
+        )
+        .first()
+    )
+
+    if not connection_exists:
+        raise HTTPException(status_code=403, detail="Verification failed")
+
+    return PlainTextResponse(content=str(challenge))
 
 @router.post("/wa/webhook")
 async def webhook_receive(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
+    raw_body = await request.body()
+    body_text = raw_body.decode("utf-8") if raw_body else ""
 
-    # Extract basic fields - adjust based on actual WhatsApp webhook structure
+    try:
+        body = json.loads(body_text or "{}")
+    except json.JSONDecodeError:
+        logger.warning(
+            "Invalid webhook payload received", extra={"message_event_ids": []}
+        )
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    message_event_ids: List[str] = []
+    phone_number_id = None
+
+    for entry in body.get("entry", []):
+        for change in entry.get("changes", []):
+            value = change.get("value", {})
+            metadata = value.get("metadata", {}) or {}
+
+            if not phone_number_id:
+                phone_number_id = metadata.get("phone_number_id")
+
+            for msg in value.get("messages", []):
+                provider_id = msg.get("id")
+                if provider_id:
+                    message_event_ids.append(provider_id)
+
+    if not phone_number_id:
+        if message_event_ids:
+            logger.warning(
+                "Webhook without phone_number_id metadata",
+                extra={"message_event_ids": message_event_ids},
+            )
+        return {"status": "ignored", "processed": 0}
+
+    connection = (
+        db.query(WAConnection)
+        .filter(
+            WAConnection.phone_id == phone_number_id,
+            WAConnection.status == "active",
+        )
+        .first()
+    )
+
+    if not connection:
+        if message_event_ids:
+            logger.warning(
+                "Webhook received for unknown phone_number_id",
+                extra={"message_event_ids": message_event_ids},
+            )
+        return {"status": "ignored", "processed": 0}
+
+    signature_header = request.headers.get("X-Hub-Signature-256", "")
+    if not signature_header.startswith("sha256="):
+        logger.warning(
+            "Missing or malformed webhook signature",
+            extra={"message_event_ids": message_event_ids},
+        )
+        raise HTTPException(status_code=403, detail="Invalid signature")
+
+    secret = decrypt_token(connection.webhook_secret_enc)
+    provided_signature = signature_header.split("=", 1)[1]
+    expected_signature = hmac.new(
+        secret.encode("utf-8"), raw_body or b"", hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(provided_signature, expected_signature):
+        logger.warning(
+            "Invalid webhook signature",
+            extra={"message_event_ids": message_event_ids},
+        )
+        raise HTTPException(status_code=403, detail="Invalid signature")
+
     processed = 0
     for entry in body.get("entry", []):
         for change in entry.get("changes", []):
@@ -67,29 +156,6 @@ async def webhook_receive(request: Request, db: Session = Depends(get_db)):
                 if not provider_id:
                     continue
 
-                phone_id = msg.get("from") or value.get("metadata", {}).get("phone_number_id")
-                connection = None
-                if phone_id:
-                    connection = (
-                        db.query(WAConnection)
-                        .filter(
-                            WAConnection.phone_id == phone_id,
-                            WAConnection.status == "active",
-                        )
-                        .first()
-                    )
-
-                if not connection:
-                    connection = (
-                        db.query(WAConnection)
-                        .filter(WAConnection.status == "active")
-                        .first()
-                    )
-
-                if not connection:
-                    logger.warning("Webhook received message %s but no WA connection is configured", provider_id)
-                    continue
-
                 # Check idempotency
                 existing = db.query(MessageEvent).filter(
                     MessageEvent.provider_event_id == provider_id
@@ -97,7 +163,6 @@ async def webhook_receive(request: Request, db: Session = Depends(get_db)):
                 if existing:
                     continue
 
-                # Create event (simplified - adjust fields as needed)
                 event = MessageEvent(
                     org_id=connection.org_id,
                     connection_id=connection.id,

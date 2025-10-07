@@ -27,12 +27,12 @@ O endpoint [`POST /integrations/wa/webhook`](../api/API_REFERENCE.md) grava even
 
 ## Subtasks
 
-- [ ] Criar tabela/coluna para armazenar secret de validação por conexão WA.
-- [ ] Implementar verificação da assinatura (compatível com Meta Cloud API).
-- [ ] Resolver TODO no código do webhook (`org_id` hardcoded) usando lookup por `phone_id`.
-- [ ] Adicionar logs mascarados (`message_event_id` apenas) em caso de erro.
+- [x] Criar tabela/coluna para armazenar secret de validação por conexão WA.
+- [x] Implementar verificação da assinatura (compatível com Meta Cloud API).
+- [x] Resolver TODO no código do webhook (`org_id` hardcoded) usando lookup por `phone_id`.
+- [x] Adicionar logs mascarados (`message_event_id` apenas) em caso de erro.
 - [ ] Atualizar Postman request **WA - Webhook Receive** com headers/variáveis necessárias.
-- [ ] Escrever guia de operação em `docs/operations/OPERATIONS.md` descrevendo rotação de secrets.
+- [x] Escrever guia de operação em `docs/operations/OPERATIONS.md` descrevendo rotação de secrets.
 
 ## Referências
 

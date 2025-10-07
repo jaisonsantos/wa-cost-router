@@ -5,16 +5,16 @@
 
 - **Autenticação**: JWT HS256 com expiração 7 dias, `org_id` no payload.
 - **Criptografia**: tokens WhatsApp via Fernet (`APP_SECRET_KEY`). Credenciais de provedores criptografadas (migration 002).
-- **Multi-tenancy**: filtros `org_id` ativos em providers, routing e mensagens; webhook ainda requer mapeamento explícito.
-- **Logs**: sem mascaramento; provider responses persistidos.
+- **Multi-tenancy**: filtros `org_id` ativos em providers, routing e mensagens; webhook mapeia `phone_number_id` → `WAConnection` e valida `X-Hub-Signature-256` por organização.
+- **Logs**: erros do webhook expõem apenas `provider_event_id`/`message_event_id`; provider responses ainda persistem dados completos.
 - **Endpoints sensíveis**: `/admin/metrics` público; `GET /rates` agora requer auth.
 
 ## Ações Recomendadas (Prioridade Alta)
 
 1. **Sanitização de payloads**
    - Aplicar máscara/anonimização em `DeliveryAttempt.provider_response` e `MessageJob.variables`.
-2. **Webhook multi-tenant**
-   - Tabela de mapeamento `phone_id -> org_id` com validação de assinatura.
+2. ~~**Webhook multi-tenant**~~ ✅
+   - Controle implementado: lookup por `phone_number_id` e assinatura HMAC por conexão.
 3. **Validação de entradas**
    - Biblioteca `phonenumbers` para E.164.
    - Sanitização de logs (evitar números completos).
