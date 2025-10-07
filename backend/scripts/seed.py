@@ -22,6 +22,9 @@ DEFAULT_USER_EMAIL = "admin@demo.local"
 DEFAULT_USER_PASSWORD = "demo123"
 DEFAULT_PHONE_ID = "demo_phone_456"
 DEFAULT_BUSINESS_ID = "demo_business_123"
+DEFAULT_WEBHOOK_VERIFY_TOKEN = "my-verify-token"
+DEFAULT_WEBHOOK_SECRET = "my-webhook-secret"
+DEFAULT_ACCESS_TOKEN = "fake-wa-access-token"
 
 
 def seed():
@@ -71,11 +74,17 @@ def seed():
                 org_id=org.id,
                 business_id=DEFAULT_BUSINESS_ID,
                 phone_id=DEFAULT_PHONE_ID,
-                access_token_enc=encrypt_token("fake_token_abc"),
+                access_token_enc=encrypt_token(DEFAULT_ACCESS_TOKEN),
+                webhook_verify_token=DEFAULT_WEBHOOK_VERIFY_TOKEN,
+                webhook_secret_enc=encrypt_token(DEFAULT_WEBHOOK_SECRET),
                 status="active",
             )
             db.add(connection)
             db.flush()
+        else:
+            connection.access_token_enc = encrypt_token(DEFAULT_ACCESS_TOKEN)
+            connection.webhook_verify_token = DEFAULT_WEBHOOK_VERIFY_TOKEN
+            connection.webhook_secret_enc = encrypt_token(DEFAULT_WEBHOOK_SECRET)
 
         now = datetime.utcnow()
         default_rates = [

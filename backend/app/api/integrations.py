@@ -16,7 +16,8 @@ class ConnectionCreate(BaseModel):
     business_id: str
     phone_id: str
     access_token: str
-    webhook_verify_token: str = None
+    webhook_verify_token: str
+    webhook_secret: str
 
 @router.post("/wa/connections")
 def create_connection(
@@ -25,12 +26,14 @@ def create_connection(
     db: Session = Depends(get_db)
 ):
     encrypted_token = encrypt_token(data.access_token)
+    encrypted_secret = encrypt_token(data.webhook_secret)
     conn = WAConnection(
         org_id=current_user["org_id"],
         business_id=data.business_id,
         phone_id=data.phone_id,
         access_token_enc=encrypted_token,
         webhook_verify_token=data.webhook_verify_token,
+        webhook_secret_enc=encrypted_secret,
         status="active"
     )
     db.add(conn)
