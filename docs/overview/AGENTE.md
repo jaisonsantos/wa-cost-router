@@ -28,7 +28,7 @@
 | `backend/app/services/` | `RoutingEngine`, conectores HTTPX | RoutingEngine impõe `org_id`; respostas completas dos provedores são persistidas.
 
  |
-| `backend/scripts/` | Seeds | `seed.py` cria tabelas via `metadata.create_all`; `seed_providers` ignora `org_id`. |
+| `backend/scripts/` | Seeds | `seed.py` cria tabelas via `metadata.create_all`; `seed_providers` aceita `--org-id` (ou executa para todas). |
 | `backend/alembic/` | Config/migrations | Apenas revisão 001 (alterações pontuais). |
 | `backend/worker.py` | Worker RQ | Pronto para background jobs.
 
@@ -123,7 +123,7 @@
 | Webhook WA | `org_id` placeholder | Eventos não associados à org correta.
 
  |
-| Seeds | `seed_providers` ignora `org_id` | Seed falha com constraint NOT NULL. |
+| Seeds | `seed_providers` respeita `org_id` informado ou replica para todas | Seed não cria org automaticamente. |
 
 ## 5. Idempotência
 
@@ -555,7 +555,7 @@ docker-compose run --rm api alembic upgrade head
 ## 2. Seed
 
 - `python scripts/seed.py` cria org demo + dados sintéticos (usa `metadata.create_all` – substituir por migrations futuras).
-- `python scripts/seed_providers.py` precisa receber `org_id` válido.
+- `python scripts/seed_providers.py --org-id <uuid>` popula uma organização específica; sem argumento replica para todas.
 
 ## 3. Saúde
 
