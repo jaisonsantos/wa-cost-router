@@ -58,6 +58,8 @@ def test_rule_create_accepts_dict_actions():
 def test_rate_response_allows_optional_template(template_name):
     rate = RateResponse(
         id=str(uuid.uuid4()),
+        provider_id=str(uuid.uuid4()),
+        provider_name="demo-provider",
         effective_from=datetime.utcnow(),
         country_iso="BR",
         category="MARKETING",

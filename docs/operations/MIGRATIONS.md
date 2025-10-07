@@ -10,7 +10,9 @@ A stack agora depende exclusivamente de migrations Alembic (sem `metadata.create
 | `000_base_schema` | `backend/alembic/versions/000_base_schema.py` | Cria todas as tabelas e enums atuais (orgs, providers, mensagens, rates, webhook, etc.). |
 | `001_add_mvp_models` | `backend/alembic/versions/001_add_mvp_models.py` | Marcador histórico (no-op após consolidação do schema base). |
 | `002_encrypt_provider_credentials` | `backend/alembic/versions/002_encrypt_provider_credentials.py` | Migra credenciais para criptografia Fernet (usa `APP_SECRET_KEY`). |
+| `003_add_message_job_fk` | `backend/alembic/versions/003_add_message_job_fk.py` | Conecta `message_event.message_job_id` e garante integridade básica. |
 | `004_add_wa_webhook_secret` | `backend/alembic/versions/004_add_wa_webhook_secret.py` | Adiciona `webhook_secret_enc` a `wa_connection` e garante `webhook_verify_token` único. |
+| `005_link_rate_cards_to_providers` | `backend/alembic/versions/005_link_rate_cards_to_providers.py` | Adiciona `provider_id` a `rate_card`, faz backfill por nome e remove registros órfãos. |
 
 Nova migrations devem sempre apontar `down_revision` para a última revisão do quadro acima.
 
@@ -20,6 +22,9 @@ Nova migrations devem sempre apontar `down_revision` para a última revisão do 
   - Requer `APP_SECRET_KEY` consistente para recriptografar segredos legados durante o upgrade.
   - Upgrade: `docker-compose run --rm api alembic upgrade 004_add_wa_webhook_secret` (ou `head`).
   - Rollback: `docker-compose run --rm api alembic downgrade 003_add_message_job_fk`.
+- **`005_link_rate_cards_to_providers`**:
+  - Remove `rate_card` sem provedor associado e força o relacionamento FK (impacta seeds antigos).
+  - Após o upgrade, reexecute `make seed` para gerar o provedor demo com tarifas vinculadas.
 
 ## Execução local
 

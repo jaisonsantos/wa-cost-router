@@ -74,6 +74,9 @@ curl -X POST http://localhost:8000/messages/send \
 | GET | `/rates` | Lista tarifas ordenadas por `effective_from`. | `Rates - List` |
 | POST | `/rates/import_csv` | Importa CSV (multipart) com tarifas. | `Rates - Import CSV` |
 
+- As respostas de `/rates` incluem `provider_id`/`provider_name` para identificar o dono da tarifa.
+- O CSV de importação deve conter a coluna `provider_id` apontando para um provedor existente da organização (veja `docs/postman/sample_rates.csv`).
+
 ## Relatórios
 
 | Método | Rota | Descrição | Postman |

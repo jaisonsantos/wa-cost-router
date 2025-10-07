@@ -175,6 +175,8 @@ export interface AdvancedSimulationResponse {
 
 export interface RateEntry {
   id: string;
+  provider_id: string;
+  provider_name: string;
   effective_from: string;
   country_iso: string;
   category: string;

@@ -92,8 +92,9 @@ class MessageEvent(Base):
 
 class RateCard(Base):
     __tablename__ = "rate_card"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("provider.id"), nullable=False, index=True)
     effective_from = Column(DateTime(timezone=True), nullable=False, index=True)
     source = Column(String, nullable=False)
     country_iso = Column(String, nullable=False)

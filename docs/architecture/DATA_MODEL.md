@@ -14,7 +14,7 @@
 | `delivery_attempt` | `message_job_id`, `provider_id`, `attempt_number`, `status`, `provider_response` | Armazena resposta crua. |
 | `cost_record` | `message_job_id`, `provider_id`, `price_eur`, `price_table_version` | Auditoria de custo. |
 | `message_event` | `org_id`, `message_job_id`, `provider_event_id`, `unit_cost_minor`, `baseline_cost_minor` | Base para relatórios (agora referencia `message_job`). |
-| `rate_card` | `source`, `country_iso`, `category`, `unit_cost_minor` | Global (sem `org_id`). |
+| `rate_card` | `provider_id`, `country_iso`, `category`, `unit_cost_minor` | Cada tarifa pertence a um provedor ativo. |
 | `wa_connection` | `org_id`, `business_id`, `phone_id`, `access_token_enc`, `webhook_secret_enc` | Tokens de acesso/webhook criptografados; `webhook_verify_token` único. |
 
 ## ERD (ASCII)
@@ -31,7 +31,7 @@ organization ──< organization_user >── user
      ├──< message_event
      └──< wa_connection
 
-rate_card (global, referenciado por nome do provider)
+rate_card ──> provider
 ```
 
 ## Índices & Constraints
@@ -46,7 +46,7 @@ rate_card (global, referenciado por nome do provider)
 
 - `000_base_schema` cria todas as tabelas atuais; consulte [guia de migrations](../operations/MIGRATIONS.md) antes de alterar o schema.
 - Migration `002_encrypt_provider_credentials` converte credenciais para texto criptografado com Fernet.
-- `rate_card` continua global; backlog P2 cobre escopo por organização.
+- `rate_card` referencia diretamente `provider` via `provider_id`; backlog P3 cobre escopo adicional por organização.
 - `provider_response` e `variables` exigem sanitização/anonimização (ver backlog P1 sanitização PII).
 
 ## Veja também

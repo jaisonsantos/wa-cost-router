@@ -14,6 +14,7 @@ from app.models.models import (  # noqa: E402
     WAConnection,
     RateCard,
     MessageEvent,
+    Provider,
 )
 
 
@@ -25,6 +26,7 @@ DEFAULT_BUSINESS_ID = "demo_business_123"
 DEFAULT_WEBHOOK_VERIFY_TOKEN = "my-verify-token"
 DEFAULT_WEBHOOK_SECRET = "my-webhook-secret"
 DEFAULT_ACCESS_TOKEN = "fake-wa-access-token"
+DEFAULT_PROVIDER_NAME = "Demo 360dialog"
 
 
 def seed():
@@ -87,6 +89,25 @@ def seed():
             connection.webhook_secret_enc = encrypt_token(DEFAULT_WEBHOOK_SECRET)
 
         now = datetime.utcnow()
+
+        provider = (
+            db.query(Provider)
+            .filter(
+                Provider.org_id == org.id,
+                Provider.name == DEFAULT_PROVIDER_NAME,
+            )
+            .first()
+        )
+        if not provider:
+            provider = Provider(
+                org_id=org.id,
+                name=DEFAULT_PROVIDER_NAME,
+                type="whatsapp",
+                status="active",
+            )
+            db.add(provider)
+            db.flush()
+
         default_rates = [
             ("BR", "MARKETING", 85),
             ("BR", "UTILITY", 42),
@@ -98,15 +119,16 @@ def seed():
             exists = (
                 db.query(RateCard)
                 .filter(
+                    RateCard.provider_id == provider.id,
                     RateCard.country_iso == country_iso,
                     RateCard.category == category,
-                    RateCard.source == "seed",
                 )
                 .first()
             )
             if not exists:
                 db.add(
                     RateCard(
+                        provider_id=provider.id,
                         effective_from=now,
                         source="seed",
                         country_iso=country_iso,

@@ -215,11 +215,16 @@ def simulate_advanced(
         
         for provider in providers:
             # Buscar tarifa do provedor
-            rate = db.query(RateCard).filter(
-                RateCard.source == provider.name,
-                RateCard.country_iso == country,
-                RateCard.category == data.category
-            ).order_by(RateCard.effective_from.desc()).first()
+            rate = (
+                db.query(RateCard)
+                .filter(
+                    RateCard.provider_id == provider.id,
+                    RateCard.country_iso == country,
+                    RateCard.category == data.category,
+                )
+                .order_by(RateCard.effective_from.desc())
+                .first()
+            )
             
             if rate:
                 cost = rate.unit_cost_minor
