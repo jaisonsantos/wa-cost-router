@@ -89,9 +89,11 @@ curl -X POST http://localhost:8000/messages/send \
 
 | Método | Rota | Descrição | Postman |
 |--------|------|-----------|---------|
-| POST | `/integrations/wa/connections` | Salva conexão WA (token + secret criptografados). | `WA - Create Connection` |
+| POST | `/integrations/wa/connections` | Cria/atualiza conexão WA da organização (token + secret criptografados; idempotente por `phone_id`). | `WA - Create Connection` |
 | GET | `/integrations/wa/webhook` | Validação de webhook (hub.verify_token). | `WA - Webhook Verify` |
 | POST | `/integrations/wa/webhook` | Recebe eventos (requer `metadata.phone_number_id` + assinatura HMAC). | `WA - Webhook Receive` |
+
+- Repetir `POST /integrations/wa/connections` com o mesmo `phone_id` atualiza o token/secret existente. Caso o `webhook_verify_token` informado já esteja associado a outra conexão, a API retorna `400`.
 
 ### Webhook WhatsApp
 

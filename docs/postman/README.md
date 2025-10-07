@@ -12,7 +12,7 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 5. **Messages** – envia mensagem, lista jobs e consulta detalhes do job usando `job_id` capturado.
 6. **Rates** – consulta tarifas e importa CSV de exemplo (`docs/postman/sample_rates.csv`) já preenchendo `provider_id` com o provedor criado na etapa Providers.
 7. **Reports** – consome métricas de dashboard, resumo e métricas por provedor.
-8. **Integrations** – cria conexão WA, valida webhook (`hub.verify_token`) e envia payload de webhook.
+8. **Integrations** – cria conexão WA, valida webhook (`hub.verify_token`) e envia payload de webhook (repetir a criação com o mesmo `phone_id` apenas atualiza o registro).
 9. **Admin** – checa `/admin/health` e `/admin/metrics`.
 10. **Cleanup** – remove credenciais do provedor criado durante o fluxo.
 
