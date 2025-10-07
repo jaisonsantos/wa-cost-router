@@ -1,4 +1,4 @@
-.PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web lint lint-fix frontend-dev install igrate seed seed-providers clean shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env ci
+.PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web lint lint-fix frontend-dev install migrate seed seed-providers clean shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env ci ci-backend ci-frontend ci-e2e
 DC ?= docker-compose
 
 help: ## Show this help message
@@ -159,6 +159,62 @@ postman-test: ## Run Newman collection tests against local stack
 postman-env: ## Show Postman collection and environment paths
 	@echo "Collection: docs/postman/wa-cost-router.postman_collection.json"
 	@echo "Environment: docs/postman/wa-cost-router.postman_environment.json"
+
+ci: ## Run backend, frontend and E2E checks sequentially
+	$(MAKE) ci-backend
+	$(MAKE) ci-frontend
+	$(MAKE) ci-e2e
+
+ci-backend: ## Build backend images and verify migrations
+	$(DC) build api worker
+	$(DC) run --rm api alembic upgrade head
+
+ci-frontend: ## Lint and build the frontend
+	npm ci
+	npm run lint
+	npm run build
+
+ci-e2e: ## Spin up stack and execute Newman tests
+	@bash -c '\
+	set -euo pipefail; \
+	trap "$(DC) down -v" EXIT; \
+	$(DC) down -v >/dev/null 2>&1 || true; \
+	$(DC) up -d db redis; \
+	echo "Waiting for Postgres to be ready..."; \
+	ready=0; \
+	for i in $$(seq 1 30); do \
+	if $(DC) exec db pg_isready -U postgres >/dev/null 2>&1; then \
+	echo "Postgres is ready"; \
+	ready=1; \
+	break; \
+	fi; \
+	printf "  attempt %s - waiting\n" "$$i"; \
+	sleep 2; \
+	done; \
+	if [ "$$ready" -ne 1 ]; then \
+	echo "Postgres did not become ready in time" >&2; \
+	exit 1; \
+	fi; \
+	$(DC) run --rm api alembic upgrade head; \
+	$(DC) run --rm api python scripts/seed.py; \
+	$(DC) up -d api worker; \
+	echo "Waiting for API to respond..."; \
+	ready=0; \
+	for i in $$(seq 1 30); do \
+	if curl -sSf http://localhost:8000/admin/health >/dev/null; then \
+	echo "API is ready"; \
+	ready=1; \
+	break; \
+	fi; \
+	printf "  attempt %s - waiting\n" "$$i"; \
+	sleep 2; \
+	done; \
+	if [ "$$ready" -ne 1 ]; then \
+	echo "API did not become ready in time" >&2; \
+	exit 1; \
+	fi; \
+	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --reporters cli,junit --reporter-junit-export newman-report.xml; \
+	'
 
 shell-api: ## Open a shell inside the API container
 	$(DC) exec api bash
