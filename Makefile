@@ -33,18 +33,18 @@ dev: ## Bootstrap local stack (db/redis, migrations, seed, services) and tail AP
 	$(DC) build api worker web
 	$(DC) up -d db redis
 	@bash -c '\
-            echo "Waiting for Postgres to be ready..."; \
-            for i in $$(seq 1 30); do \
-                if $(DC) exec db pg_isready -U postgres >/dev/null 2>&1; then \
-                    echo "Postgres is ready"; \
-                    exit 0; \
-                fi; \
-                echo "  attempt $$i - waiting"; \
-                sleep 1; \
-            done; \
-            echo "Postgres did not become ready in time" >&2; \
-            exit 1; \
-        '
+	    echo "Waiting for Postgres to be ready..."; \
+	    for i in $$(seq 1 30); do \
+	        if $(DC) exec db pg_isready -U postgres >/dev/null 2>&1; then \
+	            echo "Postgres is ready"; \
+	            exit 0; \
+	        fi; \
+	        echo "  attempt $$i - waiting"; \
+	        sleep 1; \
+	    done; \
+	    echo "Postgres did not become ready in time" >&2; \
+	    exit 1; \
+	'
 	$(DC) run --rm api alembic upgrade head
 	$(DC) run --rm api python scripts/seed.py
 	$(DC) up -d web api worker
