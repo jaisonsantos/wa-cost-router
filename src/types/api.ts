@@ -211,7 +211,8 @@ export interface CreateWAConnectionPayload {
   business_id: string;
   phone_id: string;
   access_token: string;
-  webhook_verify_token?: string;
+  webhook_verify_token: string;
+  webhook_secret: string;
 }
 
 export interface WAConnectionResponse {

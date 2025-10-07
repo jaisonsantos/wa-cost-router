@@ -145,7 +145,10 @@ export const useCreateWAConnection = () => {
   return useMutation<WAConnectionResponse, Error, CreateWAConnectionPayload>({
     mutationFn: (payload) => api.createWAConnection(payload),
     onSuccess: () => {
-      toast({ title: "Conexão WhatsApp configurada" });
+      toast({
+        title: "Conexão WhatsApp configurada",
+        description: "Tokens de webhook atualizados com sucesso.",
+      });
     },
     onError: (error: Error) => {
       toast({
