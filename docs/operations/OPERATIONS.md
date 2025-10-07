@@ -15,6 +15,16 @@ Este guia cobre tarefas rotineiras para operar o WA Cost Router em ambientes de 
 
 Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Makefile padronizam a ordem correta (migrations → seed → serviços).
 
+## Pipeline CI
+
+- **Workflow**: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) executado em `push` e `pull_request` para `main`, além de gatilho manual via `workflow_dispatch`.
+- **Ordem dos jobs**:
+  1. `backend` — constrói as imagens Python, roda `alembic upgrade head` contra um Postgres efêmero e garante que o worker continue buildável.
+  2. `frontend` — instala dependências com `npm ci`, roda `npm run lint` e `npm run build`, publicando o artefato `frontend-dist` com a pasta `dist/`.
+  3. `e2e` — depende dos jobs anteriores, sobe a stack com Docker Compose, reaproveita os seeds demo e executa os testes Postman/Newman (ver [guia](../postman/README.md)). O relatório JUnit (`newman-report.xml`) é enviado como artefato para inspeção.
+- **Depuração**: reexecute jobs individuais pelo GitHub (`Re-run failed jobs`) para validar correções rápidas. Para reproduzir localmente, utilize `make ci`, que encadeia `ci-backend`, `ci-frontend` e `ci-e2e` com os mesmos comandos do pipeline. Falhas no passo E2E geralmente aparecem no relatório Newman; baixe o artefato ou rode `make ci-e2e` para gerar um novo.
+- **Referências**: detalhes de secrets, variáveis e troubleshooting ampliado em [CI avançado](./CI.md).
+
 ## Ordem de subida recomendada
 
 1. Exporte variáveis sensíveis no `.env` da API (`backend/.env`).

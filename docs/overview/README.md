@@ -26,6 +26,7 @@ Outros comandos úteis:
 | `make migrate` | Executa `alembic upgrade head` manualmente. |
 | `make seed` | Reinsere dados demo sem recriar tabelas. |
 | `make postman-test` | Executa a coleção Postman completa via Newman. |
+| `make ci` | Reproduz localmente o pipeline (ver [Operações › Pipeline CI](../operations/OPERATIONS.md#pipeline-ci)). |
 | `make down` | Remove serviços e volumes para limpeza rápida. |
 
 ## Navegação da documentação
@@ -35,7 +36,8 @@ Outros comandos úteis:
 | [Arquitetura](../architecture/ARCHITECTURE.md) | Componentes principais, fluxos e responsabilidades. |
 | [Modelagem de Dados](../architecture/DATA_MODEL.md) | Tabelas, relacionamentos e entidades de domínio. |
 | [Referência da API](../api/API_REFERENCE.md) | Contratos dos endpoints e links para a coleção Postman. |
-| [Operações](../operations/OPERATIONS.md) | Rotinas de deploy, observabilidade e troubleshooting. |
+| [Operações](../operations/OPERATIONS.md) | Rotinas de deploy, observabilidade, pipeline CI e troubleshooting. |
+| [CI Pipeline (detalhes)](../operations/CI.md) | Segredos, execução manual e troubleshooting aprofundado. |
 | [Migrations](../operations/MIGRATIONS.md) | Pipeline de migrações Alembic e ordem de execução. |
 | [Deployment](../operations/DEPLOYMENT.md) | Estratégia recomendada para ambientes gerenciados. |
 | [Segurança](../security/SECURITY.md) | Controles atuais, riscos conhecidos e próximos passos. |
