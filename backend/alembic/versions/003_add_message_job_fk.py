@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '003_add_message_job_fk_to_message_event'
+revision = '003_add_message_job_fk'
 down_revision = '002_encrypt_provider_credentials'
 branch_labels = None
 depends_on = None
