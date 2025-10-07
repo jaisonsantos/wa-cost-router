@@ -88,7 +88,20 @@ curl -X POST http://localhost:8000/messages/send \
 |--------|------|-----------|---------|
 | POST | `/integrations/wa/connections` | Salva conexão WA (token criptografado). | `WA - Create Connection` |
 | GET | `/integrations/wa/webhook` | Validação de webhook (hub.verify_token). | `WA - Webhook Verify` |
-| POST | `/integrations/wa/webhook` | Recebe eventos; precisa mapear `phone_id`. | `WA - Webhook Receive` |
+| POST | `/integrations/wa/webhook` | Recebe eventos; precisa mapear `phone_number_id`. | `WA - Webhook Receive` |
+
+### Webhook WhatsApp
+
+#### `GET /integrations/wa/webhook`
+
+- Envie `hub.mode=subscribe`, `hub.verify_token=<token>` e `hub.challenge=<number>`.
+- A API retorna `200` com o valor de `hub.challenge` **apenas** quando existe uma `WAConnection` ativa com o `webhook_verify_token` informado. Casos sem correspondência resultam em `403`.
+
+#### `POST /integrations/wa/webhook`
+
+- Obrigatório incluir o header `X-Hub-Signature-256: sha256=<HMAC>` calculado com o secret configurado para a conexão.
+- O payload deve carregar `entry[].changes[].value.metadata.phone_number_id` para roteamento multi-tenant. Eventos de números desconhecidos são ignorados sem gravação.
+- A assinatura é validada com HMAC SHA-256 sobre o corpo bruto; divergências retornam `403` e nenhum evento é persistido.
 
 ## Admin & Saúde
 

@@ -15,6 +15,13 @@ Este guia cobre tarefas rotineiras para operar o WA Cost Router em ambientes de 
 
 Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Makefile padronizam a ordem correta (migrations → seed → serviços).
 
+## Segredos do webhook WhatsApp
+
+- O secret usado para validar `X-Hub-Signature-256` fica armazenado criptografado em `wa_connection.webhook_secret_enc` (Fernet derivado de `APP_SECRET_KEY`).
+- Para rotacionar, gere um novo secret no Meta Cloud API, atualize a conexão via `POST /integrations/wa/connections` (ou patch específico quando disponível) e aplique o mesmo valor na configuração do webhook Meta.
+- Eventos assinados com o secret antigo passam a retornar `403`; monitore os logs estruturados (`message_event_ids`) para confirmar a adoção do novo valor.
+- Nunca compartilhe o secret em texto claro; utilize os comandos administrativos para importar/exportar apenas através de variáveis de ambiente temporárias.
+
 ## Pipeline CI
 
 - **Workflow**: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) executado em `push` e `pull_request` para `main`, além de gatilho manual via `workflow_dispatch`.
