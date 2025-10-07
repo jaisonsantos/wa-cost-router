@@ -86,9 +86,9 @@ curl -X POST http://localhost:8000/messages/send \
 
 | Método | Rota | Descrição | Postman |
 |--------|------|-----------|---------|
-| POST | `/integrations/wa/connections` | Salva conexão WA (token criptografado). | `WA - Create Connection` |
+| POST | `/integrations/wa/connections` | Salva conexão WA (token + secret criptografados). | `WA - Create Connection` |
 | GET | `/integrations/wa/webhook` | Validação de webhook (hub.verify_token). | `WA - Webhook Verify` |
-| POST | `/integrations/wa/webhook` | Recebe eventos; precisa mapear `phone_number_id`. | `WA - Webhook Receive` |
+| POST | `/integrations/wa/webhook` | Recebe eventos (requer `metadata.phone_number_id` + assinatura HMAC). | `WA - Webhook Receive` |
 
 ### Webhook WhatsApp
 
@@ -102,6 +102,32 @@ curl -X POST http://localhost:8000/messages/send \
 - Obrigatório incluir o header `X-Hub-Signature-256: sha256=<HMAC>` calculado com o secret configurado para a conexão.
 - O payload deve carregar `entry[].changes[].value.metadata.phone_number_id` para roteamento multi-tenant. Eventos de números desconhecidos são ignorados sem gravação.
 - A assinatura é validada com HMAC SHA-256 sobre o corpo bruto; divergências retornam `403` e nenhum evento é persistido.
+
+```bash
+BODY='{
+  "entry": [
+    {
+      "changes": [
+        {
+          "value": {
+            "metadata": {"phone_number_id": "demo_phone_456"},
+            "messages": [
+              {"id": "msg-demo-1", "from": "demo_phone_456", "text": "hello"}
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}'
+SECRET='my-webhook-secret'
+SIGNATURE="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | sed 's/^.* //')"
+
+curl -X POST http://localhost:8000/integrations/wa/webhook \
+  -H "Content-Type: application/json" \
+  -H "X-Hub-Signature-256: $SIGNATURE" \
+  -d "$BODY"
+```
 
 ## Admin & Saúde
 
