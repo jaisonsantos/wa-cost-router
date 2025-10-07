@@ -30,8 +30,9 @@ worker-only: ## Start only the async worker
 	$(DC) up worker
 
 dev: ## Bootstrap local stack (db/redis, migrations, seed, services) and tail API logs
-	$(DC) up -d db redis
-	@bash -c '\
+        $(DC) build api worker web
+        $(DC) up -d db redis
+        @bash -c '\
             echo "Waiting for Postgres to be ready..."; \
             for i in $$(seq 1 30); do \
                 if $(DC) exec db pg_isready -U postgres >/dev/null 2>&1; then \
