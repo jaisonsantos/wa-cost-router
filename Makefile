@@ -1,5 +1,5 @@
-.PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web lint lint-fix frontend-dev install migrate seed seed-providers clean shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env
-
+.PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web lint lint-fix frontend-dev install \
+	migrate seed seed-providers clean shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env ci
 DC ?= docker-compose
 
 help: ## Show this help message
@@ -49,6 +49,61 @@ dev: ## Bootstrap local stack (db/redis, migrations, seed, services) and tail AP
 	$(DC) run --rm api python scripts/seed.py
 	$(DC) up -d web api worker
 	$(DC) logs -f api
+
+ci: ## Run CI workflow (build, migrations, health check, Postman tests, collect logs)
+	@bash -c '\
+		set -euo pipefail; \
+		cleanup() { \
+			status=$$?; \
+			mkdir -p artifacts; \
+			$(DC) logs api > artifacts/api.log 2>&1 || true; \
+			$(DC) logs worker > artifacts/worker.log 2>&1 || true; \
+			$(DC) logs web > artifacts/web.log 2>&1 || true; \
+			$(DC) logs db > artifacts/db.log 2>&1 || true; \
+			$(DC) logs redis > artifacts/redis.log 2>&1 || true; \
+			$(DC) down -v; \
+			exit $${status}; \
+		}; \
+		trap cleanup EXIT; \
+		mkdir -p artifacts; \
+		$(DC) build api worker web; \
+		$(DC) up -d db redis; \
+		echo "Waiting for Postgres to be ready..."; \
+		pg_ready=0; \
+		for i in $$(seq 1 30); do \
+			if $(DC) exec db pg_isready -U postgres >/dev/null 2>&1; then \
+				echo "Postgres is ready"; \
+				pg_ready=1; \
+				break; \
+			fi; \
+			echo "  attempt $$i - waiting"; \
+			sleep 1; \
+		done; \
+		if [ $$pg_ready -ne 1 ]; then \
+			echo "Postgres did not become ready in time" >&2; \
+			exit 1; \
+		fi; \
+		$(DC) run --rm api alembic upgrade head; \
+		$(DC) run --rm api python scripts/seed.py; \
+		$(DC) up -d api worker web; \
+		echo "Waiting for API health endpoint..."; \
+		api_ready=0; \
+		for i in $$(seq 1 30); do \
+			status_code=$$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/admin/health || true); \
+			if [ "$${status_code}" = "200" ]; then \
+				echo "API health endpoint ready"; \
+				api_ready=1; \
+				break; \
+			fi; \
+			echo "  attempt $$i - status $${status_code:-N/A}"; \
+			sleep 2; \
+		done; \
+		if [ $$api_ready -ne 1 ]; then \
+			echo "API did not become healthy in time" >&2; \
+			exit 1; \
+		fi; \
+		npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --verbose; \
+	'
 
 down: ## Stop and remove running services (including volumes)
 	$(DC) down -v
