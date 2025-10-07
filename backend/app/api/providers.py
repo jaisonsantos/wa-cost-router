@@ -47,7 +47,7 @@ def list_providers(
         has_creds = db.query(ProviderCredential).filter(
             ProviderCredential.org_id == current_user["org_id"],
             ProviderCredential.provider_id == p.id,
-            ProviderCredential.is_active == True
+            ProviderCredential.is_active.is_(True)
         ).first() is not None
         
         result.append(ProviderResponse(
@@ -141,7 +141,7 @@ async def check_provider_health(
     credential = db.query(ProviderCredential).filter(
         ProviderCredential.org_id == current_user["org_id"],
         ProviderCredential.provider_id == provider_id,
-        ProviderCredential.is_active == True
+        ProviderCredential.is_active.is_(True)
     ).first()
     
     if not credential:
