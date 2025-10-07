@@ -23,6 +23,7 @@ import {
   CreditCard,
   Users,
   Shield,
+  Info,
 } from "lucide-react";
 import { CreateWAConnectionPayload, Organization, RateEntry } from "@/types/api";
 
@@ -31,6 +32,7 @@ interface WaConnectionForm {
   phone_id: string;
   access_token: string;
   webhook_verify_token: string;
+  webhook_secret: string;
 }
 
 type ConnectionStatus = "healthy" | "warning" | "disconnected";
@@ -81,7 +83,10 @@ const Settings = () => {
     phone_id: "",
     access_token: "",
     webhook_verify_token: "",
+    webhook_secret: "",
   });
+
+  const isWAFormValid = Object.values(waForm).every((value) => value.trim().length > 0);
 
   const rates: RateEntry[] = ratesData ?? [];
   const organization: Organization = orgData ?? {
@@ -100,11 +105,15 @@ const Settings = () => {
   };
 
   const handleWAConnect = async () => {
+    if (!isWAFormValid) {
+      return;
+    }
     const payload: CreateWAConnectionPayload = {
       business_id: waForm.business_id,
       phone_id: waForm.phone_id,
       access_token: waForm.access_token,
-      webhook_verify_token: waForm.webhook_verify_token || undefined,
+      webhook_verify_token: waForm.webhook_verify_token,
+      webhook_secret: waForm.webhook_secret,
     };
     await createWAConnection.mutateAsync(payload);
   };
@@ -211,40 +220,103 @@ const Settings = () => {
             <CardContent className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Business Account ID</Label>
-                  <Input 
-                    value={waForm.business_id} 
-                    onChange={(e) => setWaForm({...waForm, business_id: e.target.value})}
+                  <Label htmlFor="wa-business-id">Business Account ID</Label>
+                  <Input
+                    id="wa-business-id"
+                    value={waForm.business_id}
+                    required
+                    aria-invalid={!waForm.business_id.trim()}
+                    onChange={(e) =>
+                      setWaForm({ ...waForm, business_id: e.target.value })
+                    }
                     placeholder="Inserir Business ID"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Disponível no painel Meta Business &gt; Configurações da conta comercial.
+                  </p>
                 </div>
                 <div>
-                  <Label>Phone Number ID</Label>
-                  <Input 
+                  <Label htmlFor="wa-phone-id">Phone Number ID</Label>
+                  <Input
+                    id="wa-phone-id"
                     value={waForm.phone_id}
-                    onChange={(e) => setWaForm({...waForm, phone_id: e.target.value})}
+                    required
+                    aria-invalid={!waForm.phone_id.trim()}
+                    onChange={(e) => setWaForm({ ...waForm, phone_id: e.target.value })}
                     placeholder="Inserir Phone ID"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Copie o ID na seção de números do WhatsApp Manager.
+                  </p>
                 </div>
                 <div>
-                  <Label>Access Token</Label>
-                  <Input 
+                  <Label htmlFor="wa-access-token">Access Token</Label>
+                  <Input
                     type="password"
+                    id="wa-access-token"
                     value={waForm.access_token}
-                    onChange={(e) => setWaForm({...waForm, access_token: e.target.value})}
+                    required
+                    aria-invalid={!waForm.access_token.trim()}
+                    onChange={(e) =>
+                      setWaForm({ ...waForm, access_token: e.target.value })
+                    }
                     placeholder="Inserir token"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Gere um token de longo prazo no Meta for Developers.
+                  </p>
                 </div>
                 <div>
-                  <Label>Webhook Verify Token (Opcional)</Label>
-                  <Input 
+                  <Label htmlFor="wa-webhook-verify-token">Webhook Verify Token</Label>
+                  <Input
+                    id="wa-webhook-verify-token"
                     value={waForm.webhook_verify_token}
-                    onChange={(e) => setWaForm({...waForm, webhook_verify_token: e.target.value})}
+                    required
+                    aria-invalid={!waForm.webhook_verify_token.trim()}
+                    onChange={(e) =>
+                      setWaForm({ ...waForm, webhook_verify_token: e.target.value })
+                    }
                     placeholder="Token de verificação"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Use o mesmo token configurado ao registrar o webhook no Meta Developers.
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="wa-webhook-secret">Webhook Secret</Label>
+                  <Input
+                    id="wa-webhook-secret"
+                    type="password"
+                    value={waForm.webhook_secret}
+                    required
+                    aria-invalid={!waForm.webhook_secret.trim()}
+                    onChange={(e) =>
+                      setWaForm({ ...waForm, webhook_secret: e.target.value })
+                    }
+                    placeholder="Secret do webhook"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Disponível na aba de Webhooks do aplicativo WhatsApp no Meta Developers.
+                  </p>
                 </div>
               </div>
-              
+
+              <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                <Shield className="mt-0.5 h-4 w-4 text-primary" />
+                <div>
+                  <p className="font-medium flex items-center gap-2">
+                    Proteja suas credenciais
+                    <Badge variant="outline" className="gap-1">
+                      <Info className="h-3 w-3" />
+                      Guia
+                    </Badge>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Gere o verify token e o secret diretamente no Meta Developers e nunca compartilhe esses valores fora da sua equipe de confiança.
+                  </p>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between p-3 bg-success/10 rounded-lg">
                 <div>
                   <p className="text-sm font-medium text-success">Conexão ativa</p>
@@ -256,9 +328,9 @@ const Settings = () => {
               </div>
 
               <div className="flex space-x-2">
-                <Button 
+                <Button
                   onClick={handleWAConnect}
-                  disabled={createWAConnection.isPending || !waForm.business_id || !waForm.phone_id || !waForm.access_token}
+                  disabled={createWAConnection.isPending || !isWAFormValid}
                   className="bg-gradient-to-r from-primary to-primary/80"
                 >
                   {createWAConnection.isPending ? "Conectando..." : "Conectar WhatsApp"}
