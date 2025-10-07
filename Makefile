@@ -1,4 +1,8 @@
-.PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web lint lint-fix frontend-dev install migrate seed seed-providers clean shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env ci ci-backend ci-frontend ci-e2e
+.PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web \
+	lint lint-fix lint-backend frontend-dev install migrate seed seed-providers clean \
+	shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env \
+	ci ci-backend ci-frontend ci-e2e ci-pipeline test-backend
+
 # Prefer the standalone docker-compose binary when available and fall back to
 # the Docker CLI plugin (`docker compose`). This mirrors the default GitHub
 # Actions environment which only ships the plugin.
@@ -59,7 +63,8 @@ dev: ## Bootstrap local stack (db/redis, migrations, seed, services) and tail AP
 	$(DC) up -d web api worker
 	$(DC) logs -f api
 
-ci: ## Run CI workflow (build, migrations, health check, Postman tests, collect logs)
+# Monolithic CI pipeline kept as a separate target (no more name collision with `ci`)
+ci-pipeline: ## Run CI workflow (build, migrations, health check, Postman tests, collect logs)
 	@bash -c '\
 		set -euo pipefail; \
 		cleanup() { \
@@ -167,10 +172,8 @@ postman-env: ## Show Postman collection and environment paths
 	@echo "Collection: docs/postman/wa-cost-router.postman_collection.json"
 	@echo "Environment: docs/postman/wa-cost-router.postman_environment.json"
 
-ci: ## Run backend, frontend and E2E checks sequentially
-	$(MAKE) ci-backend
-	$(MAKE) ci-frontend
-	$(MAKE) ci-e2e
+# Aggregator CI target (no recipe) → runs modular steps
+ci: ci-backend ci-frontend ci-e2e ## Run backend, frontend and E2E checks sequentially
 
 ci-backend: ## Build backend images and verify migrations
 	$(DC) build api worker

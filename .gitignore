@@ -1,4 +1,4 @@
-# Logs
+# ---- Logs
 logs
 *.log
 npm-debug.log*
@@ -7,18 +7,51 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# ---- Node
 node_modules
 dist
 dist-ssr
 *.local
 
-# Editor directories and files
+# ---- Editor / OS
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# ---- Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ---- Env / Segredos
+.env
+*.env
+*.env.local
+.env.*.local
+backend/.env
+
+# ---- Alembic/Build/Artifacts
+artifacts/
+newman/
+newman-report.xml
+
+# ---- Docker (opcional)
+*.tar
