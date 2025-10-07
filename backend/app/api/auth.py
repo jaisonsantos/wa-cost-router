@@ -1,6 +1,7 @@
+from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, field_validator
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token
 from app.models.models import User, Organization, OrganizationUser, RoleEnum
@@ -8,13 +9,46 @@ from app.models.models import User, Organization, OrganizationUser, RoleEnum
 router = APIRouter()
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     org_name: str
 
+    @field_validator("email")
+    @classmethod
+    def validate_email_address(cls, value: str) -> str:
+        try:
+            result = validate_email(
+                value,
+                allow_smtputf8=True,
+                allow_empty_local=False,
+                allow_domain_literal=True,
+                allow_fqdn=True,
+                allow_local=True,
+            )
+        except EmailNotValidError as exc:  # pragma: no cover - FastAPI handles response
+            raise ValueError(str(exc)) from exc
+        return result.email
+
+
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_address(cls, value: str) -> str:
+        try:
+            result = validate_email(
+                value,
+                allow_smtputf8=True,
+                allow_empty_local=False,
+                allow_domain_literal=True,
+                allow_fqdn=True,
+                allow_local=True,
+            )
+        except EmailNotValidError as exc:  # pragma: no cover - FastAPI handles response
+            raise ValueError(str(exc)) from exc
+        return result.email
 
 class TokenResponse(BaseModel):
     access_token: str
