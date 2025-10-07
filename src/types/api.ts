@@ -53,6 +53,7 @@ export interface MessageJobAttempt {
   latency_ms: number | null;
   error_code?: string | null;
   error_message?: string | null;
+  timestamp?: string | null;
 }
 
 export interface MessageJobSummary {
