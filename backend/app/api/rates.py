@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
@@ -64,20 +65,48 @@ async def import_csv(
     count = 0
     for row in reader:
         try:
-            provider_uuid = UUID(row["provider_id"])
-        except (KeyError, ValueError):
-            raise HTTPException(status_code=400, detail="Invalid provider_id in CSV")
+            provider_identifier = row.get("provider_id") or row.get("provider_name")
+        except KeyError:
+            provider_identifier = None
 
-        provider = (
-            db.query(Provider)
-            .filter(
-                Provider.id == provider_uuid,
-                Provider.org_id == current_user["org_id"],
+        if not provider_identifier:
+            raise HTTPException(
+                status_code=400,
+                detail="CSV must include provider_id or provider_name column",
             )
-            .first()
-        )
-        if not provider:
-            raise HTTPException(status_code=404, detail=f"Provider {row.get('provider_id')} not found")
+
+        provider = None
+        try:
+            provider_uuid = UUID(str(provider_identifier))
+        except ValueError:
+            provider = (
+                db.query(Provider)
+                .filter(
+                    Provider.org_id == current_user["org_id"],
+                    func.lower(Provider.name) == str(provider_identifier).strip().lower(),
+                )
+                .first()
+            )
+            if not provider:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Provider {provider_identifier} not found",
+                )
+            provider_uuid = provider.id
+        else:
+            provider = (
+                db.query(Provider)
+                .filter(
+                    Provider.id == provider_uuid,
+                    Provider.org_id == current_user["org_id"],
+                )
+                .first()
+            )
+            if not provider:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Provider {provider_identifier} not found",
+                )
 
         rate = RateCard(
             provider_id=provider_uuid,

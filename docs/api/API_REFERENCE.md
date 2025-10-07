@@ -75,7 +75,7 @@ curl -X POST http://localhost:8000/messages/send \
 | POST | `/rates/import_csv` | Importa CSV (multipart) com tarifas. | `Rates - Import CSV` |
 
 - As respostas de `/rates` incluem `provider_id`/`provider_name` para identificar o dono da tarifa.
-- O CSV de importação deve conter a coluna `provider_id` apontando para um provedor existente da organização (veja `docs/postman/sample_rates.csv`).
+- O CSV de importação deve conter `provider_id` **ou** `provider_name` apontando para um provedor existente da organização (veja `docs/postman/sample_rates.csv`).
 
 ## Relatórios
 
@@ -93,7 +93,7 @@ curl -X POST http://localhost:8000/messages/send \
 | GET | `/integrations/wa/webhook` | Validação de webhook (hub.verify_token). | `WA - Webhook Verify` |
 | POST | `/integrations/wa/webhook` | Recebe eventos (requer `metadata.phone_number_id` + assinatura HMAC). | `WA - Webhook Receive` |
 
-- Repetir `POST /integrations/wa/connections` com o mesmo `phone_id` atualiza o token/secret existente. Caso o `webhook_verify_token` informado já esteja associado a outra conexão, a API retorna `400`.
+- Repetir `POST /integrations/wa/connections` com o mesmo `phone_id` atualiza o token/secret existente. Conflitos de `webhook_verify_token` são verificados apenas dentro da mesma organização.
 
 ### Webhook WhatsApp
 
@@ -104,9 +104,9 @@ curl -X POST http://localhost:8000/messages/send \
 
 #### `POST /integrations/wa/webhook`
 
-- Obrigatório incluir o header `X-Hub-Signature-256: sha256=<HMAC>` calculado com o secret configurado para a conexão.
+- Recomenda-se incluir o header `X-Hub-Signature-256: sha256=<HMAC>` calculado com o secret configurado para a conexão.
 - O payload deve carregar `entry[].changes[].value.metadata.phone_number_id` para roteamento multi-tenant. Eventos de números desconhecidos são ignorados sem gravação.
-- A assinatura é validada com HMAC SHA-256 sobre o corpo bruto; divergências retornam `403` e nenhum evento é persistido.
+- Assinaturas ausentes ou inválidas são registradas e o payload é descartado com resposta `200` (`status: ignored`).
 
 ```bash
 BODY='{

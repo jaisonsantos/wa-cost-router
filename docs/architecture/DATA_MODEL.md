@@ -15,7 +15,7 @@
 | `cost_record` | `message_job_id`, `provider_id`, `price_eur`, `price_table_version` | Auditoria de custo. |
 | `message_event` | `org_id`, `message_job_id`, `provider_event_id`, `unit_cost_minor`, `baseline_cost_minor` | Base para relatórios (agora referencia `message_job`). |
 | `rate_card` | `provider_id`, `country_iso`, `category`, `unit_cost_minor` | Cada tarifa pertence a um provedor ativo. |
-| `wa_connection` | `org_id`, `business_id`, `phone_id`, `access_token_enc`, `webhook_secret_enc` | Tokens de acesso/webhook criptografados; `webhook_verify_token` único. |
+| `wa_connection` | `org_id`, `business_id`, `phone_id`, `access_token_enc`, `webhook_secret_enc` | Tokens de acesso/webhook criptografados; `webhook_verify_token` único por organização. |
 
 ## ERD (ASCII)
 
@@ -40,7 +40,7 @@ rate_card ──> provider
 - `provider`: unique `(org_id,name)`, índice `org_id`.
 - `delivery_attempt`: PK UUID, considerar índice em `(message_job_id, attempt_number)`.
 - `message_event`: índices em `org_id`, `provider_event_id`, `timestamp_provider`; FK opcional para `message_job` (`message_job_id`).
-- `wa_connection`: índice único em `webhook_verify_token` para evitar duplicidade entre conexões.
+- `wa_connection`: índice único composto (`org_id`, `webhook_verify_token`) para evitar duplicidade dentro do tenant.
 
 ## Observações
 

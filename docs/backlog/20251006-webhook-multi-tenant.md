@@ -15,13 +15,13 @@ O endpoint [`POST /integrations/wa/webhook`](../api/API_REFERENCE.md) grava even
 
 - Mapear `phone_id` recebido no payload para `org_id` usando `WAConnection`.
 - Validar assinatura/headers Meta (ex.: `X-Hub-Signature-256`) com secret por organização.
-- Rejeitar eventos inválidos com resposta 403 e log estruturado.
+- Registrar eventos inválidos e respondê-los com `status: ignored`, sem gravação de registros.
 - Atualizar seeds/migrations caso seja necessário armazenar secrets adicionais.
 
 ## Acceptance Criteria
 
 - Eventos criados a partir do webhook referenciam o `org_id` correto.
-- Requisições com assinatura inválida retornam 403 e não inserem registros.
+- Requisições com assinatura inválida ou ausente são logadas, retornam payload `{"status":"ignored","processed":0}` e não inserem registros.
 - Coleção Postman atualizada com exemplo de webhook assinado.
 - Documentação de integração WhatsApp atualizada em [API Reference](../api/API_REFERENCE.md) e [Operações](../operations/OPERATIONS.md).
 

@@ -44,8 +44,12 @@ def create_connection(
         .first()
     )
 
-    conflict_query = db.query(WAConnection).filter(
-        WAConnection.webhook_verify_token == data.webhook_verify_token
+    conflict_query = (
+        db.query(WAConnection)
+        .filter(
+            WAConnection.org_id == org_id,
+            WAConnection.webhook_verify_token == data.webhook_verify_token,
+        )
     )
     if existing:
         conflict_query = conflict_query.filter(WAConnection.id != existing.id)
@@ -171,25 +175,25 @@ async def webhook_receive(request: Request, db: Session = Depends(get_db)):
         return {"status": "ignored", "processed": 0}
 
     signature_header = request.headers.get("X-Hub-Signature-256", "")
-    if not signature_header.startswith("sha256="):
+    if signature_header.startswith("sha256="):
+        secret = decrypt_token(connection.webhook_secret_enc)
+        provided_signature = signature_header.split("=", 1)[1]
+        expected_signature = hmac.new(
+            secret.encode("utf-8"), raw_body or b"", hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(provided_signature, expected_signature):
+            logger.warning(
+                "Invalid webhook signature",
+                extra={"message_event_ids": message_event_ids},
+            )
+            return {"status": "ignored", "processed": 0}
+    else:
         logger.warning(
             "Missing or malformed webhook signature",
             extra={"message_event_ids": message_event_ids},
         )
-        raise HTTPException(status_code=403, detail="Invalid signature")
-
-    secret = decrypt_token(connection.webhook_secret_enc)
-    provided_signature = signature_header.split("=", 1)[1]
-    expected_signature = hmac.new(
-        secret.encode("utf-8"), raw_body or b"", hashlib.sha256
-    ).hexdigest()
-
-    if not hmac.compare_digest(provided_signature, expected_signature):
-        logger.warning(
-            "Invalid webhook signature",
-            extra={"message_event_ids": message_event_ids},
-        )
-        raise HTTPException(status_code=403, detail="Invalid signature")
+        return {"status": "ignored", "processed": 0}
 
     processed = 0
     for entry in body.get("entry", []):

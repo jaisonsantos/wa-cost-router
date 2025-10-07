@@ -54,9 +54,13 @@ class WAConnection(Base):
     phone_id = Column(String, nullable=False)
     access_token_enc = Column(String, nullable=False)
     token_expires_at = Column(DateTime(timezone=True))
-    webhook_verify_token = Column(String, nullable=False, unique=True)
+    webhook_verify_token = Column(String, nullable=False)
     webhook_secret_enc = Column(Text, nullable=False)
     status = Column(String, default="active")
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "webhook_verify_token", name="uq_wa_connection_org_token"),
+    )
 
 class WATemplate(Base):
     __tablename__ = "wa_template"

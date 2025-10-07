@@ -170,7 +170,7 @@ def test_webhook_receive_persists_events_with_valid_signature(client, db_session
     assert event.provider_event_id == "wamid.sample"
 
 
-def test_webhook_receive_returns_403_for_invalid_signature(client, db_session):
+def test_webhook_receive_ignores_events_with_invalid_signature(client, db_session):
     _create_connection(db_session, phone_id="phone-invalid", secret="expected-secret")
 
     payload = {
@@ -205,7 +205,42 @@ def test_webhook_receive_returns_403_for_invalid_signature(client, db_session):
         },
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert response.json() == {"status": "ignored", "processed": 0}
+    assert db_session.query(MessageEvent).count() == 0
+
+
+def test_webhook_receive_ignores_events_without_signature(client, db_session):
+    _create_connection(db_session, phone_id="phone-missing", secret="expected-secret")
+
+    payload = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {"phone_number_id": "phone-missing"},
+                            "messages": [
+                                {
+                                    "id": "wamid.no-signature",
+                                    "from": "5511777777777",
+                                    "timestamp": "1700000002",
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    response = client.post(
+        "/integrations/wa/webhook",
+        json=payload,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ignored", "processed": 0}
     assert db_session.query(MessageEvent).count() == 0
 
 
@@ -265,7 +300,7 @@ def test_create_connection_upserts_existing_record(client, db_session):
         app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_create_connection_rejects_conflicting_verify_token(client, db_session):
+def test_create_connection_allows_verify_token_reuse_from_other_org(client, db_session):
     other_org = Organization(id=uuid.uuid4(), name="Existing Org")
     db_session.add(other_org)
     db_session.flush()
@@ -301,8 +336,7 @@ def test_create_connection_rejects_conflicting_verify_token(client, db_session):
         }
 
         response = client.post("/integrations/wa/connections", json=payload)
-        assert response.status_code == 400
-        assert response.json()["detail"] == "Webhook verify token already in use"
+        assert response.status_code == 200
 
         db_session.expire_all()
         count_new_org_connections = (
@@ -310,6 +344,42 @@ def test_create_connection_rejects_conflicting_verify_token(client, db_session):
             .filter(WAConnection.org_id == new_org_id)
             .count()
         )
-        assert count_new_org_connections == 0
+        assert count_new_org_connections == 1
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_create_connection_rejects_conflict_within_same_org(client, db_session):
+    org_id = uuid.uuid4()
+    org = Organization(id=org_id, name="Conflict Org")
+    db_session.add(org)
+    db_session.flush()
+
+    def override_user():
+        return {"user_id": uuid.uuid4(), "org_id": org_id}
+
+    app.dependency_overrides[get_current_user] = override_user
+    try:
+        first_payload = {
+            "business_id": "biz-1",
+            "phone_id": "phone-a",
+            "access_token": "token-a",
+            "webhook_verify_token": "shared-token",
+            "webhook_secret": "secret-a",
+        }
+        second_payload = {
+            "business_id": "biz-2",
+            "phone_id": "phone-b",
+            "access_token": "token-b",
+            "webhook_verify_token": "shared-token",
+            "webhook_secret": "secret-b",
+        }
+
+        first_response = client.post("/integrations/wa/connections", json=first_payload)
+        assert first_response.status_code == 200
+
+        conflict_response = client.post("/integrations/wa/connections", json=second_payload)
+        assert conflict_response.status_code == 400
+        assert conflict_response.json()["detail"] == "Webhook verify token already in use"
     finally:
         app.dependency_overrides.pop(get_current_user, None)
