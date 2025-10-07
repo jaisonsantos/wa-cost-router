@@ -15,6 +15,18 @@ Comandos úteis:
 - `make seed` – repovoa dados demo (sem criar tabelas).
 - `make postman-test` – executa a coleção Postman via Newman.
 - `make down` – derruba todos os serviços e volumes.
+- `make lint-backend` – valida estilo/código do backend com Ruff.
+- `make test-backend` – executa a suíte Pytest localizada em `backend/tests`.
+
+## Contribuindo
+
+Antes de abrir um Pull Request, instale as dependências de desenvolvimento do backend e garanta que lint/testes passam localmente:
+
+```bash
+pip install -r backend/requirements-dev.txt
+make lint-backend
+make test-backend
+```
 
 ## CI/CD
 

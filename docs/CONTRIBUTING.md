@@ -8,6 +8,7 @@
    - `fix/<issue>` para correções.
 3. Commit mensagens no formato Conventional Commits (`feat:`, `fix:`, `docs:` etc.).
 4. Garantir lint/testes locais (quando disponíveis).
+   - Backend: `pip install -r backend/requirements-dev.txt && make lint-backend && make test-backend`.
 5. Abrir Pull Request:
    - Descrever mudança, passos de teste manual e impacto.
    - Referenciar issues relacionadas.

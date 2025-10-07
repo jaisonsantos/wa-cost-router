@@ -28,7 +28,7 @@
 | `backend/app/services/` | `RoutingEngine`, conectores HTTPX | RoutingEngine impõe `org_id`; respostas completas dos provedores são persistidas.
 
  |
-| `backend/scripts/` | Seeds | `seed.py` cria tabelas via `metadata.create_all`; `seed_providers` ignora `org_id`. |
+| `backend/scripts/` | Seeds | `seed.py` cria tabelas via `metadata.create_all`; `seed_providers` aceita `--org-id` (ou executa para todas). |
 | `backend/alembic/` | Config/migrations | Apenas revisão 001 (alterações pontuais). |
 | `backend/worker.py` | Worker RQ | Pronto para background jobs.
 
@@ -123,7 +123,7 @@
 | Webhook WA | `org_id` placeholder | Eventos não associados à org correta.
 
  |
-| Seeds | `seed_providers` ignora `org_id` | Seed falha com constraint NOT NULL. |
+| Seeds | `seed_providers` respeita `org_id` informado ou replica para todas | Seed não cria org automaticamente. |
 
 ## 5. Idempotência
 
@@ -454,7 +454,7 @@ Todas as rotas abaixo exigem `Authorization: Bearer <token>` salvo indicação c
 | `message_job` | `org_id`, `idempotency_key`, `status` | Unique `(org_id,idempotency_key)`. |
 | `delivery_attempt` | `message_job_id`, `provider_id`, `attempt_number`, `status`, `provider_response` | Armazena resposta crua. |
 | `cost_record` | `message_job_id`, `provider_id`, `price_eur`, `price_table_version` | Auditoria de custo. |
-| `message_event` | `org_id`, `provider_event_id`, `unit_cost_minor`, `baseline_cost_minor` | Base para relatórios. |
+| `message_event` | `org_id`, `message_job_id`, `provider_event_id`, `unit_cost_minor`, `baseline_cost_minor` | Base para relatórios (referência opcional para `message_job`). |
 | `rate_card` | `source`, `country_iso`, `category`, `unit_cost_minor` | Global (sem `org_id`). |
 | `wa_connection` | `org_id`, `business_id`, `phone_id`, `access_token_enc` | Token WhatsApp criptografado. |
 
@@ -480,7 +480,7 @@ rate_card (global, referenciado por nome do provider)
 - `message_job`: unique `(org_id,idempotency_key)`, index em `created_at`.
 - `provider`: unique `(org_id,name)`, índice `org_id`.
 - `delivery_attempt`: PK UUID, sem índices adicionais – considerar índice em `(message_job_id, attempt_number)`.
-- `message_event`: índices em `org_id`, `provider_event_id`, `timestamp_provider`.
+- `message_event`: índices em `org_id`, `provider_event_id`, `timestamp_provider`; FK opcional `message_job_id`.
 
 ## Observações
 
@@ -555,7 +555,7 @@ docker-compose run --rm api alembic upgrade head
 ## 2. Seed
 
 - `python scripts/seed.py` cria org demo + dados sintéticos (usa `metadata.create_all` – substituir por migrations futuras).
-- `python scripts/seed_providers.py` precisa receber `org_id` válido.
+- `python scripts/seed_providers.py --org-id <uuid>` popula uma organização específica; sem argumento replica para todas.
 
 ## 3. Saúde
 
