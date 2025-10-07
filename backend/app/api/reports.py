@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, case
 from pydantic import BaseModel
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from app.core.database import get_db
 from app.api.dependencies import get_current_user
-from app.models.models import MessageEvent, DeliveryAttempt, MessageJob, Provider, RateCard
+from app.models.models import MessageEvent, DeliveryAttempt, MessageJob, Provider
 
 router = APIRouter()
 
