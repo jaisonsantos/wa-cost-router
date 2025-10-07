@@ -1,20 +1,72 @@
+from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, field_validator
+
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token
 from app.models.models import User, Organization, OrganizationUser, RoleEnum
 
+LOCAL_EMAIL_SUFFIX = ".local"
+
+
+def _normalize_email(value: str) -> str:
+    """Validate and canonicalize user supplied email addresses.
+
+    The default validator rejects addresses that use development-only domains
+    such as ``*.local``. For those we validate the local part using the
+    library and then stitch it back together with a lower-cased domain so the
+    rest of the application can keep treating emails as canonical strings.
+    """
+
+    stripped = value.strip()
+    try:
+        result = validate_email(stripped, check_deliverability=False)
+        return result.email
+    except EmailNotValidError as exc:
+        local_part, sep, domain = stripped.rpartition("@")
+        if (
+            sep == "@"
+            and domain
+            and domain.lower().endswith(LOCAL_EMAIL_SUFFIX)
+        ):
+            normalized_domain = domain.lower()
+            domain_without_suffix = normalized_domain[: -len(LOCAL_EMAIL_SUFFIX)]
+            if not domain_without_suffix or any(
+                not label for label in domain_without_suffix.split(".")
+            ):
+                raise ValueError("Invalid email domain")
+            try:
+                pseudo_result = validate_email(
+                    f"{local_part}@example.com", check_deliverability=False
+                )
+            except EmailNotValidError as inner_exc:  # pragma: no cover - FastAPI handles response
+                raise ValueError(str(inner_exc)) from inner_exc
+            normalized_local = pseudo_result.local_part
+            return f"{normalized_local}@{normalized_domain}"
+        raise ValueError(str(exc)) from exc
+
 router = APIRouter()
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     org_name: str
 
+    @field_validator("email")
+    @classmethod
+    def validate_email_address(cls, value: str) -> str:
+        return _normalize_email(value)
+
+
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_address(cls, value: str) -> str:
+        return _normalize_email(value)
 
 class TokenResponse(BaseModel):
     access_token: str
