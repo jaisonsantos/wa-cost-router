@@ -27,7 +27,7 @@ class RoutingEngine:
         # 1. Buscar regras ativas ordenadas por prioridade
         rules = self.db.query(RoutingRule).filter(
             RoutingRule.org_id == self.org_id,
-            RoutingRule.is_enabled == True
+            RoutingRule.is_enabled.is_(True)
         ).order_by(RoutingRule.priority.asc()).all()
         
         # 2. Avaliar condições de cada regra
