@@ -13,7 +13,7 @@
 | `message_job` | `org_id`, `idempotency_key`, `status` | Unique `(org_id,idempotency_key)`. |
 | `delivery_attempt` | `message_job_id`, `provider_id`, `attempt_number`, `status`, `provider_response` | Armazena resposta crua. |
 | `cost_record` | `message_job_id`, `provider_id`, `price_eur`, `price_table_version` | Auditoria de custo. |
-| `message_event` | `org_id`, `provider_event_id`, `unit_cost_minor`, `baseline_cost_minor` | Base para relatórios. |
+| `message_event` | `org_id`, `message_job_id`, `provider_event_id`, `unit_cost_minor`, `baseline_cost_minor` | Base para relatórios (agora referencia `message_job`). |
 | `rate_card` | `source`, `country_iso`, `category`, `unit_cost_minor` | Global (sem `org_id`). |
 | `wa_connection` | `org_id`, `business_id`, `phone_id`, `access_token_enc` | Token WhatsApp criptografado. |
 
@@ -39,7 +39,7 @@ rate_card (global, referenciado por nome do provider)
 - `message_job`: unique `(org_id,idempotency_key)`, index em `created_at`.
 - `provider`: unique `(org_id,name)`, índice `org_id`.
 - `delivery_attempt`: PK UUID, considerar índice em `(message_job_id, attempt_number)`.
-- `message_event`: índices em `org_id`, `provider_event_id`, `timestamp_provider`.
+- `message_event`: índices em `org_id`, `provider_event_id`, `timestamp_provider`; FK opcional para `message_job` (`message_job_id`).
 
 ## Observações
 
