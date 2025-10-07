@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
+from uuid import UUID
 from app.core.database import get_db
 from app.api.dependencies import get_current_user
 from app.models.models import Provider, ProviderCredential
@@ -16,7 +18,7 @@ class ProviderCreate(BaseModel):
     name: str
     type: str = "whatsapp"
     base_url: Optional[str] = None
-    metadata: Dict[str, Any] = {}
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class ProviderCredentialCreate(BaseModel):
     provider_id: str
@@ -73,18 +75,46 @@ def create_provider(
         name=data.name,
         type=data.type,
         base_url=data.base_url,
-        meta=data.metadata
+        meta=data.metadata or {},
     )
     db.add(provider)
-    db.commit()
-    db.refresh(provider)
-    
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        provider = (
+            db.query(Provider)
+            .filter(
+                Provider.org_id == current_user["org_id"],
+                Provider.name == data.name,
+            )
+            .first()
+        )
+        if not provider:
+            raise HTTPException(status_code=400, detail="Unable to create provider")
+    else:
+        db.refresh(provider)
+
+    has_creds = (
+        db.query(ProviderCredential)
+        .filter(
+            ProviderCredential.org_id == current_user["org_id"],
+            ProviderCredential.provider_id == provider.id,
+            ProviderCredential.is_active.is_(True),
+        )
+        .first()
+        is not None
+    )
+
     return ProviderResponse(
         id=str(provider.id),
         name=provider.name,
         type=provider.type,
         status=provider.status,
-        has_credentials=False
+        has_credentials=has_creds,
+        is_configured=has_creds,
+        avg_latency_ms=None,
     )
 
 @router.post("/credentials")
@@ -94,20 +124,25 @@ def set_provider_credentials(
     db: Session = Depends(get_db)
 ):
     """Configura credenciais do provedor para a org"""
+    try:
+        provider_uuid = UUID(data.provider_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid provider_id")
+
     # Verificar se provider existe
     provider = db.query(Provider).filter(
-        Provider.id == data.provider_id,
+        Provider.id == provider_uuid,
         Provider.org_id == current_user["org_id"],
     ).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
-    
+
     # Verificar se já existe
     existing = db.query(ProviderCredential).filter(
         ProviderCredential.org_id == current_user["org_id"],
-        ProviderCredential.provider_id == data.provider_id
+        ProviderCredential.provider_id == provider_uuid
     ).first()
-    
+
     if existing:
         # Atualizar
         existing.credentials_encrypted = encrypt_credentials(data.credentials)
@@ -116,7 +151,7 @@ def set_provider_credentials(
         # Criar novo
         credential = ProviderCredential(
             org_id=current_user["org_id"],
-            provider_id=data.provider_id,
+            provider_id=provider_uuid,
             credentials_encrypted=encrypt_credentials(data.credentials)
         )
         db.add(credential)
@@ -131,16 +166,21 @@ async def check_provider_health(
     db: Session = Depends(get_db)
 ):
     """Testa conectividade com o provedor"""
+    try:
+        provider_uuid = UUID(provider_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid provider_id")
+
     provider = db.query(Provider).filter(
-        Provider.id == provider_id,
+        Provider.id == provider_uuid,
         Provider.org_id == current_user["org_id"],
     ).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
-    
+
     credential = db.query(ProviderCredential).filter(
         ProviderCredential.org_id == current_user["org_id"],
-        ProviderCredential.provider_id == provider_id,
+        ProviderCredential.provider_id == provider_uuid,
         ProviderCredential.is_active.is_(True)
     ).first()
     
@@ -181,9 +221,14 @@ def delete_provider_credentials(
     db: Session = Depends(get_db)
 ):
     """Remove credenciais do provedor"""
+    try:
+        provider_uuid = UUID(provider_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid provider_id")
+
     credential = db.query(ProviderCredential).filter(
         ProviderCredential.org_id == current_user["org_id"],
-        ProviderCredential.provider_id == provider_id
+        ProviderCredential.provider_id == provider_uuid
     ).first()
     
     if not credential:

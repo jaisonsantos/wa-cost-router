@@ -12,7 +12,7 @@ class RuleCreate(BaseModel):
     name: str
     is_enabled: bool = True
     conditions: List[Dict[str, Any]]
-    actions: List[Dict[str, Any]]
+    actions: Dict[str, Any]
     priority: int = 100
 
 class RuleResponse(BaseModel):
@@ -20,7 +20,7 @@ class RuleResponse(BaseModel):
     name: str
     is_enabled: bool
     conditions: List[Dict[str, Any]]
-    actions: List[Dict[str, Any]]
+    actions: Dict[str, Any]
     priority: int
 
 @router.get("/", response_model=List[RuleResponse])

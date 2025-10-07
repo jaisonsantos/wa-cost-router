@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
+import logging
 from app.core.database import get_db
 from app.core.security import encrypt_token
 from app.api.dependencies import get_current_user
@@ -9,6 +10,7 @@ from app.models.models import WAConnection, MessageEvent
 from app.core.config import settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 class ConnectionCreate(BaseModel):
     business_id: str
@@ -49,38 +51,64 @@ def webhook_verify(
 @router.post("/wa/webhook")
 async def webhook_receive(request: Request, db: Session = Depends(get_db)):
     body = await request.json()
-    
+
     # Extract basic fields - adjust based on actual WhatsApp webhook structure
+    processed = 0
     for entry in body.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
             messages = value.get("messages", [])
-            
+
             for msg in messages:
                 provider_id = msg.get("id")
                 if not provider_id:
                     continue
-                
+
+                phone_id = msg.get("from") or value.get("metadata", {}).get("phone_number_id")
+                connection = None
+                if phone_id:
+                    connection = (
+                        db.query(WAConnection)
+                        .filter(
+                            WAConnection.phone_id == phone_id,
+                            WAConnection.status == "active",
+                        )
+                        .first()
+                    )
+
+                if not connection:
+                    connection = (
+                        db.query(WAConnection)
+                        .filter(WAConnection.status == "active")
+                        .first()
+                    )
+
+                if not connection:
+                    logger.warning("Webhook received message %s but no WA connection is configured", provider_id)
+                    continue
+
                 # Check idempotency
                 existing = db.query(MessageEvent).filter(
                     MessageEvent.provider_event_id == provider_id
                 ).first()
                 if existing:
                     continue
-                
+
                 # Create event (simplified - adjust fields as needed)
                 event = MessageEvent(
-                    org_id="00000000-0000-0000-0000-000000000000",  # TODO: map from phone_id
+                    org_id=connection.org_id,
+                    connection_id=connection.id,
                     provider_event_id=provider_id,
-                    direction="outbound",
+                    direction="inbound",
                     timestamp_provider=datetime.utcnow(),
-                    delivery_status="sent",
-                    attributes=msg
+                    delivery_status="received",
+                    attributes=msg,
                 )
                 db.add(event)
-    
+                processed += 1
+
     db.commit()
-    return {"status": "ok"}
+    return {"status": "ok", "processed": processed}
 
 @router.post("/wa/test")
 def test_send(current_user: dict = Depends(get_current_user)):

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 import csv
 import io
 from app.core.database import get_db
@@ -15,7 +16,7 @@ class RateResponse(BaseModel):
     effective_from: datetime
     country_iso: str
     category: str
-    template_name: str = None
+    template_name: Optional[str] = None
     unit_cost_minor: int
     currency: str
 
