@@ -1,18 +1,45 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import {
+  AdvancedSimulationRequest,
+  AdvancedSimulationResponse,
+  CreateWAConnectionPayload,
+  DashboardMetrics,
+  Event,
+  EventsQueryParams,
+  ImportRatesResponse,
+  MessageJobDetail,
+  MessageJobSummary,
+  MessageJobsQueryParams,
+  Organization,
+  Provider,
+  ProviderCredentialInput,
+  ProviderHealth,
+  ProviderMetric,
+  RateEntry,
+  Rule,
+  RuleCreatePayload,
+  RuleUpdatePayload,
+  SendMessageRequest,
+  SendMessageResponse,
+  SetProviderCredentialsResponse,
+  SimulateRulesResult,
+  SummaryResponse,
+  WAConnectionResponse,
+} from "@/types/api";
 
 // Summary
 export const useSummary = (from?: string, to?: string) => {
-  return useQuery({
+  return useQuery<SummaryResponse, Error>({
     queryKey: ["summary", from, to],
     queryFn: () => api.getSummary(from, to),
   });
 };
 
 // Events
-export const useEvents = (params?: Parameters<typeof api.getEvents>[0]) => {
-  return useQuery({
+export const useEvents = (params?: EventsQueryParams) => {
+  return useQuery<Event[], Error>({
     queryKey: ["events", params],
     queryFn: () => api.getEvents(params),
   });
@@ -20,7 +47,7 @@ export const useEvents = (params?: Parameters<typeof api.getEvents>[0]) => {
 
 // Rules
 export const useRules = () => {
-  return useQuery({
+  return useQuery<Rule[], Error>({
     queryKey: ["rules"],
     queryFn: () => api.getRules(),
   });
@@ -28,8 +55,8 @@ export const useRules = () => {
 
 export const useCreateRule = () => {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: api.createRule.bind(api),
+  return useMutation<Rule, Error, RuleCreatePayload>({
+    mutationFn: (payload) => api.createRule(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rules"] });
       toast({ title: "Regra criada com sucesso" });
@@ -42,9 +69,8 @@ export const useCreateRule = () => {
 
 export const useUpdateRule = () => {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ ruleId, updates }: { ruleId: string; updates: any }) =>
-      api.updateRule(ruleId, updates),
+  return useMutation<{ status: string }, Error, { ruleId: string; updates: RuleUpdatePayload }>({
+    mutationFn: ({ ruleId, updates }) => api.updateRule(ruleId, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rules"] });
       toast({ title: "Regra atualizada" });
@@ -57,7 +83,7 @@ export const useUpdateRule = () => {
 
 export const useToggleRule = () => {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<{ is_enabled: boolean }, Error, string>({
     mutationFn: (ruleId: string) => api.toggleRule(ruleId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rules"] });
@@ -70,12 +96,12 @@ export const useToggleRule = () => {
 };
 
 export const useSimulateRules = () => {
-  return useMutation({
+  return useMutation<SimulateRulesResult, Error, void>({
     mutationFn: () => api.simulateRules(),
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
       toast({
         title: "Simulação concluída",
-        description: `Economia potencial: €${(data.potential_saved_minor / 100).toFixed(2)}`,
+        description: `Economia potencial: €${(data.saved / 100).toFixed(2)}`,
       });
     },
     onError: (error: Error) => {
@@ -86,7 +112,7 @@ export const useSimulateRules = () => {
 
 // Rates
 export const useRates = () => {
-  return useQuery({
+  return useQuery<RateEntry[], Error>({
     queryKey: ["rates"],
     queryFn: () => api.getRates(),
   });
@@ -94,9 +120,9 @@ export const useRates = () => {
 
 export const useImportRatesCSV = () => {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<ImportRatesResponse, Error, File>({
     mutationFn: (file: File) => api.importRatesCSV(file),
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["rates"] });
       toast({ title: `${data.imported} tarifas importadas` });
     },
@@ -108,7 +134,7 @@ export const useImportRatesCSV = () => {
 
 // Organizations
 export const useCurrentOrg = () => {
-  return useQuery({
+  return useQuery<Organization, Error>({
     queryKey: ["currentOrg"],
     queryFn: () => api.getCurrentOrg(),
   });
@@ -116,8 +142,8 @@ export const useCurrentOrg = () => {
 
 // Integrations
 export const useCreateWAConnection = () => {
-  return useMutation({
-    mutationFn: api.createWAConnection.bind(api),
+  return useMutation<WAConnectionResponse, Error, CreateWAConnectionPayload>({
+    mutationFn: (payload) => api.createWAConnection(payload),
     onSuccess: () => {
       toast({ title: "Conexão WhatsApp configurada" });
     },
@@ -133,7 +159,7 @@ export const useCreateWAConnection = () => {
 
 // Providers
 export const useProviders = () => {
-  return useQuery({
+  return useQuery<Provider[], Error>({
     queryKey: ["providers"],
     queryFn: () => api.getProviders(),
   });
@@ -141,9 +167,12 @@ export const useProviders = () => {
 
 export const useSetProviderCredentials = () => {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ provider_id, credentials }: { provider_id: string; credentials: any }) =>
-      api.setProviderCredentials(provider_id, credentials),
+  return useMutation<
+    SetProviderCredentialsResponse,
+    Error,
+    { providerId: string; credentials: ProviderCredentialInput }
+  >({
+    mutationFn: ({ providerId, credentials }) => api.setProviderCredentials(providerId, credentials),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
     },
@@ -151,21 +180,21 @@ export const useSetProviderCredentials = () => {
 };
 
 export const useHealthCheckProvider = () => {
-  return useMutation({
+  return useMutation<ProviderHealth, Error, string>({
     mutationFn: (providerId: string) => api.healthCheckProvider(providerId),
   });
 };
 
 // Messages
-export const useMessageJobs = (params?: { status?: string }) => {
-  return useQuery({
+export const useMessageJobs = (params?: MessageJobsQueryParams) => {
+  return useQuery<MessageJobSummary[], Error>({
     queryKey: ["messageJobs", params],
     queryFn: () => api.getMessageJobs(params),
   });
 };
 
 export const useMessageJobDetails = (jobId: string) => {
-  return useQuery({
+  return useQuery<MessageJobDetail, Error>({
     queryKey: ["messageJob", jobId],
     queryFn: () => api.getMessageJobDetails(jobId),
     enabled: !!jobId,
@@ -174,8 +203,8 @@ export const useMessageJobDetails = (jobId: string) => {
 
 export const useSendMessage = () => {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: api.sendMessage.bind(api),
+  return useMutation<SendMessageResponse, Error, SendMessageRequest>({
+    mutationFn: (payload) => api.sendMessage(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messageJobs"] });
       toast({ title: "Mensagem enviada com sucesso" });
@@ -188,14 +217,14 @@ export const useSendMessage = () => {
 
 // Dashboard Metrics
 export const useDashboardMetrics = () => {
-  return useQuery({
+  return useQuery<DashboardMetrics, Error>({
     queryKey: ["dashboardMetrics"],
     queryFn: () => api.getDashboardMetrics(),
   });
 };
 
 export const useProviderMetrics = () => {
-  return useQuery({
+  return useQuery<ProviderMetric[], Error>({
     queryKey: ["providerMetrics"],
     queryFn: () => api.getProviderMetrics(),
   });
@@ -203,13 +232,12 @@ export const useProviderMetrics = () => {
 
 // Advanced Simulator
 export const useSimulateAdvanced = () => {
-  return useMutation({
-    mutationFn: (data: { countries: string[]; volumes: Record<string, number>; category: string }) => 
-      api.simulateAdvanced(data),
-    onSuccess: (data: any) => {
+  return useMutation<AdvancedSimulationResponse, Error, AdvancedSimulationRequest>({
+    mutationFn: (data) => api.simulateAdvanced(data),
+    onSuccess: (data) => {
       toast({
         title: "Simulação concluída",
-        description: `Economia potencial: €${((data.total_savings || 0) / 100).toFixed(2)}`,
+        description: `Economia potencial: €${((data.total_saved || 0) / 100).toFixed(2)}`,
       });
     },
     onError: (error: Error) => {

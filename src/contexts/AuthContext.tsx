@@ -78,10 +78,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
       navigate("/dashboard");
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Login failed";
       toast({
         title: "Erro no login",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
       throw error;
@@ -118,10 +119,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
       navigate("/dashboard");
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Registration failed";
       toast({
         title: "Erro no registro",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
       throw error;
