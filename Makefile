@@ -1,5 +1,5 @@
-.PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web lint lint-fix frontend-dev install migrate seed seed-providers clean shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env ci
-
+.PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web lint lint-fix frontend-dev install \
+	migrate seed seed-providers clean shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env ci
 DC ?= docker-compose
 
 help: ## Show this help message
