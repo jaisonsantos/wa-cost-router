@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import auth, orgs, integrations, rates, events, reports, rules, admin, messages, providers
-from app.core.config import settings
 
 app = FastAPI(title="WA Cost Router API", version="1.0.0")
 

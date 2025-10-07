@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any
 from app.core.database import get_db
 from app.api.dependencies import get_current_user
-from app.models.models import RoutingRule, MessageEvent
+from app.models.models import RoutingRule
 
 router = APIRouter()
 
@@ -154,7 +154,6 @@ def simulate(
     Calcula custo otimizado vs baseline para múltiplos países
     """
     from app.services.routing_engine import RoutingEngine
-    from app.models.models import RateCard, Provider
     
     engine = RoutingEngine(db, current_user["org_id"])
     
