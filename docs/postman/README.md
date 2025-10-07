@@ -25,11 +25,17 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 | Variável | Descrição |
 |----------|-----------|
 | `base_url` | URL base da API (default `http://localhost:8000`). |
-| `email` / `password` | Credenciais usadas no fluxo (email e senha fortes são gerados dinamicamente a cada execução). |
+| `email` / `password` | Credenciais seed (`admin@demo.local` / `demo123`) usadas como fallback até o prerequest gerar valores fortes por execução. |
 | `token` | JWT salvo pelos testes (não preencha manualmente). |
 | `org_id`, `provider_id`, `rule_id`, `job_id` | IDs capturados automaticamente para uso em chamadas subsequentes. |
 | `rates_csv_path` | Caminho do CSV usado no import de tarifas (`docs/postman/sample_rates.csv`). |
-| `wa_phone_id`, `wa_business_id`, `wa_access_token`, `wa_verify_token` | Dados falsos para testar integrações WhatsApp. |
+| `wa_phone_id`, `wa_business_id`, `wa_access_token`, `wa_verify_token`, `wa_webhook_secret` | Dados seed para testar integrações WhatsApp (incluindo secret usado no HMAC do webhook). |
+
+### Assinatura do webhook
+
+- `WA - Webhook Receive` calcula automaticamente o header `X-Hub-Signature-256` em um script *pre-request* usando HMAC SHA-256 do corpo bruto com a variável `wa_webhook_secret` (`sha256=<hex>`).
+- Certifique-se de executar **WA - Create Connection** antes das requisições de webhook para que a API armazene o mesmo secret e verifique a assinatura corretamente.
+- O payload de exemplo inclui `metadata.phone_number_id` e deve combinar com `wa_phone_id` para que o evento seja aceito.
 
 ## Fluxo recomendado
 

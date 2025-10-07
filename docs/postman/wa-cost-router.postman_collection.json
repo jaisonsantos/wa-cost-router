@@ -509,7 +509,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"business_id\": \"{{wa_business_id}}\",\n  \"phone_id\": \"{{wa_phone_id}}\",\n  \"access_token\": \"{{wa_access_token}}\",\n  \"webhook_verify_token\": \"{{wa_verify_token}}\"\n}"
+              "raw": "{\n  \"business_id\": \"{{wa_business_id}}\",\n  \"phone_id\": \"{{wa_phone_id}}\",\n  \"access_token\": \"{{wa_access_token}}\",\n  \"webhook_verify_token\": \"{{wa_verify_token}}\",\n  \"webhook_secret\": \"{{wa_webhook_secret}}\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/integrations/wa/connections",
@@ -543,14 +543,32 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"entry\": [\n    {\n      \"changes\": [\n        {\n          \"value\": {\n            \"messages\": [\n              {\n                \"id\": \"msg-postman-{{$timestamp}}\",\n                \"from\": \"{{wa_phone_id}}\",\n                \"text\": \"hello\"\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+              "raw": "{\n  \"entry\": [\n    {\n      \"changes\": [\n        {\n          \"value\": {\n            \"metadata\": {\n              \"phone_number_id\": \"{{wa_phone_id}}\"\n            },\n            \"messages\": [\n              {\n                \"id\": \"msg-postman-{{$timestamp}}\",\n                \"from\": \"{{wa_phone_id}}\",\n                \"text\": \"hello\"\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/integrations/wa/webhook",
               "host": ["{{base_url}}"],
               "path": ["integrations", "wa", "webhook"]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const secret = pm.environment.get('wa_webhook_secret');",
+                  "if (!secret) {",
+                  "  pm.request.headers.remove('X-Hub-Signature-256');",
+                  "  return;",
+                  "}",
+                  "const rawBody = (pm.request.body && pm.request.body.raw) || '';",
+                  "const signature = 'sha256=' + CryptoJS.HmacSHA256(rawBody, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'X-Hub-Signature-256', value: signature });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
