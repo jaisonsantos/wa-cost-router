@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useSimulateAdvanced } from "@/hooks/useApi";
 import { PlayCircle, TrendingDown, Plus, X } from "lucide-react";
+import {
+  AdvancedSimulationCountryBreakdown,
+  AdvancedSimulationProviderBreakdown,
+  AdvancedSimulationResponse,
+} from "@/types/api";
 
 interface CountryVolume {
   country: string;
@@ -17,7 +22,7 @@ interface CountryVolume {
 export default function AdvancedSimulator() {
   const [countries, setCountries] = useState<CountryVolume[]>([{ country: "BR", volume: 1000 }]);
   const [category, setCategory] = useState("marketing");
-  const [results, setResults] = useState<any>(null);
+  const [results, setResults] = useState<AdvancedSimulationResponse | null>(null);
   
   const simulate = useSimulateAdvanced();
 
@@ -61,6 +66,16 @@ export default function AdvancedSimulator() {
       console.error("Simulation error:", error);
     }
   };
+
+  const providerNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    results?.breakdown.forEach((countryBreakdown) => {
+      countryBreakdown.providers.forEach((provider) => {
+        map.set(provider.provider_id, provider.provider_name);
+      });
+    });
+    return map;
+  }, [results]);
 
   const commonCountries = [
     { code: "BR", name: "Brasil" },
@@ -169,22 +184,22 @@ export default function AdvancedSimulator() {
         {results && (
           <>
             <Separator />
-            
+
             <div>
               <h3 className="font-semibold mb-4">Resultados da Simulação</h3>
-              
+
               {/* Resumo */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <Card>
                   <CardContent className="pt-6">
                     <p className="text-sm text-muted-foreground">Custo Baseline</p>
-                    <p className="text-2xl font-bold">€{((results.baseline_cost || 0) / 100).toFixed(2)}</p>
+                    <p className="text-2xl font-bold">€{(results.total_baseline / 100).toFixed(2)}</p>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="pt-6">
                     <p className="text-sm text-muted-foreground">Custo Otimizado</p>
-                    <p className="text-2xl font-bold text-success">€{((results.optimized_cost || 0) / 100).toFixed(2)}</p>
+                    <p className="text-2xl font-bold text-success">€{(results.total_optimized / 100).toFixed(2)}</p>
                   </CardContent>
                 </Card>
                 <Card>
@@ -192,37 +207,66 @@ export default function AdvancedSimulator() {
                     <p className="text-sm text-muted-foreground">Economia</p>
                     <div className="flex items-center gap-2">
                       <TrendingDown className="h-5 w-5 text-success" />
-                      <p className="text-2xl font-bold text-success">€{((results.total_savings || 0) / 100).toFixed(2)}</p>
+                      <p className="text-2xl font-bold text-success">€{(results.total_saved / 100).toFixed(2)}</p>
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Breakdown por provedor */}
-              <div className="space-y-3">
-                <h4 className="font-medium">Comparação por Provedor</h4>
-                {results.provider_comparison?.map((provider: any) => (
-                  <div key={provider.provider_id} className="p-4 bg-muted/30 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{provider.provider_name}</span>
-                        {provider.recommended && (
-                          <Badge className="bg-success/10 text-success border-success/20">
-                            Recomendado
-                          </Badge>
-                        )}
+              {/* Breakdown por país */}
+              <div className="space-y-4">
+                <h4 className="font-medium">Breakdown por País</h4>
+                {results.breakdown.map((countryBreakdown: AdvancedSimulationCountryBreakdown) => (
+                  <div key={countryBreakdown.country} className="p-4 bg-muted/30 rounded-lg space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm text-muted-foreground">{countryBreakdown.country}</p>
+                        <p className="text-lg font-semibold">Volume: {countryBreakdown.volume.toLocaleString()}</p>
                       </div>
-                      <span className="text-lg font-bold">€{(provider.total_cost / 100).toFixed(2)}</span>
-                    </div>
-                    
-                    <div className="grid grid-cols-3 gap-2 text-sm">
-                      {Object.entries(provider.cost_by_country || {}).map(([country, cost]: [string, any]) => (
-                        <div key={country} className="flex justify-between">
-                          <span className="text-muted-foreground">{country}:</span>
-                          <span className="font-medium">€{(cost / 100).toFixed(2)}</span>
+                      <div className="flex gap-6 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Baseline</p>
+                          <p className="font-semibold">€{(countryBreakdown.baseline_cost / 100).toFixed(2)}</p>
                         </div>
-                      ))}
+                        <div>
+                          <p className="text-muted-foreground">Otimizado</p>
+                          <p className="font-semibold text-success">€{(countryBreakdown.optimized_cost / 100).toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Economia</p>
+                          <p className="font-semibold text-success">€{(countryBreakdown.saved / 100).toFixed(2)}</p>
+                        </div>
+                      </div>
                     </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Provedores</p>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {countryBreakdown.providers.map((provider: AdvancedSimulationProviderBreakdown) => (
+                          <div key={provider.provider_id} className="p-3 bg-background rounded-lg border">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">{provider.provider_name}</span>
+                                {!provider.available && (
+                                  <Badge variant="outline" className="text-xs text-destructive border-destructive/40">
+                                    Indisponível
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className="text-sm font-medium">€{(provider.cost_minor / 100).toFixed(2)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {countryBreakdown.recommended_provider && (
+                      <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                        <span className="font-medium">Provedor recomendado:</span>{" "}
+                        {providerNameMap.get(countryBreakdown.recommended_provider) ??
+                          countryBreakdown.recommended_provider}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -231,7 +275,16 @@ export default function AdvancedSimulator() {
               {results.recommended_route && (
                 <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
                   <h4 className="font-semibold text-primary mb-2">Rota Recomendada</h4>
-                  <p className="text-sm text-muted-foreground mb-3">{results.recommended_route.description}</p>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    {Object.entries(results.recommended_route).map(([country, providerId]) => (
+                      <div key={country} className="flex items-center justify-between rounded bg-background px-3 py-2">
+                        <span className="font-medium text-foreground">{country}</span>
+                        <span>
+                          {providerNameMap.get(providerId) ?? providerId}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                   <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80">
                     Criar Regra com Esta Configuração
                   </Button>

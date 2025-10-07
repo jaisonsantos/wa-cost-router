@@ -6,27 +6,55 @@ import SimpleLayout from "@/components/SimpleLayout";
 import { useSummary, useEvents, useDashboardMetrics, useProviderMetrics } from "@/hooks/useApi";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";
-import { 
-  TrendingDown, 
-  MessageSquare, 
-  Globe, 
+import {
+  TrendingDown,
+  MessageSquare,
+  Globe,
   AlertTriangle,
   ArrowRight,
   Target,
   BarChart3,
   Activity,
-  Zap
+  Zap,
 } from "lucide-react";
+import { DashboardMetrics, Event, ProviderMetric, SummaryResponse } from "@/types/api";
+
+interface CountryAggregation {
+  count: number;
+  costMinor: number;
+}
+
+interface CountryRow {
+  country: string;
+  flag: string;
+  costMinor: number;
+  messages: number;
+}
+
+interface TemplateAggregation {
+  count: number;
+  costMinor: number;
+  category: string;
+}
+
+interface TemplateRow {
+  name: string;
+  category: string;
+  costMinor: number;
+  count: number;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { data: summary, isLoading: summaryLoading } = useSummary();
-  const { data: events, isLoading: eventsLoading } = useEvents({ limit: 10 });
+  const { data: events } = useEvents({ limit: 10 });
   const { data: dashboardMetrics } = useDashboardMetrics();
   const { data: providerMetrics } = useProviderMetrics();
 
-  const metricsData = dashboardMetrics as any;
-  const providersData = (providerMetrics as any) || [];
+  const summaryData: SummaryResponse | undefined = summary;
+  const eventsList: Event[] = events ?? [];
+  const metricsData: DashboardMetrics | undefined = dashboardMetrics;
+  const providersData: ProviderMetric[] = providerMetrics ?? [];
 
   if (summaryLoading) {
     return (
@@ -46,10 +74,10 @@ const Dashboard = () => {
     );
   }
 
-  const costEur = ((summary as any)?.cost_7d_minor || 0) / 100;
-  const savedEur = ((summary as any)?.saved_7d_minor || 0) / 100;
-  const pctSaved = (summary as any)?.pct_saved || 0;
-  const totalMessages = ((events as any)?.events?.length || 0);
+  const costEur = (summaryData?.cost_7d_minor ?? 0) / 100;
+  const savedEur = (summaryData?.saved_7d_minor ?? 0) / 100;
+  const pctSaved = summaryData?.pct_saved ?? 0;
+  const totalMessages = eventsList.length;
 
   const metrics = [
     {
@@ -87,45 +115,51 @@ const Dashboard = () => {
   ];
 
   // Group events by country
-  const eventsByCountry = ((events as any)?.events || []).reduce((acc: any, event: any) => {
-    const country = event.destination_country || "Unknown";
+  const eventsByCountry = eventsList.reduce<Record<string, CountryAggregation>>((acc, event) => {
+    const country = event.country_iso ?? "Unknown";
+    const unitCost = event.unit_cost_minor ?? 0;
     if (!acc[country]) {
-      acc[country] = { count: 0, cost: 0 };
+      acc[country] = { count: 0, costMinor: 0 };
     }
-    acc[country].count++;
-    acc[country].cost += event.unit_cost_minor || 0;
+    acc[country].count += 1;
+    acc[country].costMinor += unitCost;
     return acc;
   }, {});
 
-  const topCountries = Object.entries(eventsByCountry)
-    .map(([country, data]: [string, any]) => ({
+  const topCountries: CountryRow[] = Object.entries(eventsByCountry)
+    .map(([country, data]) => ({
       country,
       flag: "🌍",
-      cost: `€${(data.cost / 100).toFixed(2)}`,
-      messages: data.count.toString(),
+      costMinor: data.costMinor,
+      messages: data.count,
     }))
-    .sort((a: any, b: any) => parseFloat(b.cost.slice(1)) - parseFloat(a.cost.slice(1)))
+    .sort((a, b) => b.costMinor - a.costMinor)
     .slice(0, 4);
 
   // Group events by template
-  const eventsByTemplate = ((events as any)?.events || []).reduce((acc: any, event: any) => {
-    const template = event.template_name || "unknown";
+  const eventsByTemplate = eventsList.reduce<Record<string, TemplateAggregation>>((acc, event) => {
+    const template = event.template_name ?? "unknown";
+    const unitCost = event.unit_cost_minor ?? 0;
     if (!acc[template]) {
-      acc[template] = { count: 0, cost: 0, category: event.template_category || "Unknown" };
+      acc[template] = {
+        count: 0,
+        costMinor: 0,
+        category: event.category ?? "Unknown",
+      };
     }
-    acc[template].count++;
-    acc[template].cost += event.unit_cost_minor || 0;
+    acc[template].count += 1;
+    acc[template].costMinor += unitCost;
     return acc;
   }, {});
 
-  const topTemplates = Object.entries(eventsByTemplate)
-    .map(([name, data]: [string, any]) => ({
+  const topTemplates: TemplateRow[] = Object.entries(eventsByTemplate)
+    .map(([name, data]) => ({
       name,
       category: data.category,
-      cost: `€${(data.cost / 100).toFixed(2)}`,
-      count: data.count.toString(),
+      costMinor: data.costMinor,
+      count: data.count,
     }))
-    .sort((a: any, b: any) => parseFloat(b.cost.slice(1)) - parseFloat(a.cost.slice(1)))
+    .sort((a, b) => b.costMinor - a.costMinor)
     .slice(0, 4);
 
   return (
@@ -202,7 +236,7 @@ const Dashboard = () => {
                     <span className="text-xl">{country.flag}</span>
                     <div>
                       <p className="font-medium">{country.country}</p>
-                      <p className="text-sm text-muted-foreground">Custo: {country.cost}</p>
+                      <p className="text-sm text-muted-foreground">Custo: €{(country.costMinor / 100).toFixed(2)}</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -237,8 +271,8 @@ const Dashboard = () => {
                   <div className="flex-1">
                     <div className="flex items-center space-x-2">
                       <p className="font-medium text-sm">{template.name}</p>
-                      <Badge 
-                        variant={template.category === "Marketing" ? "secondary" : "outline"}
+                      <Badge
+                        variant={template.category.toLowerCase() === "marketing" ? "secondary" : "outline"}
                         className="text-xs"
                       >
                         {template.category}
@@ -247,7 +281,7 @@ const Dashboard = () => {
                     <p className="text-xs text-muted-foreground">{template.count} mensagens</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium">{template.cost}</p>
+                    <p className="text-sm font-medium">€{(template.costMinor / 100).toFixed(2)}</p>
                   </div>
                 </div>
               )) : (
@@ -290,32 +324,32 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
-                {providersData.map((provider: any) => (
+                {providersData.map((provider) => (
                   <div key={provider.provider_id} className="p-4 bg-muted/30 rounded-lg">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="font-semibold">{provider.provider_name}</h3>
-                      <Badge variant={provider.is_healthy ? "default" : "destructive"}>
-                        {provider.is_healthy ? "Saudável" : "Problemas"}
+                      <Badge variant={provider.success_rate >= 0.95 ? "default" : "destructive"}>
+                        {provider.success_rate >= 0.95 ? "Saudável" : "Atenção"}
                       </Badge>
                     </div>
-                    
+
                     <div className="grid grid-cols-3 gap-3 text-sm">
                       <div>
                         <p className="text-muted-foreground">Mensagens</p>
-                        <p className="text-lg font-bold">{provider.total_messages || 0}</p>
+                        <p className="text-lg font-bold">{provider.total_sent}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Taxa Sucesso</p>
                         <p className="text-lg font-bold text-success">
-                          {((provider.success_rate || 0) * 100).toFixed(0)}%
+                          {(provider.success_rate * 100).toFixed(0)}%
                         </p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Latência Avg</p>
-                        <p className="text-lg font-bold">{provider.avg_latency_ms || 0}ms</p>
+                        <p className="text-lg font-bold">{provider.avg_latency_ms}ms</p>
                       </div>
                     </div>
-                    
+
                     {provider.total_cost_minor && (
                       <div className="mt-3 pt-3 border-t">
                         <p className="text-sm text-muted-foreground">Custo Total</p>
@@ -340,12 +374,15 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {metricsData.alerts.map((alert: any, index: number) => (
+                {metricsData.alerts.map((alert, index) => (
                   <div key={index} className="flex items-start gap-3 p-3 bg-warning/5 rounded-lg">
                     <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <p className="font-medium">{alert.title}</p>
-                      <p className="text-sm text-muted-foreground">{alert.description}</p>
+                      <p className="font-medium capitalize">{alert.type}</p>
+                      <p className="text-sm text-muted-foreground">{alert.message}</p>
+                      {alert.action && (
+                        <p className="text-xs text-foreground mt-1">Sugestão: {alert.action}</p>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -26,8 +26,18 @@ import {
   MessageSquare,
   Zap,
 } from "lucide-react";
+import { Provider, Rule, RuleActions, RuleCondition } from "@/types/api";
 
-const normalizeRule = (rule: any): RuleFormRule | null => {
+type RuleLike = Rule & {
+  rule_id?: string;
+  conditions_json?: RuleCondition[];
+  actions_json?: RuleActions;
+};
+
+const isRuleActions = (value: unknown): value is RuleFormRule["actions"] =>
+  typeof value === "object" && value !== null;
+
+const normalizeRule = (rule?: RuleLike | null): RuleFormRule | null => {
   if (!rule) {
     return null;
   }
@@ -37,22 +47,19 @@ const normalizeRule = (rule: any): RuleFormRule | null => {
     return null;
   }
 
-  const conditions = Array.isArray(rule.conditions)
-    ? (rule.conditions as RuleFormRule["conditions"])
+  const conditions: RuleCondition[] = Array.isArray(rule.conditions)
+    ? rule.conditions
     : Array.isArray(rule.conditions_json)
-      ? (rule.conditions_json as RuleFormRule["conditions"])
+      ? rule.conditions_json
       : [];
 
   const actionsSource = rule.actions ?? rule.actions_json ?? {};
-  const actions =
-    typeof actionsSource === "object" && actionsSource !== null
-      ? (actionsSource as RuleFormRule["actions"])
-      : ({} as RuleFormRule["actions"]);
+  const actions: RuleFormRule["actions"] = isRuleActions(actionsSource) ? actionsSource : {};
 
   return {
     id,
     name: rule.name ?? "Regra sem nome",
-    is_enabled: rule.is_enabled ?? rule.enabled ?? false,
+    is_enabled: rule.is_enabled ?? false,
     priority: rule.priority ?? 100,
     conditions,
     actions,
@@ -88,31 +95,15 @@ const Rules = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<RuleFormRule | null>(null);
 
-  const providers = useMemo(() => {
-    if (Array.isArray(providersData)) {
-      return providersData;
-    }
-    if (providersData && Array.isArray((providersData as any).providers)) {
-      return (providersData as any).providers;
-    }
-    return [];
-  }, [providersData]);
+  const providers: Provider[] = useMemo(() => providersData ?? [], [providersData]);
 
   const providerOptions = useMemo(
     () =>
-      providers
-        .map((provider: any) => {
-          const id = provider.id ?? provider.provider_id ?? provider.uuid;
-          if (!id) {
-            return null;
-          }
-          return {
-            id,
-            name: provider.name ?? "Provedor sem nome",
-            status: provider.status,
-          };
-        })
-        .filter(Boolean) as { id: string; name: string; status?: string }[],
+      providers.map((provider) => ({
+        id: provider.id,
+        name: provider.name,
+        status: provider.status,
+      })),
     [providers],
   );
 
@@ -125,12 +116,11 @@ const Rules = () => {
   }, [providerOptions]);
 
   const rules = useMemo(() => {
-    const list = Array.isArray(rulesData) ? rulesData : (rulesData as any)?.rules || [];
-    return (
-      list
-        .map((rule: any) => normalizeRule(rule))
-        .filter(Boolean) as RuleFormRule[]
-    ).sort((a, b) => a.priority - b.priority);
+    const list: RuleLike[] = rulesData ?? [];
+    return list
+      .map((rule) => normalizeRule(rule))
+      .filter((rule): rule is RuleFormRule => Boolean(rule))
+      .sort((a, b) => a.priority - b.priority);
   }, [rulesData]);
 
   const handleToggle = async (ruleId: string) => {

@@ -5,7 +5,7 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 
 ## Estrutura
 
-1. **Auth** – registra usuário aleatório (`postman+timestamp`) e efetua login (token salvo automaticamente).
+1. **Auth** – registra usuário aleatório (`postman+timestamp`) com senha forte gerada no runtime e efetua login (token salvo automaticamente).
 2. **Organization** – obtém `org_id` via `/orgs/current`.
 3. **Providers** – cria provedor WhatsApp (360dialog), salva credenciais fake e executa health check.
 4. **Rules** – lista, cria, atualiza e alterna regras, incluindo simulação avançada.
@@ -25,7 +25,7 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 | Variável | Descrição |
 |----------|-----------|
 | `base_url` | URL base da API (default `http://localhost:8000`). |
-| `email` / `password` | Credenciais usadas no fluxo (email é gerado dinamicamente, senha padrão `demo123`). |
+| `email` / `password` | Credenciais usadas no fluxo (email e senha fortes são gerados dinamicamente a cada execução). |
 | `token` | JWT salvo pelos testes (não preencha manualmente). |
 | `org_id`, `provider_id`, `rule_id`, `job_id` | IDs capturados automaticamente para uso em chamadas subsequentes. |
 | `rates_csv_path` | Caminho do CSV usado no import de tarifas (`docs/postman/sample_rates.csv`). |

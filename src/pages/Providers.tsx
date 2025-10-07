@@ -9,63 +9,69 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Activity, CheckCircle, XCircle, Settings } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { Provider, ProviderHealth } from "@/types/api";
+
+type ProviderSummary = Provider;
+type ProviderHealthCheck = ProviderHealth;
 
 export default function Providers() {
   const { data: providers, isLoading } = useProviders();
   const setCredentialsMutation = useSetProviderCredentials();
   const healthCheck = useHealthCheckProvider();
-  
-  const [selectedProvider, setSelectedProvider] = useState<any>(null);
+
+  const [selectedProvider, setSelectedProvider] = useState<ProviderSummary | null>(null);
   const [credentialsForm, setCredentialsForm] = useState<Record<string, string>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const handleSetCredentials = async () => {
     if (!selectedProvider) return;
-    
+
     try {
       await setCredentialsMutation.mutateAsync({
-        provider_id: selectedProvider.id,
+        providerId: selectedProvider.id,
         credentials: credentialsForm,
       });
       setDialogOpen(false);
       setCredentialsForm({});
       toast({ title: "Credenciais configuradas com sucesso" });
-    } catch (error: any) {
-      toast({ 
-        title: "Erro ao configurar credenciais", 
-        description: error.message,
-        variant: "destructive" 
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Erro inesperado";
+      toast({
+        title: "Erro ao configurar credenciais",
+        description: message,
+        variant: "destructive",
       });
     }
   };
 
   const handleHealthCheck = async (providerId: string) => {
     try {
-      const result: any = await healthCheck.mutateAsync(providerId);
+      const result: ProviderHealthCheck = await healthCheck.mutateAsync(providerId);
       if (result.healthy) {
-        toast({ title: "Provider está saudável", description: `Latência: ${result.latency_ms}ms` });
+        toast({ title: "Provider está saudável", description: `Latência: ${result.latency_ms ?? 0}ms` });
       } else {
-        toast({ 
-          title: "Provider com problemas", 
-          description: result.error,
-          variant: "destructive" 
+        toast({
+          title: "Provider com problemas",
+          description: result.error ?? "Erro desconhecido",
+          variant: "destructive",
         });
       }
-    } catch (error: any) {
-      toast({ 
-        title: "Erro ao verificar health", 
-        description: error.message,
-        variant: "destructive" 
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Erro inesperado";
+      toast({
+        title: "Erro ao verificar health",
+        description: message,
+        variant: "destructive",
       });
     }
   };
 
-  const openCredentialsDialog = (provider: any) => {
+  const openCredentialsDialog = (provider: ProviderSummary) => {
     setSelectedProvider(provider);
     setDialogOpen(true);
   };
 
-  const providersList = Array.isArray(providers) ? providers : [];
+  const providersList: ProviderSummary[] = providers ?? [];
 
   if (isLoading) {
     return (
@@ -88,7 +94,7 @@ export default function Providers() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {providersList.map((provider: any) => (
+          {providersList.map((provider) => (
             <Card key={provider.id}>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -114,7 +120,7 @@ export default function Providers() {
                   )}
                 </div>
 
-                {provider.avg_latency_ms && (
+                {provider.avg_latency_ms !== null && provider.avg_latency_ms !== undefined && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Activity className="h-4 w-4" />
                     <span>Latência média: {provider.avg_latency_ms}ms</span>

@@ -10,16 +10,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CheckCircle, XCircle, Clock, AlertCircle, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { MessageJobDetail, MessageJobSummary } from "@/types/api";
 
 export default function Messages() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   
   const { data: jobs, isLoading } = useMessageJobs({ status: statusFilter === "all" ? undefined : statusFilter });
-  const { data: jobDetails } = useMessageJobDetails(selectedJobId || "");
+  const { data: jobDetails } = useMessageJobDetails(selectedJobId ?? "");
 
-  const jobsList = Array.isArray(jobs) ? jobs : [];
-  const jobDetailsData = jobDetails as any;
+  const jobsList: MessageJobSummary[] = jobs ?? [];
+  const jobDetailsData: MessageJobDetail | undefined = jobDetails;
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -102,7 +103,7 @@ export default function Messages() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {jobsList.map((job: any) => (
+                {jobsList.map((job) => (
                   <TableRow key={job.id}>
                     <TableCell className="font-mono text-sm">
                       {job.to_number}
@@ -177,13 +178,13 @@ export default function Messages() {
                 <div>
                   <h3 className="font-semibold mb-3">Tentativas de Entrega</h3>
                   <div className="space-y-2">
-                    {jobDetailsData.attempts?.map((attempt: any, index: number) => (
+                    {jobDetailsData.attempts.map((attempt) => (
                       <Card key={attempt.id}>
                         <CardContent className="pt-6">
                           <div className="flex items-start justify-between">
                             <div className="space-y-2">
                               <div className="flex items-center gap-2">
-                                <span className="font-medium">Tentativa #{index + 1}</span>
+                                <span className="font-medium">Tentativa #{attempt.attempt_number}</span>
                                 <Badge variant={attempt.status === "success" ? "default" : "destructive"}>
                                   {attempt.status}
                                 </Badge>
@@ -191,7 +192,7 @@ export default function Messages() {
                               <div className="text-sm text-muted-foreground">
                                 Provider: {attempt.provider_name}
                               </div>
-                              {attempt.latency_ms && (
+                              {attempt.latency_ms !== null && attempt.latency_ms !== undefined && (
                                 <div className="text-sm text-muted-foreground">
                                   Latência: {attempt.latency_ms}ms
                                 </div>
@@ -201,10 +202,17 @@ export default function Messages() {
                                   Erro: {attempt.error_code}
                                 </div>
                               )}
+                              {attempt.error_message && (
+                                <div className="text-xs text-muted-foreground">
+                                  {attempt.error_message}
+                                </div>
+                              )}
                             </div>
-                            <div className="text-sm text-muted-foreground">
-                              {formatDistanceToNow(new Date(attempt.timestamp), { addSuffix: true, locale: ptBR })}
-                            </div>
+                            {"timestamp" in attempt && attempt.timestamp ? (
+                              <div className="text-sm text-muted-foreground">
+                                {formatDistanceToNow(new Date(attempt.timestamp), { addSuffix: true, locale: ptBR })}
+                              </div>
+                            ) : null}
                           </div>
                         </CardContent>
                       </Card>

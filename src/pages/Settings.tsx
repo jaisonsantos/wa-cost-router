@@ -10,11 +10,11 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import SimpleLayout from "@/components/SimpleLayout";
 import { useRates, useImportRatesCSV, useCurrentOrg, useCreateWAConnection } from "@/hooks/useApi";
-import { 
-  MessageSquare, 
-  Globe, 
-  Mail, 
-  Smartphone, 
+import {
+  MessageSquare,
+  Globe,
+  Mail,
+  Smartphone,
   Send,
   CheckCircle,
   AlertCircle,
@@ -22,8 +22,52 @@ import {
   Download,
   CreditCard,
   Users,
-  Shield
+  Shield,
 } from "lucide-react";
+import { CreateWAConnectionPayload, Organization, RateEntry } from "@/types/api";
+
+interface WaConnectionForm {
+  business_id: string;
+  phone_id: string;
+  access_token: string;
+  webhook_verify_token: string;
+}
+
+type ConnectionStatus = "healthy" | "warning" | "disconnected";
+
+interface WhatsAppConnection {
+  connected: boolean;
+  businessId: string;
+  phoneId: string;
+  lastSync: string;
+  status: ConnectionStatus;
+}
+
+interface EmailConnection {
+  connected: boolean;
+  provider: string;
+  endpoint: string;
+  status: ConnectionStatus;
+}
+
+interface SmsConnection {
+  connected: boolean;
+  provider: string;
+  status: ConnectionStatus;
+}
+
+interface TelegramConnection {
+  connected: boolean;
+  botToken: string;
+  status: ConnectionStatus;
+}
+
+interface ConnectionsState {
+  whatsapp: WhatsAppConnection;
+  email: EmailConnection;
+  sms: SmsConnection;
+  telegram: TelegramConnection;
+}
 
 const Settings = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,15 +76,20 @@ const Settings = () => {
   const importRates = useImportRatesCSV();
   const createWAConnection = useCreateWAConnection();
 
-  const [waForm, setWaForm] = useState({
+  const [waForm, setWaForm] = useState<WaConnectionForm>({
     business_id: "",
     phone_id: "",
     access_token: "",
-    webhook_verify_token: ""
+    webhook_verify_token: "",
   });
 
-  const rates = (ratesData as any)?.rates || [];
-  const organization = (orgData as any) || { name: "Carregando...", role: "member" };
+  const rates: RateEntry[] = ratesData ?? [];
+  const organization: Organization = orgData ?? {
+    id: "-",
+    name: "Carregando...",
+    user_email: "-",
+    role: "member",
+  };
 
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -51,38 +100,39 @@ const Settings = () => {
   };
 
   const handleWAConnect = async () => {
-    await createWAConnection.mutateAsync({
+    const payload: CreateWAConnectionPayload = {
       business_id: waForm.business_id,
       phone_id: waForm.phone_id,
       access_token: waForm.access_token,
-      webhook_verify_token: waForm.webhook_verify_token || undefined
-    } as any);
+      webhook_verify_token: waForm.webhook_verify_token || undefined,
+    };
+    await createWAConnection.mutateAsync(payload);
   };
 
-  const [connections, setConnections] = useState({
+  const [connections] = useState<ConnectionsState>({
     whatsapp: {
       connected: true,
       businessId: "1234567890123456",
       phoneId: "987654321098765",
       lastSync: "2 horas atrás",
-      status: "healthy"
+      status: "healthy",
     },
     email: {
       connected: true,
       provider: "SMTP",
       endpoint: "smtp.empresa.com",
-      status: "healthy"
+      status: "healthy",
     },
     sms: {
       connected: false,
       provider: "Twilio",
-      status: "disconnected"
+      status: "disconnected",
     },
     telegram: {
       connected: true,
       botToken: "123456789:ABC...XYZ",
-      status: "healthy"
-    }
+      status: "healthy",
+    },
   });
 
 
@@ -371,33 +421,33 @@ const Settings = () => {
                     <div>Custo Unitário</div>
                     <div>Atualizado</div>
                   </div>
-                  
+
                   {rates.length === 0 ? (
                     <p className="text-center text-muted-foreground py-8">
                       Nenhuma tarifa cadastrada. Importe um CSV para começar.
                     </p>
                   ) : (
-                    rates.map((rate: any, index: number) => (
-                      <div key={index} className="grid grid-cols-4 gap-4 p-3 rounded-lg bg-card border hover:bg-muted/20 transition-colors">
-                        <div className="font-medium">{rate.country || "Global"}</div>
+                    rates.map((rate) => (
+                      <div key={rate.id} className="grid grid-cols-4 gap-4 p-3 rounded-lg bg-card border hover:bg-muted/20 transition-colors">
+                        <div className="font-medium">{rate.country_iso || "Global"}</div>
                         <div>
-                          <Badge className={rate.template_category === "MARKETING" 
-                            ? "bg-warning/10 text-warning border-warning/20" 
+                          <Badge className={rate.category.toLowerCase() === "marketing"
+                            ? "bg-warning/10 text-warning border-warning/20"
                             : "bg-primary/10 text-primary border-primary/20"
                           }>
-                            {rate.template_category || "All"}
+                            {rate.category}
                           </Badge>
                         </div>
-                        <div className="font-medium">€{((rate.cost_minor || 0) / 100).toFixed(4)}</div>
+                        <div className="font-medium">€{(rate.unit_cost_minor / 100).toFixed(4)}</div>
                         <div className="text-sm text-muted-foreground">
-                          {rate.updated_at ? new Date(rate.updated_at).toLocaleDateString() : "-"}
+                          {rate.effective_from ? new Date(rate.effective_from).toLocaleDateString() : "-"}
                         </div>
                       </div>
                     ))
                   )}
                 </div>
               )}
-              
+
               <Separator className="my-6" />
               
               <div className="space-y-4">
