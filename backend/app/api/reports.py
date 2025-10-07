@@ -242,26 +242,44 @@ def get_provider_metrics(
     org_id = current_user["org_id"]
     
     # Query combinada para todas as métricas por provedor
-    provider_stats = db.query(
-        Provider.id,
-        Provider.name,
-        func.count(DeliveryAttempt.id).label("total_attempts"),
-        func.sum(case((DeliveryAttempt.status == "success", 1), else_=0)).label("successful"),
-        func.avg(case((DeliveryAttempt.status == "success", DeliveryAttempt.latency_ms), else_=None)).label("avg_latency"),
-        func.sum(MessageEvent.unit_cost_minor).label("total_cost")
-    ).select_from(Provider).outerjoin(
-        DeliveryAttempt, DeliveryAttempt.provider_id == Provider.id
-    ).outerjoin(
-        MessageJob, MessageJob.id == DeliveryAttempt.message_job_id
-    ).outerjoin(
-        MessageEvent, and_(
-            MessageEvent.org_id == org_id,
-            MessageEvent.timestamp_provider >= from_dt
+    provider_stats = (
+        db.query(
+            Provider.id,
+            Provider.name,
+            func.count(DeliveryAttempt.id).label("total_attempts"),
+            func.sum(case((DeliveryAttempt.status == "success", 1), else_=0)).label("successful"),
+            func.avg(
+                case((DeliveryAttempt.status == "success", DeliveryAttempt.latency_ms), else_=None)
+            ).label("avg_latency"),
+            func.sum(MessageEvent.unit_cost_minor).label("total_cost"),
         )
-    ).filter(
-        Provider.org_id == org_id,
-        DeliveryAttempt.timestamp >= from_dt
-    ).group_by(Provider.id, Provider.name).all()
+        .select_from(Provider)
+        .outerjoin(
+            DeliveryAttempt,
+            and_(
+                DeliveryAttempt.provider_id == Provider.id,
+                DeliveryAttempt.timestamp >= from_dt,
+            ),
+        )
+        .outerjoin(
+            MessageJob,
+            and_(
+                MessageJob.id == DeliveryAttempt.message_job_id,
+                MessageJob.org_id == org_id,
+            ),
+        )
+        .outerjoin(
+            MessageEvent,
+            and_(
+                MessageEvent.message_job_id == MessageJob.id,
+                MessageEvent.org_id == org_id,
+                MessageEvent.timestamp_provider >= from_dt,
+            ),
+        )
+        .filter(Provider.org_id == org_id)
+        .group_by(Provider.id, Provider.name)
+        .all()
+    )
     
     metrics = []
     for stat in provider_stats:
