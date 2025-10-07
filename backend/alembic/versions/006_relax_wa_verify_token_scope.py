@@ -10,10 +10,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_constraint(
+    op.drop_index(
         "uq_wa_connection_webhook_verify_token",
-        "wa_connection",
-        type_="unique",
+        table_name="wa_connection",
     )
     op.create_unique_constraint(
         "uq_wa_connection_org_token",
@@ -24,8 +23,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint("uq_wa_connection_org_token", "wa_connection", type_="unique")
-    op.create_unique_constraint(
+    op.create_index(
         "uq_wa_connection_webhook_verify_token",
         "wa_connection",
         ["webhook_verify_token"],
+        unique=True,
     )
