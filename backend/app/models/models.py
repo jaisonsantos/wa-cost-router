@@ -54,7 +54,8 @@ class WAConnection(Base):
     phone_id = Column(String, nullable=False)
     access_token_enc = Column(String, nullable=False)
     token_expires_at = Column(DateTime(timezone=True))
-    webhook_verify_token = Column(String)
+    webhook_verify_token = Column(String, nullable=False, unique=True)
+    webhook_secret_enc = Column(Text, nullable=False)
     status = Column(String, default="active")
 
 class WATemplate(Base):
