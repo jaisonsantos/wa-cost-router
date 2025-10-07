@@ -28,8 +28,8 @@
 | `backend/app/services/` | `RoutingEngine`, conectores HTTPX | RoutingEngine impõe `org_id`; respostas completas dos provedores são persistidas.
 
  |
-| `backend/scripts/` | Seeds | `seed.py` cria tabelas via `metadata.create_all`; `seed_providers` aceita `--org-id` (ou executa para todas). |
-| `backend/alembic/` | Config/migrations | Apenas revisão 001 (alterações pontuais). |
+| `backend/scripts/` | Seeds | `seed.py` assume migrations aplicadas e popula dados demo de forma idempotente; `seed_providers` aceita `--org-id` (ou executa para todas). |
+| `backend/alembic/` | Config/migrations | Revisões `000`–`005` cobrem schema base, FK de `message_job` e vínculo `rate_card → provider`. |
 | `backend/worker.py` | Worker RQ | Pronto para background jobs.
 
  |
@@ -455,7 +455,7 @@ Todas as rotas abaixo exigem `Authorization: Bearer <token>` salvo indicação c
 | `delivery_attempt` | `message_job_id`, `provider_id`, `attempt_number`, `status`, `provider_response` | Armazena resposta crua. |
 | `cost_record` | `message_job_id`, `provider_id`, `price_eur`, `price_table_version` | Auditoria de custo. |
 | `message_event` | `org_id`, `message_job_id`, `provider_event_id`, `unit_cost_minor`, `baseline_cost_minor` | Base para relatórios (referência opcional para `message_job`). |
-| `rate_card` | `source`, `country_iso`, `category`, `unit_cost_minor` | Global (sem `org_id`). |
+| `rate_card` | `provider_id`, `country_iso`, `category`, `unit_cost_minor` | Tarifa vinculada a um provedor ativo. |
 | `wa_connection` | `org_id`, `business_id`, `phone_id`, `access_token_enc` | Token WhatsApp criptografado. |
 
 ## ERD (ASCII)
@@ -472,7 +472,7 @@ organization ──< organization_user >── user
      ├──< message_event
      └──< wa_connection
 
-rate_card (global, referenciado por nome do provider)
+rate_card ──> provider
 ```
 
 ## Índices & Constraints
@@ -484,8 +484,8 @@ rate_card (global, referenciado por nome do provider)
 
 ## Observações
 
-- Necessário migration inicial criando todas as tabelas (modelo atual depende de `metadata.create_all`).
-- `rate_card` deveria incluir `org_id` se houver tarifas específicas por tenant.
+- Schema consolidado via migrations Alembic (`000_base_schema` → `005_link_rate_cards_to_providers`).
+- `rate_card` agora referencia `provider` diretamente; backlog P3 discute escopo por tenant.
 - `provider_response` e `variables` precisam de sanitização/anonimização.
 ```
 

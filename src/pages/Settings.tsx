@@ -487,9 +487,10 @@ const Settings = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-4 gap-4 p-3 bg-muted/30 rounded-lg font-medium text-sm">
+                  <div className="grid grid-cols-5 gap-4 p-3 bg-muted/30 rounded-lg font-medium text-sm">
                     <div>País</div>
                     <div>Categoria</div>
+                    <div>Provedor</div>
                     <div>Custo Unitário</div>
                     <div>Atualizado</div>
                   </div>
@@ -500,7 +501,10 @@ const Settings = () => {
                     </p>
                   ) : (
                     rates.map((rate) => (
-                      <div key={rate.id} className="grid grid-cols-4 gap-4 p-3 rounded-lg bg-card border hover:bg-muted/20 transition-colors">
+                      <div
+                        key={rate.id}
+                        className="grid grid-cols-5 gap-4 p-3 rounded-lg bg-card border hover:bg-muted/20 transition-colors"
+                      >
                         <div className="font-medium">{rate.country_iso || "Global"}</div>
                         <div>
                           <Badge className={rate.category.toLowerCase() === "marketing"
@@ -509,6 +513,9 @@ const Settings = () => {
                           }>
                             {rate.category}
                           </Badge>
+                        </div>
+                        <div className="text-sm font-medium text-muted-foreground">
+                          {rate.provider_name}
                         </div>
                         <div className="font-medium">€{(rate.unit_cost_minor / 100).toFixed(4)}</div>
                         <div className="text-sm text-muted-foreground">

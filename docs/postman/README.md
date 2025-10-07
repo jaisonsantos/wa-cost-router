@@ -10,9 +10,9 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 3. **Providers** – cria provedor WhatsApp (360dialog), salva credenciais fake e executa health check.
 4. **Rules** – lista, cria, atualiza e alterna regras, incluindo simulação avançada.
 5. **Messages** – envia mensagem, lista jobs e consulta detalhes do job usando `job_id` capturado.
-6. **Rates** – consulta tarifas e importa CSV de exemplo (`docs/postman/sample_rates.csv`).
+6. **Rates** – consulta tarifas e importa CSV de exemplo (`docs/postman/sample_rates.csv`) usando o `provider_name` do provedor criado na etapa Providers.
 7. **Reports** – consome métricas de dashboard, resumo e métricas por provedor.
-8. **Integrations** – cria conexão WA, valida webhook (`hub.verify_token`) e envia payload de webhook.
+8. **Integrations** – cria conexão WA, valida webhook (`hub.verify_token`) e envia payload de webhook (repetir a criação com o mesmo `phone_id` apenas atualiza o registro).
 9. **Admin** – checa `/admin/health` e `/admin/metrics`.
 10. **Cleanup** – remove credenciais do provedor criado durante o fluxo.
 
@@ -34,7 +34,7 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 ### Assinatura do webhook
 
 - `WA - Webhook Receive` calcula automaticamente o header `X-Hub-Signature-256` em um script *pre-request* usando HMAC SHA-256 do corpo bruto com a variável `wa_webhook_secret` (`sha256=<hex>`).
-- Certifique-se de executar **WA - Create Connection** antes das requisições de webhook para que a API armazene o mesmo secret e verifique a assinatura corretamente.
+- Certifique-se de executar **WA - Create Connection** antes das requisições de webhook para que a API armazene o mesmo secret; quando o header de assinatura não for enviado, os eventos serão ignorados com `status: ignored`.
 - O payload de exemplo inclui `metadata.phone_number_id` e deve combinar com `wa_phone_id` para que o evento seja aceito.
 
 ## Fluxo recomendado

@@ -1,4 +1,5 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
+from uuid import UUID
 from sqlalchemy.orm import Session
 from app.models.models import RoutingRule, Provider, RateCard
 import logging
@@ -48,7 +49,7 @@ class RoutingEngine:
                         )
                         continue
 
-                    estimated_cost = self._get_estimated_cost(provider, country_iso, category)
+                    estimated_cost = self._get_estimated_cost(provider.id, country_iso, category)
                     valid_fallbacks = [
                         fb
                         for fb in fallback_chain
@@ -102,23 +103,38 @@ class RoutingEngine:
         
         return True
     
-    def _get_provider(self, provider_id: str) -> Optional[Provider]:
+    def _get_provider(self, provider_id: Union[str, UUID]) -> Optional[Provider]:
+        try:
+            provider_uuid = UUID(str(provider_id))
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid provider identifier %s supplied for org %s",
+                provider_id,
+                self.org_id,
+            )
+            return None
+
         return (
             self.db.query(Provider)
             .filter(
-                Provider.id == provider_id,
+                Provider.id == provider_uuid,
                 Provider.org_id == self.org_id,
                 Provider.status == "active",
             )
             .first()
         )
 
-    def _get_estimated_cost(self, provider: Provider, country_iso: str, category: str) -> int:
+    def _get_estimated_cost(
+        self,
+        provider_id: Union[str, UUID],
+        country_iso: str,
+        category: str,
+    ) -> int:
         """Busca custo estimado para o provedor"""
         rate = (
             self.db.query(RateCard)
             .filter(
-                RateCard.source == provider.name,
+                RateCard.provider_id == provider_id,
                 RateCard.country_iso == country_iso,
                 RateCard.category == category,
             )
@@ -132,7 +148,7 @@ class RoutingEngine:
         """Encontra o provedor mais barato para país/categoria"""
         rates = (
             self.db.query(RateCard, Provider)
-            .join(Provider, RateCard.source == Provider.name)
+            .join(Provider, RateCard.provider_id == Provider.id)
             .filter(
                 Provider.org_id == self.org_id,
                 RateCard.country_iso == country_iso,
@@ -156,7 +172,7 @@ class RoutingEngine:
         """Calcula custo baseline (mais caro) para economia"""
         rate = (
             self.db.query(RateCard)
-            .join(Provider, RateCard.source == Provider.name)
+            .join(Provider, RateCard.provider_id == Provider.id)
             .filter(
                 Provider.org_id == self.org_id,
                 RateCard.country_iso == country_iso,

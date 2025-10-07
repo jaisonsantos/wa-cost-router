@@ -54,9 +54,13 @@ class WAConnection(Base):
     phone_id = Column(String, nullable=False)
     access_token_enc = Column(String, nullable=False)
     token_expires_at = Column(DateTime(timezone=True))
-    webhook_verify_token = Column(String, nullable=False, unique=True)
+    webhook_verify_token = Column(String, nullable=False)
     webhook_secret_enc = Column(Text, nullable=False)
     status = Column(String, default="active")
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "webhook_verify_token", name="uq_wa_connection_org_token"),
+    )
 
 class WATemplate(Base):
     __tablename__ = "wa_template"
@@ -92,8 +96,9 @@ class MessageEvent(Base):
 
 class RateCard(Base):
     __tablename__ = "rate_card"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("provider.id"), nullable=False, index=True)
     effective_from = Column(DateTime(timezone=True), nullable=False, index=True)
     source = Column(String, nullable=False)
     country_iso = Column(String, nullable=False)

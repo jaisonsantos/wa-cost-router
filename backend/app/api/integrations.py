@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
 import logging
+from sqlalchemy.exc import IntegrityError
 from app.core.database import get_db
 from app.core.security import decrypt_token, encrypt_token
 from app.api.dependencies import get_current_user
@@ -30,21 +31,70 @@ def create_connection(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    org_id = current_user["org_id"]
     encrypted_token = encrypt_token(data.access_token)
     encrypted_secret = encrypt_token(data.webhook_secret)
-    conn = WAConnection(
-        org_id=current_user["org_id"],
-        business_id=data.business_id,
-        phone_id=data.phone_id,
-        access_token_enc=encrypted_token,
-        webhook_verify_token=data.webhook_verify_token,
-        webhook_secret_enc=encrypted_secret,
-        status="active"
+
+    existing = (
+        db.query(WAConnection)
+        .filter(
+            WAConnection.org_id == org_id,
+            WAConnection.phone_id == data.phone_id,
+        )
+        .first()
     )
-    db.add(conn)
-    db.commit()
-    db.refresh(conn)
-    return {"id": str(conn.id), "status": "active"}
+
+    conflict_query = (
+        db.query(WAConnection)
+        .filter(
+            WAConnection.org_id == org_id,
+            WAConnection.webhook_verify_token == data.webhook_verify_token,
+        )
+    )
+    if existing:
+        conflict_query = conflict_query.filter(WAConnection.id != existing.id)
+    conflict_connection = conflict_query.first()
+    if conflict_connection:
+        raise HTTPException(
+            status_code=400,
+            detail="Webhook verify token already in use",
+        )
+
+    if existing:
+        connection = existing
+        connection.business_id = data.business_id
+        connection.phone_id = data.phone_id
+        connection.access_token_enc = encrypted_token
+        connection.webhook_verify_token = data.webhook_verify_token
+        connection.webhook_secret_enc = encrypted_secret
+        connection.status = "active"
+    else:
+        connection = WAConnection(
+            org_id=org_id,
+            business_id=data.business_id,
+            phone_id=data.phone_id,
+            access_token_enc=encrypted_token,
+            webhook_verify_token=data.webhook_verify_token,
+            webhook_secret_enc=encrypted_secret,
+            status="active"
+        )
+        db.add(connection)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.exception(
+            "Failed to persist WA connection due to integrity error",
+            extra={"org_id": str(org_id)},
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to save WhatsApp connection",
+        )
+
+    db.refresh(connection)
+    return {"id": str(connection.id), "status": connection.status}
 
 @router.get("/wa/webhook")
 def webhook_verify(
@@ -125,25 +175,25 @@ async def webhook_receive(request: Request, db: Session = Depends(get_db)):
         return {"status": "ignored", "processed": 0}
 
     signature_header = request.headers.get("X-Hub-Signature-256", "")
-    if not signature_header.startswith("sha256="):
+    if signature_header.startswith("sha256="):
+        secret = decrypt_token(connection.webhook_secret_enc)
+        provided_signature = signature_header.split("=", 1)[1]
+        expected_signature = hmac.new(
+            secret.encode("utf-8"), raw_body or b"", hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(provided_signature, expected_signature):
+            logger.warning(
+                "Invalid webhook signature",
+                extra={"message_event_ids": message_event_ids},
+            )
+            return {"status": "ignored", "processed": 0}
+    else:
         logger.warning(
             "Missing or malformed webhook signature",
             extra={"message_event_ids": message_event_ids},
         )
-        raise HTTPException(status_code=403, detail="Invalid signature")
-
-    secret = decrypt_token(connection.webhook_secret_enc)
-    provided_signature = signature_header.split("=", 1)[1]
-    expected_signature = hmac.new(
-        secret.encode("utf-8"), raw_body or b"", hashlib.sha256
-    ).hexdigest()
-
-    if not hmac.compare_digest(provided_signature, expected_signature):
-        logger.warning(
-            "Invalid webhook signature",
-            extra={"message_event_ids": message_event_ids},
-        )
-        raise HTTPException(status_code=403, detail="Invalid signature")
+        return {"status": "ignored", "processed": 0}
 
     processed = 0
     for entry in body.get("entry", []):
