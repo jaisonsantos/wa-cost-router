@@ -16,22 +16,29 @@
               "listen": "prerequest",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "const uniqueEmail = `postman+${Date.now()}@demo.local`;",
-                  "pm.environment.set('email', uniqueEmail);",
-                  "pm.environment.unset('token');"
-                ]
+              "exec": [
+                "const timestamp = Date.now();",
+                "const uniqueEmail = `postman+${timestamp}@demo.local`;",
+                "const generatedPassword = `Demo!${timestamp}`;",
+                "pm.environment.set('email', uniqueEmail);",
+                "pm.environment.set('password', generatedPassword);",
+                "pm.environment.unset('token');"
+              ]
               }
             },
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
-                  "if (data.access_token) { pm.environment.set('token', data.access_token); }"
-                ]
+              "exec": [
+                "(() => {",
+                "  let body = null;",
+                "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                "  if (body && body.access_token) {",
+                "    pm.environment.set('token', body.access_token);",
+                "  }",
+                "})();"
+              ]
               }
             }
           ],
@@ -58,11 +65,15 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
-                  "if (data.access_token) { pm.environment.set('token', data.access_token); }"
-                ]
+              "exec": [
+                "(() => {",
+                "  let body = null;",
+                "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                "  if (body && body.access_token) {",
+                "    pm.environment.set('token', body.access_token);",
+                "  }",
+                "})();"
+              ]
               }
             }
           ],
@@ -94,11 +105,15 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
-                  "if (data.id) { pm.environment.set('org_id', data.id); }"
-                ]
+              "exec": [
+                "(() => {",
+                "  let body = null;",
+                "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                "  if (body && body.id) {",
+                "    pm.environment.set('org_id', body.id);",
+                "  }",
+                "})();"
+              ]
               }
             }
           ],
@@ -134,11 +149,15 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
-                  "if (data.id) { pm.environment.set('provider_id', data.id); }"
-                ]
+              "exec": [
+                "(() => {",
+                "  let body = null;",
+                "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                "  if (body && body.id) {",
+                "    pm.environment.set('provider_id', body.id);",
+                "  }",
+                "})();"
+              ]
               }
             }
           ],
@@ -210,11 +229,15 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
-                  "if (data.id) { pm.environment.set('rule_id', data.id); }"
-                ]
+              "exec": [
+                "(() => {",
+                "  let body = null;",
+                "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                "  if (body && body.id) {",
+                "    pm.environment.set('rule_id', body.id);",
+                "  }",
+                "})();"
+              ]
               }
             }
           ],
@@ -259,11 +282,13 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
-                  "pm.expect(data.is_enabled).to.eql(false);"
-                ]
+              "exec": [
+                "(() => {",
+                "  let body = null;",
+                "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                "  pm.expect(body && body.is_enabled, 'rule disabled flag').to.eql(false);",
+                "})();"
+              ]
               }
             }
           ],
@@ -283,11 +308,13 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
-                  "pm.expect(data.is_enabled).to.eql(true);"
-                ]
+              "exec": [
+                "(() => {",
+                "  let body = null;",
+                "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                "  pm.expect(body && body.is_enabled, 'rule enabled flag').to.eql(true);",
+                "})();"
+              ]
               }
             }
           ],
@@ -330,11 +357,15 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "let data = {};",
-                  "try { data = pm.response.json(); } catch (err) { data = {}; }",
-                  "if (data.job_id) { pm.environment.set('job_id', data.job_id); }"
-                ]
+              "exec": [
+                "(() => {",
+                "  let body = null;",
+                "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                "  if (body && body.job_id) {",
+                "    pm.environment.set('job_id', body.job_id);",
+                "  }",
+                "})();"
+              ]
               }
             }
           ],
