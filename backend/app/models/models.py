@@ -70,9 +70,10 @@ class WATemplate(Base):
 
 class MessageEvent(Base):
     __tablename__ = "message_event"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
+    message_job_id = Column(UUID(as_uuid=True), ForeignKey("message_job.id"))
     connection_id = Column(UUID(as_uuid=True), ForeignKey("wa_connection.id"))
     provider_event_id = Column(String, unique=True, nullable=False, index=True)
     direction = Column(String, nullable=False)
