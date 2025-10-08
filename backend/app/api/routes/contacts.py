@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -17,8 +18,14 @@ from app.api.deps import (
     require_contacts_write,
 )
 from app.core.database import get_db
-from app.models.models import ContactStatusEnum, OptInStatusEnum
-from app.services.contacts import ContactRepository
+from app.models.models import (
+    ContactImportJob,
+    ContactImportStatusEnum,
+    ContactStatusEnum,
+    OptInStatusEnum,
+)
+from app.services.contacts import ContactRepository, enqueue_contact_import
+from app.services.storage import TemporaryObjectStorage
 
 router = APIRouter()
 
@@ -88,6 +95,28 @@ class ContactListResponse(BaseModel):
     count: int
 
 
+class ContactImportJobResponse(BaseModel):
+    """Representation of an asynchronous contact import job."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    org_id: UUID
+    requested_by: str
+    input_uri: str | None
+    status: ContactImportStatusEnum
+    total_rows: int
+    processed_rows: int
+    error_rows: int
+    error_report_uri: str | None
+    source: str
+    source_metadata: dict[str, Any] | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 @router.get("/", response_model=ContactListResponse)
 def list_contacts(
     pagination: PaginationParams = Depends(get_pagination_params),
@@ -133,6 +162,52 @@ def list_contacts(
         offset=pagination.offset,
         count=len(items),
     )
+
+
+@router.post(
+    "/imports",
+    response_model=ContactImportJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def upload_contacts_import(
+    upload: UploadFile = File(...),
+    current_user: dict = Depends(require_contacts_write),
+    db: Session = Depends(get_db),
+):
+    """Persist an uploaded CSV file and enqueue background processing."""
+
+    storage = TemporaryObjectStorage()
+    suffix = Path(upload.filename or "").suffix
+    input_uri = storage.store_fileobj(
+        upload.file,
+        prefix="contact-imports",
+        suffix=suffix,
+    )
+
+    job = ContactImportJob(
+        org_id=current_user["org_id"],
+        requested_by=str(current_user["user_id"]),
+        input_uri=input_uri,
+        status=ContactImportStatusEnum.pending,
+        source="import",
+        source_metadata={"original_filename": upload.filename},
+    )
+
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    try:
+        enqueue_contact_import(job.id)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        job.status = ContactImportStatusEnum.failed
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to schedule contact import job",
+        ) from exc
+
+    return ContactImportJobResponse.model_validate(job)
 
 
 @router.post("/", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)
