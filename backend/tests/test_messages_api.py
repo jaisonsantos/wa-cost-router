@@ -222,6 +222,39 @@ def test_send_message_handles_delivery_exception(client, db_session, monkeypatch
     assert payload["provider_used"] is None
 
 
+def test_send_message_handles_job_commit_failure(client, db_session, monkeypatch):
+    test_client, org_id = client
+    _bootstrap_routing_stack(db_session, org_id)
+
+    original_commit = db_session.commit
+    call_state = {"calls": 0}
+
+    def failing_first_commit():
+        call_state["calls"] += 1
+        if call_state["calls"] == 1:
+            raise RuntimeError("job commit exploded")
+        return original_commit()
+
+    monkeypatch.setattr(db_session, "commit", failing_first_commit)
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "job-commit-failure",
+            "to_number": "+5511999999999",
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Nia"]},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed_final"
+    assert payload["message"] == "Message job persistence error"
+    assert payload["provider_used"] is None
+
+
 def test_send_message_handles_non_iterable_fallback_chain(client, db_session, monkeypatch):
     test_client, org_id = client
     provider = _bootstrap_routing_stack(db_session, org_id)
@@ -288,4 +321,41 @@ def test_send_message_defaults_invalid_estimated_cost(client, db_session, monkey
     stored_costs = db_session.query(CostRecord).filter(CostRecord.message_job_id == job_uuid).all()
     assert len(stored_costs) == 1
     assert stored_costs[0].price_eur == 0
+
+
+def test_send_message_rolls_back_on_commit_error(client, db_session, monkeypatch):
+    test_client, org_id = client
+    _bootstrap_routing_stack(db_session, org_id)
+
+    original_commit = db_session.commit
+    call_state = {"calls": 0, "raised": False}
+
+    def flaky_commit():
+        call_state["calls"] += 1
+        result = original_commit()
+        # Let the first commit (job creation) succeed without raising. Fail on
+        # the next commit performed during delivery orchestration, mimicking a
+        # transactional error after the flush has been executed.
+        if call_state["calls"] == 2 and not call_state["raised"]:
+            call_state["raised"] = True
+            raise RuntimeError("commit exploded")
+        return result
+
+    monkeypatch.setattr(db_session, "commit", flaky_commit)
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "flaky-commit",
+            "to_number": "+5511999999999",
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Zoe"]},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed_final"
+    assert payload["message"] == "Delivery orchestration error"
 

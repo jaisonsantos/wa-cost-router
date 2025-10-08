@@ -1,20 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from pydantic import BaseModel
+import asyncio
+import logging
+import uuid
 from typing import Dict, Any, Optional, Iterable
 from uuid import UUID
-from app.core.database import get_db
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from app.api.dependencies import get_current_user
+from app.core.database import get_db
+from app.core.security import decrypt_credentials
 from app.models.models import (
     MessageJob, DeliveryAttempt, CostRecord, Provider, ProviderCredential,
     JobStatusEnum, AttemptStatusEnum
 )
-from app.services.routing_engine import RoutingEngine
 from app.services.provider_connectors import get_connector
-from app.core.security import decrypt_credentials
-import logging
-import asyncio
+from app.services.routing_engine import RoutingEngine
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -76,7 +80,43 @@ async def send_message(
         status=JobStatusEnum.processing
     )
     db.add(job)
-    db.commit()
+
+    try:
+        _commit_or_raise(db)
+    except Exception as exc:  # pragma: no cover - committed failure handled below
+        logger.exception(
+            "Failed to persist message job %s for org %s: %s",
+            getattr(job, "id", None),
+            current_user["org_id"],
+            exc,
+        )
+        try:
+            existing_job = db.query(MessageJob).filter(
+                MessageJob.org_id == current_user["org_id"],
+                MessageJob.idempotency_key == data.idempotency_key,
+            ).first()
+        except Exception:  # pragma: no cover - defensive fallback
+            existing_job = None
+
+        if existing_job:
+            return SendMessageResponse(
+                job_id=str(existing_job.id),
+                status=existing_job.status.value,
+                provider_used=None,
+                estimated_cost=None,
+                message="Message already processed (idempotent)",
+            )
+
+        job_identifier = getattr(job, "id", None) or uuid.uuid4()
+
+        return SendMessageResponse(
+            job_id=str(job_identifier),
+            status=JobStatusEnum.failed_final.value,
+            provider_used=None,
+            estimated_cost=None,
+            message="Message job persistence error",
+        )
+
     db.refresh(job)
     
     # 4. Escolher provedor via motor de decisão
@@ -94,11 +134,17 @@ async def send_message(
             current_user["org_id"],
             exc,
         )
-        job.status = JobStatusEnum.failed_final
-        db.commit()
+        status_value = JobStatusEnum.failed_final.value
+        try:  # pragma: no cover - best effort persistence
+            job_to_update = _ensure_job_attached(db, job)
+            if job_to_update is not None:
+                job_to_update.status = JobStatusEnum.failed_final
+                status_value = job_to_update.status.value
+        except Exception:
+            logger.exception("Unable to mark job %s as failed after routing error", job.id)
         return SendMessageResponse(
             job_id=str(job.id),
-            status=job.status.value,
+            status=status_value,
             provider_used=None,
             estimated_cost=None,
             message="Routing engine error",
@@ -106,7 +152,10 @@ async def send_message(
     
     if not routing_decision:
         job.status = JobStatusEnum.failed_final
-        db.commit()
+        try:
+            _commit_or_raise(db)
+        except Exception:
+            logger.exception("Failed to mark job %s as failed after empty routing decision", job.id)
         raise HTTPException(status_code=400, detail="No provider available for this route")
     
     # 5. Tentar envio com fallback
@@ -130,10 +179,16 @@ async def send_message(
             routing_decision.get("provider_id") if routing_decision else None,
             exc,
         )
-        job.status = JobStatusEnum.failed_final
-        db.commit()
+        status_value = JobStatusEnum.failed_final.value
+        try:  # pragma: no cover - best effort persistence
+            job_to_update = _ensure_job_attached(db, job)
+            if job_to_update is not None:
+                job_to_update.status = JobStatusEnum.failed_final
+                status_value = job_to_update.status.value
+        except Exception:
+            logger.exception("Unable to mark job %s as failed after delivery error", job.id)
         result = {
-            "status": job.status.value,
+            "status": status_value,
             "provider_name": None,
             "message": "Delivery orchestration error",
         }
@@ -160,7 +215,10 @@ async def _attempt_delivery_with_fallback(
     if org_uuid is None:
         logger.error("Invalid organization identifier %r for job %s", org_id, job.id)
         job.status = JobStatusEnum.failed_final
-        db.commit()
+        try:
+            _commit_or_raise(db)
+        except Exception:
+            logger.exception("Failed to persist invalid organization failure for job %s", job.id)
         return {
             "status": job.status.value,
             "message": "Invalid organization context",
@@ -226,77 +284,82 @@ async def _attempt_delivery_with_fallback(
 
         # Tentar envio com retries
         for retry in range(3):
+            connector = get_connector(
+                provider.name,
+                credentials_payload,
+                provider.base_url
+            )
+
             try:
-                connector = get_connector(
-                    provider.name,
-                    credentials_payload,
-                    provider.base_url
-                )
-                
                 result = await connector.send_message(
                     to_number=data.to_number,
                     template_id=data.template_id,
                     variables=data.variables
                 )
-                
-                # Gravar tentativa
-                attempt = DeliveryAttempt(
-                    message_job_id=job.id,
-                    provider_id=provider.id,
-                    attempt_number=attempt_number,
-                    status=AttemptStatusEnum.success if result["success"] else AttemptStatusEnum.failed,
-                    error_code=result.get("error_code"),
-                    error_message=result.get("error_message"),
-                    latency_ms=result.get("latency_ms"),
-                    provider_message_id=result.get("provider_message_id"),
-                    provider_response=result.get("response")
-                )
-                db.add(attempt)
-                
-                if result["success"]:
-                    # Sucesso! Gravar custo
-                    cost_record = CostRecord(
-                        message_job_id=job.id,
-                        provider_id=provider.id,
-                        price_eur=estimated_cost_minor,
-                        country_iso=job.country_iso,
-                        category=job.template_category,
-                        price_table_version="v1"  # TODO: pegar versão real da tabela de preços
-                    )
-                    db.add(cost_record)
-                    
-                    job.status = JobStatusEnum.delivered if attempt_number == 1 else JobStatusEnum.delivered_with_fallback
-                    db.commit()
-                    
-                    return {
-                        "status": job.status.value,
-                        "provider_name": provider.name,
-                        "message": "Message delivered successfully"
-                    }
-                
-                # Falha, tentar retry se erro recuperável
-                if result.get("error_code") in ["429", "timeout"]:
-                    await asyncio.sleep(2 ** retry)  # Exponential backoff
-                    continue
-                else:
-                    break  # Erro não recuperável, próximo provider
-            
-            except Exception as e:
-                logger.error(f"Delivery error: {str(e)}")
+            except Exception as exc:
+                logger.error(f"Delivery error: {str(exc)}")
                 attempt = DeliveryAttempt(
                     message_job_id=job.id,
                     provider_id=provider.id,
                     attempt_number=attempt_number,
                     status=AttemptStatusEnum.failed,
                     error_code="EXCEPTION",
-                    error_message=str(e)
+                    error_message=str(exc)
                 )
                 db.add(attempt)
-                db.commit()
-    
+                try:
+                    _commit_or_raise(db)
+                except Exception:
+                    logger.exception("Failed to record delivery exception for provider %s", provider.id)
+                    raise
+                break
+
+            attempt = DeliveryAttempt(
+                message_job_id=job.id,
+                provider_id=provider.id,
+                attempt_number=attempt_number,
+                status=AttemptStatusEnum.success if result["success"] else AttemptStatusEnum.failed,
+                error_code=result.get("error_code"),
+                error_message=result.get("error_message"),
+                latency_ms=result.get("latency_ms"),
+                provider_message_id=result.get("provider_message_id"),
+                provider_response=result.get("response")
+            )
+            db.add(attempt)
+
+            if result["success"]:
+                cost_record = CostRecord(
+                    message_job_id=job.id,
+                    provider_id=provider.id,
+                    price_eur=estimated_cost_minor,
+                    country_iso=job.country_iso,
+                    category=job.template_category,
+                    price_table_version="v1"
+                )
+                db.add(cost_record)
+
+                job.status = (
+                    JobStatusEnum.delivered
+                    if attempt_number == 1
+                    else JobStatusEnum.delivered_with_fallback
+                )
+                _commit_or_raise(db)
+
+                return {
+                    "status": job.status.value,
+                    "provider_name": provider.name,
+                    "message": "Message delivered successfully"
+                }
+
+            if result.get("error_code") in ["429", "timeout"]:
+                await asyncio.sleep(2 ** retry)
+                continue
+
+            break
+
     # Todos os providers falharam
     job.status = JobStatusEnum.failed_final
-    db.commit()
+    _commit_or_raise(db)
 
     return {
         "status": job.status.value,
@@ -348,6 +411,29 @@ def _coerce_uuid(value: Any) -> Optional[UUID]:
         return UUID(str(value))
     except (TypeError, ValueError):
         return None
+
+
+def _commit_or_raise(db: Session) -> None:
+    """Commit the current transaction or propagate the failure after rollback."""
+
+    try:
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise exc
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _ensure_job_attached(db: Session, job: MessageJob) -> MessageJob:
+    """Reload the job from the database if the session was reset."""
+
+    if job is None or getattr(job, "id", None) is None:
+        return job
+
+    refreshed = db.get(MessageJob, job.id)
+    return refreshed or job
 
 @router.get("/jobs")
 def list_message_jobs(
