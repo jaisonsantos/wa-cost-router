@@ -8,6 +8,7 @@
 - Backend, frontend e documentação necessários para fechar os itens críticos listados no [backlog priorizado do ciclo](docs/current-cycle/AGENTE.md).
 - Integrações e automações explícitas na etapa corrente do [plano de implementação](docs/current-cycle/NEXT_IMPLEMENTATION_PLAN.md), respeitando as restrições apontadas na análise de lacunas (`USE_CASE_GAP`).
 - Coordenação operacional conforme diretrizes do [roadmap do ciclo](docs/current-cycle/README.md) para evitar deriva de escopo.
+- Manter o [índice do backlog por caso de uso](docs/backlog/INDEX_BY_USE_CASE.md) alinhado à matriz de rastreabilidade.
 
 ## Entregáveis
 - Incrementos funcionais descritos na seção “Próxima Milestone” do [plano de implementação](docs/current-cycle/NEXT_IMPLEMENTATION_PLAN.md).
