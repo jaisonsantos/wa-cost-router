@@ -227,7 +227,7 @@ class SandboxProviderConnector(ProviderConnector):
         template_id: str,
         variables: Dict[str, Any]
     ) -> Dict[str, Any]:
-        latency_ms = max(settings.SANDBOX_LATENCY_MS, 0)
+        latency_ms = self._resolve_latency_ms()
         if latency_ms:
             await asyncio.sleep(latency_ms / 1000)
 
@@ -263,7 +263,7 @@ class SandboxProviderConnector(ProviderConnector):
         }
 
     async def health_check(self) -> Dict[str, Any]:
-        latency_ms = max(settings.SANDBOX_LATENCY_MS, 0)
+        latency_ms = self._resolve_latency_ms()
         if latency_ms:
             await asyncio.sleep(latency_ms / 1000)
 
@@ -284,12 +284,40 @@ class SandboxProviderConnector(ProviderConnector):
         return hashlib.sha256(serialized.encode()).hexdigest()
 
     def _should_fail(self, fingerprint: str) -> bool:
-        failure_rate = min(max(settings.SANDBOX_FAILURE_RATE, 0.0), 1.0)
+        failure_rate = self._resolve_failure_rate()
         if failure_rate == 0:
             return False
 
         sample = int(fingerprint[:8], 16) / 0xFFFFFFFF
         return sample < failure_rate
+
+    @staticmethod
+    def _resolve_latency_ms() -> int:
+        raw_value = settings.SANDBOX_LATENCY_MS
+        try:
+            latency_ms = int(raw_value)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid SANDBOX_LATENCY_MS value %r; defaulting to 0 ms",
+                raw_value,
+            )
+            return 0
+
+        return max(latency_ms, 0)
+
+    @staticmethod
+    def _resolve_failure_rate() -> float:
+        raw_value = settings.SANDBOX_FAILURE_RATE
+        try:
+            failure_rate = float(raw_value)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid SANDBOX_FAILURE_RATE value %r; defaulting to 0.0",
+                raw_value,
+            )
+            return 0.0
+
+        return min(max(failure_rate, 0.0), 1.0)
 
 
 def get_connector(provider_name: str, credentials: Dict[str, Any], base_url: Optional[str] = None) -> ProviderConnector:
