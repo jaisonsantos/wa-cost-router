@@ -36,6 +36,8 @@ from app.models.models import (  # noqa: E402
     RateCard,
     RoutingRule,
 )
+from app.services.routing_engine import RoutingEngine  # noqa: E402
+import app.api.messages as messages_module  # noqa: E402
 
 
 TEST_ENGINE = create_engine(
@@ -163,4 +165,58 @@ def test_send_message_returns_success(client, db_session):
     assert payload["provider_used"] == "360dialog"
     assert payload["estimated_cost"] == 85
     assert payload["job_id"]
+
+
+def test_send_message_handles_routing_engine_error(client, db_session, monkeypatch):
+    test_client, org_id = client
+    _bootstrap_routing_stack(db_session, org_id)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("routing exploded")
+
+    monkeypatch.setattr(RoutingEngine, "select_provider", boom)
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "boom-key",
+            "to_number": "+5511999999999",
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Jane"]},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed_final"
+    assert payload["message"] == "Routing engine error"
+    assert payload["provider_used"] is None
+
+
+def test_send_message_handles_delivery_exception(client, db_session, monkeypatch):
+    test_client, org_id = client
+    _bootstrap_routing_stack(db_session, org_id)
+
+    async def boom(**kwargs):
+        raise RuntimeError("delivery exploded")
+
+    monkeypatch.setattr(messages_module, "_attempt_delivery_with_fallback", boom)
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "delivery-key",
+            "to_number": "+5511999999999",
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Ravi"]},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed_final"
+    assert payload["message"] == "Delivery orchestration error"
+    assert payload["provider_used"] is None
 

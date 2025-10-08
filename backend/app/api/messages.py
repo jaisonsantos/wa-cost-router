@@ -81,11 +81,28 @@ async def send_message(
     
     # 4. Escolher provedor via motor de decisão
     engine = RoutingEngine(db, current_user["org_id"])
-    routing_decision = engine.select_provider(
-        country_iso=country_iso,
-        category=data.template_category,
-        template_id=data.template_id
-    )
+    try:
+        routing_decision = engine.select_provider(
+            country_iso=country_iso,
+            category=data.template_category,
+            template_id=data.template_id,
+        )
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.exception(
+            "Routing engine failure for job %s in org %s: %s",
+            job.id,
+            current_user["org_id"],
+            exc,
+        )
+        job.status = JobStatusEnum.failed_final
+        db.commit()
+        return SendMessageResponse(
+            job_id=str(job.id),
+            status=job.status.value,
+            provider_used=None,
+            estimated_cost=None,
+            message="Routing engine error",
+        )
     
     if not routing_decision:
         job.status = JobStatusEnum.failed_final
@@ -93,13 +110,28 @@ async def send_message(
         raise HTTPException(status_code=400, detail="No provider available for this route")
     
     # 5. Tentar envio com fallback
-    result = await _attempt_delivery_with_fallback(
-        db=db,
-        job=job,
-        routing_decision=routing_decision,
-        data=data,
-        org_id=current_user["org_id"]
-    )
+    try:
+        result = await _attempt_delivery_with_fallback(
+            db=db,
+            job=job,
+            routing_decision=routing_decision,
+            data=data,
+            org_id=current_user["org_id"],
+        )
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.exception(
+            "Unexpected delivery failure for job %s via provider %s: %s",
+            job.id,
+            routing_decision.get("provider_id") if routing_decision else None,
+            exc,
+        )
+        job.status = JobStatusEnum.failed_final
+        db.commit()
+        result = {
+            "status": job.status.value,
+            "provider_name": None,
+            "message": "Delivery orchestration error",
+        }
     
     return SendMessageResponse(
         job_id=str(job.id),
