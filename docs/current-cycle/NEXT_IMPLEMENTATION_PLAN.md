@@ -1,51 +1,52 @@
-# Pós-mortem — Plano de Próxima Etapa
+# Plano de Implementação — Ciclo Contatos/Opt-ins
 
 ## Sumário da iteração
-- **Período:** 30/09/2024 – 11/10/2024 (janela de hardening pré-piloto externo).
-- **Responsáveis principais:** Tech Lead (Squad Core Routing), PM (Squad Operações) e QA Lead (Squad Quality Enablement).
-- **Escopo planejado:** Executar o plano de próxima etapa para entregar os épicos E1–E4 — catálogo de contatos multi-tenant, orquestração multicanal inbound/outbound, conectores CRM e oferta white-label — habilitando o piloto multicanal com parceiros.
+- **Período:** 14/10/2024 – 08/11/2024 (janela de preparação para piloto externo com foco em contatos/opt-ins).
+- **Escopo principal:** Disponibilizar catálogo multi-tenant de contatos com gestão completa de consentimentos e integrações mínimas necessárias para validação com parceiros piloto.
+- **Responsáveis:**
+  - **Tech Lead (Squad Core Routing):** Orquestra migrações, APIs e webhook WA.
+  - **PM (Squad Operações):** Coordena alinhamento com compliance e parceiros piloto.
+  - **QA Lead (Squad Quality Enablement):** Formaliza cenários de aceite, monitora auditoria de opt-ins e sanitização de PII.
 
-## 1. Visão geral
-A iteração fechou o planejamento original com forte desvio para mitigações de segurança e multi-tenant identificadas durante o piloto interno. As squads priorizaram ajustes estruturais (ex.: segregação por `org_id`, criptografia de credenciais e contratos de mensagens) para conter riscos imediatos, mas os épicos planejados permaneceram majoritariamente em estado preparatório.
+## 1. Objetivos e critérios de sucesso
+- Catálogo de contatos multi-tenant disponível via API e UI, com importação em massa validada e deduplicação por `org_id`.
+- Registro de consentimento com trilha auditável (timestamp, origem, prova de aceitação) acessível via relatórios e API.
+- Webhook WhatsApp multi-tenant operando com roteamento por `phone_id → org_id` e validação de consentimento antes de respostas automatizadas.
+- Sanitização de payloads/logs contendo PII aplicada aos novos fluxos e documentada em playbooks operacionais.
+- Conectores CRM priorizados (HubSpot) sincronizando opt-ins em modo beta, destravando o planejamento dos épicos E3/E4.
 
-Principais conclusões:
-- O plano original superestimou a capacidade de executar épicos verdes enquanto pendências críticas de hardening (webhook multi-tenant, sanitização de PII e proteção de métricas administrativas) continuavam bloqueando o piloto externo.
-- Entregas técnicas não previstas — como reforço de multi-tenant na API e criptografia de credenciais legadas — consumiram o buffer destinado aos épicos E1–E4.
-- A rastreabilidade de casos de uso permanece relevante: a matriz em [`USE_CASE_TRACEABILITY.md`](./USE_CASE_TRACEABILITY.md) continua como fonte de verdade para status e dependências.
+## 2. Escopo e entregas previstas
+| Frente | Entrega | Critério de aceite |
+| --- | --- | --- |
+| **Catálogo multi-tenant (P0)** | Nova tabela `contact_profile` com migração assistida, API CRUD e importação CSV validada. | `alembic upgrade` + `seed` executam sem intervenção manual; importação rejeita duplicados e gera relatório de inconsistências.
+| **Timeline e consentimento (P0)** | Endpoint `/contacts/{id}/consents` com versionamento, gravação da origem e exposição no frontend. | Histórico visível na SPA; cada atualização persiste evidência (`channel`, `proof_url`) e dispara evento de auditoria.
+| **Webhook WA (P0)** | Mapeamento dinâmico `phone_id` ↔ `org_id` com isolamento de payloads e enriquecimento de consentimento. | Requisições rejeitadas sem opt-in ativo; logs mascaram dados sensíveis conforme política.
+| **Sanitização e governança (P0)** | Middleware de sanitização, rotinas de limpeza e atualização dos playbooks de incidentes. | Checklist de conformidade assinado pelo time de segurança; operações informadas em `docs/security/SECURITY.md`.
+| **CRM HubSpot (P1)** | Sync inicial de opt-ins/opt-outs com fila de retries e monitoramento básico. | Jobs visíveis no worker, com dashboard mínimo de status; dependência liberada para epics E3/E4.
 
-## 2. Status dos épicos planejados
-| Épico | Objetivo original | Status final | Entregas principais | Pendências e motivos |
-| --- | --- | --- | --- | --- |
-| **E1. Plataforma de contatos e consentimento** | Catálogo multi-tenant com APIs de CRUD/importação, timeline e consentimento. | **Parcial** — discovery e modelagem revisados; sem entregas em produção. | Documentação de requisitos consolidada, análise de migração e ajustes preliminares de seeds. | `T1`/`T2` continuam abertos por risco de migração sem sanitização (`20251006-sanitizacao-pii`) e falta de estratégia de backfill controlado. |
-| **E2. Orquestração de atendimento multicanal** | Canais inbound/outbound (WhatsApp, e-mail, chat) com filas e SLAs monitorados. | **Parcial** — protótipo de SLA validado; infraestrutura multicanal não concluída. | Retenção de métricas exploratórias e revisão do roteador para respeitar `org_id`. | Webhook WhatsApp multi-tenant (`20251006-webhook-multi-tenant`) e circuito de provedores (`20251006-circuit-breaker`) seguem bloqueando o rollout. |
-| **E3. CRM sincronizado com jornada** | Conectores HubSpot/Salesforce com sync bidirecional e retries monitorados. | **Não iniciado** — aguardando conclusão de E1/E2. | Nenhuma entrega. | Dependências diretas de catálogo/timeline e infraestrutura multicanal, além de requisitos de auditoria ainda não endereçados. |
-| **E4. White-label e governança comercial** | Branding por tenant, RBAC granular e relatórios customizados. | **Não iniciado** — aguardando base multi-tenant estabilizada. | Nenhuma entrega. | Prioridade redirecionada para hardening de segurança e multicanal; backlog de RBAC permanece aberto (`20251006-proteger-admin-metrics`). |
-
-## 3. Entregas confirmadas
-Mesmo fora do escopo original, as squads registraram avanços críticos para a saúde do MVP:
-- **Roteamento e providers multi-tenant:** todos os endpoints de providers e o `RoutingEngine` agora impõem `org_id`, evitando vazamentos entre clientes.
-- **Criptografia de credenciais:** `ProviderCredential.credentials_encrypted` foi migrado para armazenamento criptografado com Fernet, incluindo backfill (`migration 002`).
-- **Contratos de mensagens revisados:** endpoints alinharam `is_configured`, `provider_name` e agregados de custo para o frontend, reduzindo divergências de contrato.
-- **Endereçamento de exposição pública:** `GET /rates` passou a exigir autenticação, eliminando acesso público inadvertido.
-
-## 4. Itens em aberto e justificativas
-| ID | Título | Status atual | Justificativa de não entrega |
+## 3. Sequenciamento e marcos
+| Marco | Data-alvo | Descrição | Dependências |
 | --- | --- | --- | --- |
-| T1 | Catálogo de contatos multi-tenant | Não iniciado | Migração arriscada sem sanitização de PII e sem estratégia de deduplicação segura; esforço deslocado para hardening imediato. |
-| T2 | Timeline e vinculação de mensagens | Não iniciado | Depende de T1 e de ajustes nas consultas de relatórios; sem base confiável para retroalimentar contatos. |
-| T3 | Infra de canais inbound/outbound unificados | Não iniciado | Webhook multi-tenant e circuito de provedores ainda sem implementação, impossibilitando ativação de canais inbound. |
-| T4 | Monitoramento de SLA e painel | Não iniciado | Sem infraestrutura multicanal para gerar métricas reais; protótipo permanece apenas exploratório. |
-| T5 | Conectores CRM prioritários | Não iniciado | Sem catálogo/timeline consolidados e sem política de retries auditável; riscos de compliance com parceiros. |
-| T6 | White-label, RBAC e branding | Não iniciado | Bloqueado pelos itens de segurança (proteção `/admin/metrics`, RBAC) e por ausência de catálogo multicanal. |
+| **M1 — Migração e API base** | 18/10 | Criar schema, migrar dados existentes e expor endpoints CRUD com validações. | Sanitização de PII (card `20251006-sanitizacao-pii`). |
+| **M2 — Timeline e consentimento** | 23/10 | Implementar versionamento de consentimento, UI e eventos de auditoria. | M1 concluído; ajustes de contratos frontend (`20251006-contratos-api-fe`). |
+| **M3 — Webhook WA multi-tenant** | 28/10 | Roteamento por `org_id`, validação de opt-in e fallback de provedores. | Circuit breaker (`20251006-circuit-breaker`) e mapa de phone ids. |
+| **M4 — Sanitização e playbooks** | 30/10 | Middleware de mascaramento, retenção e atualização de docs operacionais. | M1–M3 entregues para validar cenários reais. |
+| **M5 — Beta com HubSpot** | 08/11 | Sync parcial de opt-ins e relatório consolidado para parceiros piloto. | M2 concluído, credenciais configuradas (`20251006-proteger-admin-metrics`). |
 
-## 5. Riscos e aprendizados
-- **Dependências subestimadas:** A ausência de sanitização e isolamento completo entre tenants inviabilizou iniciar migrações sensíveis, reiterando a necessidade de tratar P0s de segurança antes de novos épicos.
-- **Buffer insuficiente para hardening:** Sem reserva explícita para correções emergenciais, o escopo planejado foi consumido por débitos identificados no piloto interno.
-- **Rastreabilidade deve guiar priorização:** A matriz de casos de uso continua essencial para entender impactos; qualquer replanejamento precisa manter links vivos com backlog e roadmap.
+## 4. Dependências críticas e alinhamento
+- **Segurança e compliance:** Cards `20251006-sanitizacao-pii`, `20251006-proteger-admin-metrics` e `20251006-enforce-secret-strength` promovidos a **P0**; execução coordenada com time de segurança.
+- **Frontend:** Adequação dos contratos (`20251006-contratos-api-fe`) e exposição do histórico de consentimento em `src/pages/Contacts` até M2.
+- **Observabilidade:** Integração com logs mascarados e métricas de opt-ins documentada em `docs/operations/OPERATIONS.md`.
+- **CRM:** Disponibilidade do conector HubSpot e acordos de dados com parceiros antes de M5.
 
-## 6. Continuidade e próximos passos
-- **Rastreabilidade:** Consulte [`USE_CASE_TRACEABILITY.md`](./USE_CASE_TRACEABILITY.md) para acompanhar a evolução de UC-01 a UC-04 e os vínculos com backlog e roadmap após este pós-mortem.
-- **Replanejamento:** As prioridades revisadas para retomar o piloto externo estão documentadas no [`IMPLEMENTATION_PLAN_ROLLING.md`](./IMPLEMENTATION_PLAN_ROLLING.md), que consolida o novo plano de implementação.
-- **Hand-off:** Registrar decisões adicionais no `docs/current-cycle/AGENTE.md` e alinhar squads sobre as pendências críticas (`20251006-webhook-multi-tenant`, `20251006-sanitizacao-pii`, `20251006-proteger-admin-metrics`, `20251006-circuit-breaker`) antes de abrir o piloto externo.
+## 5. Plano de validação e aceite
+1. **QA funcional:** Casos automatizados cobrindo importação, deduplicação e fluxo completo de opt-in/out (happy path + rejeições).
+2. **QA segurança:** Revisão de sanitização e rotinas de expurgo com o time de segurança antes do go-live.
+3. **UAT com parceiros:** Executar checklist de consentimento com dois parceiros piloto entre 04/11 e 08/11, registrando evidências.
+4. **Observabilidade:** Dashboards de opt-ins ativos por `org_id` publicados no Grafana interno.
+5. **Go/No-Go:** Reunião 08/11 com PM, Tech Lead e Security para liberar o piloto externo.
 
-Este pós-mortem encerra o planejamento original e fornece o contexto necessário para a continuidade do ciclo.
+## 6. Comunicação e governança
+- Atualizar o status diário no canal `#proj-wa-optin` destacando progresso dos P0 e riscos.
+- Registrar decisões relevantes no [`docs/current-cycle/AGENTE.md`](./AGENTE.md) e refletir impactos no backlog (`docs/backlog/README.md`).
+- Revisar o roadmap quinzenalmente, garantindo que dependências para E3/E4 permaneçam bloqueadas até que os critérios deste plano sejam cumpridos.

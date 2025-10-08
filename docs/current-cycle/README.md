@@ -31,12 +31,29 @@ Outros comandos úteis:
 | `make ci` | Reproduz localmente o pipeline (ver [Operações › Pipeline CI](../operations/OPERATIONS.md#pipeline-ci)). |
 | `make down` | Remove serviços e volumes para limpeza rápida. |
 
+## Marcos e datas-alvo do ciclo de contatos/opt-ins
+
+| Marco | Data-alvo | Resultado esperado | Dependências chave |
+|-------|-----------|--------------------|--------------------|
+| **M1 — Migração e API base** | 18/10/2024 | Catálogo multi-tenant migrado com API CRUD validada. | Sanitização de PII ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)). |
+| **M2 — Timeline e consentimento** | 23/10/2024 | Histórico de opt-ins exposto na SPA e versionado por `org_id`. | Contratos frontend ↔️ API ([`20251006-contratos-api-fe`](../backlog/20251006-contratos-api-fe.md)). |
+| **M3 — Webhook WA multi-tenant** | 28/10/2024 | Roteamento por `phone_id → org_id` com validação de consentimento ativo. | Circuit breaker multicanal ([`20251006-circuit-breaker`](../backlog/20251006-circuit-breaker.md)). |
+| **M4 — Sanitização e playbooks** | 30/10/2024 | Logs e payloads mascarados com playbooks atualizados. | Alinhamento segurança/compliance. |
+| **M5 — Beta HubSpot** | 08/11/2024 | Sincronização inicial de opt-ins/opt-outs com parceiros piloto. | Proteção de métricas administrativas ([`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md)). |
+
+## Dependências e alinhamentos críticos
+
+- **Segurança (P0):** `20251006-sanitizacao-pii`, `20251006-proteger-admin-metrics` e `20251006-enforce-secret-strength` precisam estar concluídos para liberar o piloto externo.
+- **Frontend:** A squad de produto deve priorizar os contratos e telas de consentimento até M2, garantindo rastreabilidade de opt-ins.
+- **Observabilidade:** Métricas e logs mascarados devem ser registrados em `docs/operations/OPERATIONS.md` conforme os marcos são cumpridos.
+- **CRM:** O beta com HubSpot requer alinhamento jurídico e configuração de credenciais antes do marco M5.
+
 ## Navegação da documentação
 
 | Área | Conteúdo |
 |------|----------|
-| [AGENTE do ciclo](./AGENTE.md) | Síntese executiva, pendências críticas e direcionadores de foco. |
-| [Plano de Próxima Etapa](./NEXT_IMPLEMENTATION_PLAN.md) | Sequenciamento das entregas "Next Up" e dependências entre squads. |
+| [AGENTE do ciclo](./AGENTE.md) | Síntese executiva, pendências críticas e direcionadores de foco (ciclo contatos/opt-ins). |
+| [Plano de Próxima Etapa](./NEXT_IMPLEMENTATION_PLAN.md) | Sequenciamento das entregas "Next Up" com marcos e critérios do ciclo de contatos/opt-ins. |
 | [Matriz de Casos de Uso](./USE_CASE_TRACEABILITY.md) | Status UC-01 a UC-04 com rastreabilidade para backlog, roadmap e documentação de suporte. |
 | [Índice do Backlog por Caso de Uso](../backlog/INDEX_BY_USE_CASE.md) | Visão cruzada dos itens priorizados por UC e links para cada história. |
 | [Backlog Prioritário](../backlog/README.md) | Itens P1/P2/P3 com subtarefas e referências cruzadas. |
@@ -55,7 +72,7 @@ Outros comandos úteis:
 ## Convenções chave
 
 - **Autenticação**: JWT assinado com `JWT_SECRET`; tokens de provedores criptografados com Fernet (`APP_SECRET_KEY`).
-- **Multi-tenant**: todo acesso a dados é filtrado por `org_id`. O webhook WhatsApp ainda precisa mapear `phone_id → org_id` (vide backlog P1).
+- **Multi-tenant**: todo acesso a dados é filtrado por `org_id`. O webhook WhatsApp ainda precisa mapear `phone_id → org_id` (vide backlog P0).
 - **Logs & métricas**: `/admin/metrics` expõe métricas Prometheus; proteger em ambiente produtivo.
 - **Seeds**: `backend/scripts/seed.py` popula apenas dados demo (org, usuário, rates, eventos) sem criar tabelas.
 
