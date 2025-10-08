@@ -31,6 +31,7 @@ class Organization(Base):
 
     contacts = relationship("Contact", back_populates="organization")
     contact_segments = relationship("ContactSegment", back_populates="organization")
+    segment_policies = relationship("ContactSegmentPolicy", back_populates="organization")
 
 class User(Base):
     __tablename__ = "user"
@@ -335,12 +336,37 @@ class ContactSegment(Base):
         back_populates="segment",
         cascade="all, delete-orphan",
     )
+    policy = relationship(
+        "ContactSegmentPolicy",
+        back_populates="segment",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
     contacts = relationship(
         "Contact",
         secondary="contact_segment_membership",
         back_populates="segments",
         viewonly=True,
     )
+
+
+class ContactSegmentPolicy(Base):
+    __tablename__ = "contact_segment_policy"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    segment_id = Column(
+        UUID(as_uuid=True), ForeignKey("contact_segment.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    limits = Column(JSON, nullable=False, default=dict)
+    opt_out = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    organization = relationship("Organization", back_populates="segment_policies")
+    segment = relationship("ContactSegment", back_populates="policy")
 
 
 class ContactSegmentMembership(Base):
