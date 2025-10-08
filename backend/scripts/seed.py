@@ -1,5 +1,7 @@
 import sys
-from datetime import datetime, timedelta
+import uuid
+import hashlib
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, "/app")
 
@@ -14,10 +16,20 @@ from app.models.models import (  # noqa: E402
     RateCard,
     MessageEvent,
     Provider,
+    Contact,
+    ContactChannelOptIn,
+    ContactSegment,
+    ContactSegmentMembership,
+    ContactImportJob,
+    ContactStatusEnum,
+    OptInStatusEnum,
+    ContactImportStatusEnum,
 )
 
 
+DEFAULT_ORG_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")
 DEFAULT_ORG_NAME = "Demo Org"
+DEFAULT_USER_ID = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 DEFAULT_USER_EMAIL = "admin@demo.local"
 DEFAULT_USER_PASSWORD = "demo123"
 DEFAULT_PHONE_ID = "demo_phone_456"
@@ -27,6 +39,16 @@ DEFAULT_WEBHOOK_SECRET = "my-webhook-secret"
 DEFAULT_ACCESS_TOKEN = "fake-wa-access-token"
 DEFAULT_PROVIDER_NAME = "360dialog"
 
+DEFAULT_CONTACT_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")
+DEFAULT_CONTACT_EMAIL = "dana.customer@example.com"
+DEFAULT_CONTACT_PHONE = "+5511987654321"
+DEFAULT_CONTACT_SOURCE = "seed"
+
+DEFAULT_SEGMENT_ID = uuid.UUID("33333333-3333-4333-8333-333333333333")
+DEFAULT_SEGMENT_SLUG = "pilot-customers"
+
+DEFAULT_IMPORT_JOB_ID = uuid.UUID("44444444-4444-4444-8444-444444444444")
+
 
 def seed():
     """Populate demo data without creating database structures."""
@@ -35,13 +57,17 @@ def seed():
     try:
         org = db.query(Organization).filter(Organization.name == DEFAULT_ORG_NAME).first()
         if not org:
-            org = Organization(name=DEFAULT_ORG_NAME)
+            org = Organization(id=DEFAULT_ORG_ID, name=DEFAULT_ORG_NAME)
             db.add(org)
             db.flush()
 
         user = db.query(User).filter(User.email == DEFAULT_USER_EMAIL).first()
         if not user:
-            user = User(email=DEFAULT_USER_EMAIL, password_hash=hash_password(DEFAULT_USER_PASSWORD))
+            user = User(
+                id=DEFAULT_USER_ID,
+                email=DEFAULT_USER_EMAIL,
+                password_hash=hash_password(DEFAULT_USER_PASSWORD),
+            )
             db.add(user)
             db.flush()
 
@@ -87,7 +113,7 @@ def seed():
             connection.webhook_verify_token = DEFAULT_WEBHOOK_VERIFY_TOKEN
             connection.webhook_secret_enc = encrypt_token(DEFAULT_WEBHOOK_SECRET)
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         provider = (
             db.query(Provider)
@@ -162,6 +188,130 @@ def seed():
                         delivery_status="delivered",
                     )
                 )
+
+        demo_contact = (
+            db.query(Contact)
+            .filter(Contact.org_id == org.id, Contact.email == DEFAULT_CONTACT_EMAIL)
+            .first()
+        )
+        seed_timestamp = datetime(2024, 1, 15, tzinfo=timezone.utc)
+        if not demo_contact:
+            demo_contact = Contact(
+                id=DEFAULT_CONTACT_ID,
+                org_id=org.id,
+                full_name="Dona Dana",
+                first_name="Dona",
+                last_name="Dana",
+                email=DEFAULT_CONTACT_EMAIL,
+                phone=DEFAULT_CONTACT_PHONE,
+                status=ContactStatusEnum.active,
+                source=DEFAULT_CONTACT_SOURCE,
+                source_metadata={"seed": True},
+                proof_hash=hashlib.sha256(b"contact:dona-dana:seed:v1").hexdigest(),
+                created_at=seed_timestamp,
+                updated_at=seed_timestamp,
+            )
+            db.add(demo_contact)
+            db.flush()
+
+        opt_in = (
+            db.query(ContactChannelOptIn)
+            .filter(
+                ContactChannelOptIn.contact_id == demo_contact.id,
+                ContactChannelOptIn.channel == "whatsapp",
+                ContactChannelOptIn.channel_address == DEFAULT_CONTACT_PHONE,
+                ContactChannelOptIn.version == 1,
+            )
+            .first()
+        )
+        if not opt_in:
+            opt_in = ContactChannelOptIn(
+                org_id=org.id,
+                contact_id=demo_contact.id,
+                channel="whatsapp",
+                channel_address=DEFAULT_CONTACT_PHONE,
+                status=OptInStatusEnum.granted,
+                version=1,
+                legal_basis="legitimate_interest",
+                captured_at=seed_timestamp,
+                source=DEFAULT_CONTACT_SOURCE,
+                source_metadata={"seed": True},
+                evidence_uri="https://example.com/proof/whatsapp-opt-in",
+                proof_hash=hashlib.sha256(b"optin:whatsapp:dona-dana:v1").hexdigest(),
+                created_at=seed_timestamp,
+                updated_at=seed_timestamp,
+            )
+            db.add(opt_in)
+
+        pilot_segment = (
+            db.query(ContactSegment)
+            .filter(ContactSegment.org_id == org.id, ContactSegment.slug == DEFAULT_SEGMENT_SLUG)
+            .first()
+        )
+        if not pilot_segment:
+            pilot_segment = ContactSegment(
+                id=DEFAULT_SEGMENT_ID,
+                org_id=org.id,
+                slug=DEFAULT_SEGMENT_SLUG,
+                name="Clientes Piloto",
+                description="Contatos habilitados para o piloto multi-tenant.",
+                criteria={"type": "static", "seed": True},
+                source=DEFAULT_CONTACT_SOURCE,
+                source_metadata={"seed": True},
+                proof_hash=hashlib.sha256(b"segment:pilot-customers:v1").hexdigest(),
+                created_at=seed_timestamp,
+                updated_at=seed_timestamp,
+            )
+            db.add(pilot_segment)
+            db.flush()
+
+        membership = (
+            db.query(ContactSegmentMembership)
+            .filter(
+                ContactSegmentMembership.contact_id == demo_contact.id,
+                ContactSegmentMembership.segment_id == pilot_segment.id,
+            )
+            .first()
+        )
+        if not membership:
+            membership = ContactSegmentMembership(
+                org_id=org.id,
+                contact_id=demo_contact.id,
+                segment_id=pilot_segment.id,
+                membership_origin="seed",
+                valid_from=seed_timestamp,
+                source=DEFAULT_CONTACT_SOURCE,
+                source_metadata={"seed": True},
+                proof_hash=hashlib.sha256(b"segment-membership:dona-dana:pilot").hexdigest(),
+                created_at=seed_timestamp,
+                updated_at=seed_timestamp,
+            )
+            db.add(membership)
+
+        import_job = (
+            db.query(ContactImportJob)
+            .filter(ContactImportJob.id == DEFAULT_IMPORT_JOB_ID)
+            .first()
+        )
+        if not import_job:
+            import_job = ContactImportJob(
+                id=DEFAULT_IMPORT_JOB_ID,
+                org_id=org.id,
+                requested_by=DEFAULT_USER_EMAIL,
+                input_uri="s3://demo-imports/contacts.csv",
+                status=ContactImportStatusEnum.completed,
+                total_rows=1,
+                processed_rows=1,
+                error_rows=0,
+                started_at=seed_timestamp,
+                completed_at=seed_timestamp + timedelta(minutes=5),
+                source=DEFAULT_CONTACT_SOURCE,
+                source_metadata={"seed": True},
+                proof_hash=hashlib.sha256(b"import:contacts:demo:v1").hexdigest(),
+                created_at=seed_timestamp,
+                updated_at=seed_timestamp + timedelta(minutes=5),
+            )
+            db.add(import_job)
 
         db.commit()
         print("✅ Seed data created successfully (idempotent).")

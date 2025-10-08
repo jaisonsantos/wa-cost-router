@@ -9,6 +9,7 @@ from sqlalchemy import (
     Enum,
     UniqueConstraint,
     Text,
+    Index,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
@@ -77,7 +78,9 @@ class MessageEvent(Base):
     __tablename__ = "message_event"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     message_job_id = Column(UUID(as_uuid=True), ForeignKey("message_job.id"))
     connection_id = Column(UUID(as_uuid=True), ForeignKey("wa_connection.id"))
     provider_event_id = Column(String, unique=True, nullable=False, index=True)
@@ -157,6 +160,27 @@ class AttemptStatusEnum(str, enum.Enum):
     failed = "failed"
     timeout = "timeout"
 
+
+class ContactStatusEnum(str, enum.Enum):
+    active = "active"
+    inactive = "inactive"
+    archived = "archived"
+
+
+class OptInStatusEnum(str, enum.Enum):
+    granted = "granted"
+    revoked = "revoked"
+    pending = "pending"
+
+
+class ContactImportStatusEnum(str, enum.Enum):
+    pending = "pending"
+    validating = "validating"
+    processing = "processing"
+    completed = "completed"
+    failed = "failed"
+
+
 class Provider(Base):
     __tablename__ = "provider"
 
@@ -196,9 +220,148 @@ class MessageJob(Base):
     country_iso = Column(String)
     status = Column(Enum(JobStatusEnum), nullable=False, default="pending")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     __table_args__ = (UniqueConstraint('org_id', 'idempotency_key', name='_org_idempotency_uc'),)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Contact(Base):
+    __tablename__ = "contact"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
+    external_id = Column(String, index=True)
+    full_name = Column(String)
+    first_name = Column(String)
+    last_name = Column(String)
+    email = Column(String, index=True)
+    phone = Column(String, index=True)
+    status = Column(Enum(ContactStatusEnum), nullable=False, default=ContactStatusEnum.active)
+    attributes = Column(JSON)
+    source = Column(String, nullable=False, default="manual")
+    source_metadata = Column(JSON)
+    proof_hash = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "external_id", name="uq_contact_org_external_id"),
+    )
+
+
+class ContactChannelOptIn(Base):
+    __tablename__ = "contact_channel_opt_in"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    contact_id = Column(
+        UUID(as_uuid=True), ForeignKey("contact.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    channel = Column(String, nullable=False)
+    channel_address = Column(String, nullable=False)
+    status = Column(Enum(OptInStatusEnum), nullable=False, default=OptInStatusEnum.granted)
+    version = Column(Integer, nullable=False, default=1)
+    legal_basis = Column(String)
+    captured_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    source = Column(String, nullable=False, default="manual")
+    source_metadata = Column(JSON)
+    evidence_uri = Column(String)
+    proof_hash = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "contact_id",
+            "channel",
+            "channel_address",
+            "version",
+            name="uq_contact_opt_in_version",
+        ),
+        Index("ix_contact_channel_opt_in_channel_address", "channel_address"),
+    )
+
+
+class ContactSegment(Base):
+    __tablename__ = "contact_segment"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    slug = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(Text)
+    criteria = Column(JSON)
+    source = Column(String, nullable=False, default="manual")
+    source_metadata = Column(JSON)
+    proof_hash = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "slug", name="uq_contact_segment_org_slug"),
+    )
+
+
+class ContactSegmentMembership(Base):
+    __tablename__ = "contact_segment_membership"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    contact_id = Column(
+        UUID(as_uuid=True), ForeignKey("contact.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    segment_id = Column(
+        UUID(as_uuid=True), ForeignKey("contact_segment.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    membership_origin = Column(String, nullable=False)
+    valid_from = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    valid_to = Column(DateTime(timezone=True))
+    source = Column(String, nullable=False, default="manual")
+    source_metadata = Column(JSON)
+    proof_hash = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "contact_id",
+            "segment_id",
+            "valid_from",
+            name="uq_contact_segment_membership_version",
+        ),
+    )
+
+
+class ContactImportJob(Base):
+    __tablename__ = "contact_import_job"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    requested_by = Column(String, nullable=False)
+    input_uri = Column(String)
+    status = Column(Enum(ContactImportStatusEnum), nullable=False, default=ContactImportStatusEnum.pending)
+    total_rows = Column(Integer, nullable=False, default=0)
+    processed_rows = Column(Integer, nullable=False, default=0)
+    error_rows = Column(Integer, nullable=False, default=0)
+    error_report_uri = Column(String)
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
+    source = Column(String, nullable=False, default="manual")
+    source_metadata = Column(JSON)
+    proof_hash = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_contact_import_job_org_status", "org_id", "status"),
+    )
 
 class DeliveryAttempt(Base):
     __tablename__ = "delivery_attempt"
