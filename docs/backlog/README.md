@@ -1,7 +1,7 @@
 [Docs](../current-cycle/README.md) › [Backlog](./README.md)
 # Backlog Prioritário
 
-Os itens abaixo seguem o formato `YYYYMMDD-<slug>.md` com frontmatter contendo tipo, prioridade (P1 crítico → P3 baixo), estimativa e dependências. Cada card detalha contexto, escopo, critérios de aceite, subtarefas e referências cruzadas para documentação e endpoints relevantes. Consulte o [índice por caso de uso](./INDEX_BY_USE_CASE.md) para navegar rapidamente pelos cards alinhados à matriz do ciclo.
+Os itens abaixo seguem o formato `YYYYMMDD-<slug>.md` com frontmatter contendo tipo, prioridade (**P0 crítico imediato → P3 baixo**), estimativa e dependências. Cada card detalha contexto, escopo, critérios de aceite, subtarefas e referências cruzadas para documentação e endpoints relevantes. Consulte o [índice por caso de uso](./INDEX_BY_USE_CASE.md) para navegar rapidamente pelos cards alinhados à matriz do ciclo.
 
 ## Processo de priorização orientado pela matriz de casos de uso
 
@@ -25,7 +25,8 @@ Status disponíveis:
 
 Prioridades atuais:
 
-- **P1** – Bloqueadores para go-live externo (segurança multi-tenant, PII, métricas sensíveis, secret enforcement).
+- **P0** – Frentes de contatos/opt-ins multi-tenant (catálogo, timeline, consentimento, sanitização e webhook WA). Devem ser acompanhadas diariamente e liberam a etapa de piloto externo.
+- **P1** – Bloqueadores para go-live externo restantes (proteção de métricas, enforcement de secrets, compliance residual).
 - **P2** – Resiliência e governança (rate limiting, circuit breaker, validações).
 - **P3** – Otimizações futuras e acordos com frontend.
 
