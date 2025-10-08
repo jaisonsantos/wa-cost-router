@@ -1,6 +1,5 @@
 import sys
 from datetime import datetime, timedelta
-import random
 
 sys.path.insert(0, "/app")
 
@@ -26,7 +25,7 @@ DEFAULT_BUSINESS_ID = "demo_business_123"
 DEFAULT_WEBHOOK_VERIFY_TOKEN = "my-verify-token"
 DEFAULT_WEBHOOK_SECRET = "my-webhook-secret"
 DEFAULT_ACCESS_TOKEN = "fake-wa-access-token"
-DEFAULT_PROVIDER_NAME = "Demo 360dialog"
+DEFAULT_PROVIDER_NAME = "360dialog"
 
 
 def seed():
@@ -140,22 +139,26 @@ def seed():
 
         events_exist = db.query(MessageEvent).filter(MessageEvent.org_id == org.id).first()
         if not events_exist:
-            countries = ["BR", "ES", "US", "MX"]
-            categories = ["MARKETING", "UTILITY", "AUTHENTICATION"]
-            templates = ["welcome_msg", "order_confirmation", "promo_campaign"]
+            templates = [
+                ("welcome_msg", "MARKETING", "BR"),
+                ("order_confirmation", "UTILITY", "BR"),
+                ("promo_campaign", "MARKETING", "ES"),
+                ("password_reset", "AUTHENTICATION", "US"),
+            ]
 
-            for i in range(20):
+            for index in range(20):
+                template_name, category, country_iso = templates[index % len(templates)]
                 db.add(
                     MessageEvent(
                         org_id=org.id,
                         connection_id=connection.id,
-                        provider_event_id=f"evt_{i}_{random.randint(1000, 9999)}",
+                        provider_event_id=f"evt_{index:02d}_sandbox",
                         direction="outbound",
-                        template_name=random.choice(templates),
-                        category=random.choice(categories),
-                        country_iso=random.choice(countries),
+                        template_name=template_name,
+                        category=category,
+                        country_iso=country_iso,
                         phone_cc="+55",
-                        timestamp_provider=now - timedelta(days=random.randint(0, 7)),
+                        timestamp_provider=now - timedelta(days=index % 7),
                         delivery_status="delivered",
                     )
                 )

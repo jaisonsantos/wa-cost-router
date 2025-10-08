@@ -15,7 +15,7 @@ O produto ainda não consegue calcular custos reais por provedor porque os rate 
 
 Além disso, os simuladores exigem categorias em caixa alta, mas o frontend envia `marketing/utility`, e há chamadas sem payload (ex.: `/rules/simulate`) que geram 422 antes mesmo do cálculo.
 
-Os conectores HTTP usam as URLs reais (360dialog, Gupshup); mesmo quando falham, o backend responde `200 "All providers failed"`, prolongando o Newman com timeouts e sem registrar eventos para relatórios.
+O modo sandbox para conectores foi entregue: `SANDBOX_PROVIDERS` habilita respostas determinísticas, elimina timeouts e deixa seeds alinhadas ao cenário fake. O próximo passo crítico é persistir eventos/custos reais após o envio (T3) para liberar relatórios consistentes.
 
 No frontend, o `API_BASE_URL` é hardcoded para localhost, impedindo deploy multiambiente, e há bugs de contrato (ex.: modal Gupshup case sensitive, Settings exibe dados estáticos).
 
@@ -40,7 +40,7 @@ O README do Postman promete cobertura total, mas o CSV de exemplo não preenche 
 | ID | Título | Prioridade | Owner sugerido | Estimativa | Dependências | Risco | DoD |
 |----|--------|------------|----------------|------------|--------------|-------|-----|
 | T1 | Vincular rate cards a provedores e corrigir seleção de custos | P0 | Backend | 5d | E1 | Alto (migração de dados) | • Migration Alembic adiciona `provider_id` + backfill idempotente cruzando por nome (fallback seguro).<br>• Atualizar `RoutingEngine`, seeds e importador CSV/API para usar `provider_id` (incluindo fallback por `provider_name` no CSV).<br>• Revisar docs: [`DATA_MODEL`](../architecture/DATA_MODEL.md), [`API_REFERENCE`](../api/API_REFERENCE.md), [`MIGRATIONS`](../operations/MIGRATIONS.md).<br>• Postman: request "Rates - Import CSV" com arquivo de exemplo alinhado ao fluxo automatizado.<br>• `make dev` + `make ci` verdes com base limpa e existente. |
-| T2 | Sandbox de conectores e seeds determinísticas | P0 | Backend | 4d | T1 | Médio | • Toggle `SANDBOX_PROVIDERS=true` curto-circuita HTTP externo com resposta fake e latência configurável.<br>• Seeds criam provider + tarifa coerente, Newman completa em < 60s.<br>• Documentar flag em [`OPERATIONS`](../operations/OPERATIONS.md) e `.env.example`.<br>• Tests pytest para sandbox.<br>• Atualizar [`ARCHITECTURE`](../architecture/ARCHITECTURE.md) com fluxo sandbox.<br>• `make dev` + `make ci` verdes. |
+| T2 | Sandbox de conectores e seeds determinísticas | P0 | Backend | 4d | T1 | Médio | ✅ Entregue. Toggle `SANDBOX_PROVIDERS` ativo por padrão no dev/CI, seeds determinísticas e docs/Postman atualizados. |
 | T3 | Persistir `MessageEvent` + baseline ao enviar | P0 | Backend | 3d | T1 | Médio | • Após envio, gravar `MessageEvent` com custos baseline/otimizado e atualizar relatórios.<br>• Ajustar queries de `/messages/jobs` e `/reports/summary` para usar novos registros.<br>• Postman valida valores > 0 nas rotas.<br>• Atualizar [`API_REFERENCE`](../api/API_REFERENCE.md) e [`ARCHITECTURE`](../architecture/ARCHITECTURE.md).<br>• `make dev` + `make ci` verdes. |
 | T4 | Normalizar categorias e payloads dos simuladores | P0 | Full-stack | 3d | T1 | Baixo | • Backend aceita categorias case-insensitive com default configurável e payload padrão para `/rules/simulate`.<br>• Frontend envia payload real, ajusta toasts/validações e remove TODO de economia.<br>• Postman atualiza requests de simulação com testes de contrato.<br>• Atualizar [`API_REFERENCE`](../api/API_REFERENCE.md) e docs de FE em [`ARCHITECTURE`](../architecture/ARCHITECTURE.md).<br>• `make dev` + `make ci` verdes + smoke FE. |
 | T5 | Configuração de base URL e providers UI | P0 | Frontend | 2d | - | Baixo | • Substituir literal `http://localhost:8000` por `import.meta.env.VITE_API_BASE` com fallback seguro.<br>• Modal de credenciais Gupshup case-insensitive orientado por `provider.type`/`metadata`.<br>• Documentar variáveis em [`DEPLOYMENT`](../operations/DEPLOYMENT.md) e [`docs/postman/README.md`](../postman/README.md).<br>• Smoke manual: login → Settings → credenciais 360dialog/Gupshup.<br>• `make dev` + `make ci` verdes. |
@@ -66,6 +66,10 @@ O README do Postman promete cobertura total, mas o CSV de exemplo não preenche 
 | Segurança | Enforce de secrets, mascaramento PII, proteção `/admin/metrics`. |
 | Observabilidade | Métricas Prometheus e logging estruturado para tentativas de envio. |
 
+**Progresso recente (2024-10-07):**
+- ✅ T2 entregue — sandbox dos conectores, seeds determinísticas e Newman executando em < 60 s no modo fake.
+- 🔜 Foco imediato em T3 para persistir `MessageEvent`/`CostRecord` reais após envio, destravando relatórios consistentes.
+
 ## Plano de testes e health-checks
 ### Automação local / CI
 - ⚠️ `make dev` — aplicar migrations, seed atualizado, subir stack (usar sandbox quando necessário).
@@ -77,7 +81,7 @@ O README do Postman promete cobertura total, mas o CSV de exemplo não preenche 
 - Fluxo web: login → Providers → configurar credenciais fake → Rules simulate (rápida + avançada) → Settings (dados reais).
 
 ### Testes unitários
-- Backend: pytest para validação de números, mascaramento e sandbox connectors.
+- Backend: pytest para validação de números, mascaramento e sandbox connectors (`backend/tests/test_sandbox_connectors.py`).
 - Frontend: React Testing Library para simulador/Settings (renderização com dados reais).
 
 Todos os critérios de DoD incluem `make dev` e `make ci` verdes, além de evidências (logs ou prints) anexadas ao PR.

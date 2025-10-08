@@ -13,10 +13,14 @@ DC ?= docker compose
 endif
 
 help: ## Show this help message
-	@echo "Usage: make [target]"
-	@echo ""
-	@echo "Targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
+@echo "Usage: make [target]"
+@echo ""
+@echo "Targets:"
+@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
+@echo ""
+@echo "Sandbox:"
+@echo "  SANDBOX_PROVIDERS=true (default) evita chamadas HTTP externas nos conectores."
+@echo "  Ajuste SANDBOX_LATENCY_MS e SANDBOX_FAILURE_RATE para simular cenários específicos."
 
 install: ## Install frontend dependencies (local npm)
 	npm install

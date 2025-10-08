@@ -10,6 +10,8 @@ cp backend/.env.example backend/.env  # ajuste segredos localmente
 make dev                               # inicia db/redis, roda migrations + seed e sobe api/web/worker
 ```
 
+O `.env` exemplo habilita o modo sandbox (`SANDBOX_PROVIDERS=true`), evitando chamadas HTTP externas e garantindo que seeds e testes retornem dados determinísticos.
+
 Serviços expostos após `make dev`:
 
 | Serviço  | Porta | Observações |
