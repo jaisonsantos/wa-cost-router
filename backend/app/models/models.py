@@ -12,6 +12,7 @@ from sqlalchemy import (
     Index,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 import enum
@@ -23,10 +24,13 @@ class RoleEnum(str, enum.Enum):
 
 class Organization(Base):
     __tablename__ = "organization"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    contacts = relationship("Contact", back_populates="organization")
+    contact_segments = relationship("ContactSegment", back_populates="organization")
 
 class User(Base):
     __tablename__ = "user"
@@ -247,6 +251,24 @@ class Contact(Base):
         UniqueConstraint("org_id", "external_id", name="uq_contact_org_external_id"),
     )
 
+    organization = relationship("Organization", back_populates="contacts")
+    channel_opt_ins = relationship(
+        "ContactChannelOptIn",
+        back_populates="contact",
+        cascade="all, delete-orphan",
+    )
+    segment_memberships = relationship(
+        "ContactSegmentMembership",
+        back_populates="contact",
+        cascade="all, delete-orphan",
+    )
+    segments = relationship(
+        "ContactSegment",
+        secondary="contact_segment_membership",
+        back_populates="contacts",
+        viewonly=True,
+    )
+
 
 class ContactChannelOptIn(Base):
     __tablename__ = "contact_channel_opt_in"
@@ -282,6 +304,9 @@ class ContactChannelOptIn(Base):
         Index("ix_contact_channel_opt_in_channel_address", "channel_address"),
     )
 
+    organization = relationship("Organization")
+    contact = relationship("Contact", back_populates="channel_opt_ins")
+
 
 class ContactSegment(Base):
     __tablename__ = "contact_segment"
@@ -302,6 +327,19 @@ class ContactSegment(Base):
 
     __table_args__ = (
         UniqueConstraint("org_id", "slug", name="uq_contact_segment_org_slug"),
+    )
+
+    organization = relationship("Organization", back_populates="contact_segments")
+    memberships = relationship(
+        "ContactSegmentMembership",
+        back_populates="segment",
+        cascade="all, delete-orphan",
+    )
+    contacts = relationship(
+        "Contact",
+        secondary="contact_segment_membership",
+        back_populates="segments",
+        viewonly=True,
     )
 
 
@@ -335,6 +373,10 @@ class ContactSegmentMembership(Base):
             name="uq_contact_segment_membership_version",
         ),
     )
+
+    organization = relationship("Organization")
+    contact = relationship("Contact", back_populates="segment_memberships")
+    segment = relationship("ContactSegment", back_populates="memberships")
 
 
 class ContactImportJob(Base):
