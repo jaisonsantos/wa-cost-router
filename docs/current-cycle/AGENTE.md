@@ -12,6 +12,11 @@
 - **Pendências para go-live externo**: mapeamento multi-tenant do webhook WhatsApp, sanitização de payloads/PII e proteção de `/admin/metrics`. Também é necessário substituir o seed baseado em `create_all` por migrations completas.
 - **Matriz de rastreabilidade**: consulte [`USE_CASE_TRACEABILITY`](./USE_CASE_TRACEABILITY.md) para acompanhar status dos casos de uso UC-01 a UC-04 e seus vínculos com backlog e roadmap.
 
+### Estado em 2025-10-08
+- O MVP continua bloqueado para o piloto externo porque o webhook WhatsApp ainda não está multi-tenant, mantendo o item crítico [`20251006-webhook-multi-tenant`](../backlog/20251006-webhook-multi-tenant.md) aberto.
+- As salvaguardas de conformidade seguem pendentes: sanitização de payloads e logs ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)) e proteção do endpoint de métricas administrativas ([`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md)).
+- A resiliência multicanal não está validada; o fallback automático depende do circuito de provedores [`20251006-circuit-breaker`](../backlog/20251006-circuit-breaker.md) e o frontend ainda não expõe indicadores multicanal alinhados ao backlog [`20250210-analytics-dashboard-sync`](../backlog/20250210-analytics-dashboard-sync.md).
+
 ## 2. Mapa do Repositório
 
 | Caminho | Papel | Observações |
@@ -39,6 +44,17 @@
 
  |
 | Docs raiz | `README`, `docs/` | README reescrito com demo; `docs/` centraliza arquitetura, operações e segurança. |
+
+### Backend — pendências críticas
+- [ ] Webhook WhatsApp multi-tenant para roteamento inbound/outbound seguro ([`20251006-webhook-multi-tenant`](../backlog/20251006-webhook-multi-tenant.md)).
+- [ ] Sanitização de PII em payloads e respostas ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)).
+- [ ] Circuit breaker e fallback multicanal monitorado ([`20251006-circuit-breaker`](../backlog/20251006-circuit-breaker.md)).
+- [ ] Proteção do endpoint `/admin/metrics` e hardening operacional ([`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md)).
+
+### Frontend — pendências críticas
+- [ ] Ajustar contratos API ↔ SPA antes do piloto externo ([`20251006-contratos-api-fe`](../backlog/20251006-contratos-api-fe.md)).
+- [ ] Expor indicadores e fallback multicanal alinhados às novas fontes de dados ([`20250210-analytics-dashboard-sync`](../backlog/20250210-analytics-dashboard-sync.md)).
+- [ ] Preparar telas de branding/white-label e RBAC por tenant (depende de [`20250210-worker-offload`](../backlog/20250210-worker-offload.md) e épico E4 para governança).
 
 ## 3. Inventário de Endpoints
 
@@ -278,7 +294,11 @@
    - Proteger `/admin/metrics` com auth e coletar via Prometheus.
    - Logs estruturados enviados para ELK/CloudWatch.
    - Alarmes: latência >3s, taxa de sucesso <95%, falhas de migration.
-6. **Checklist**: migrations rodadas, secrets rotacionados, TLS ativo, backup testado, monitoramento configurado.
+6. **Checklist (pendências)**:
+   - [ ] Migrations reconciliadas em todos os ambientes conforme [`20251006-migration-base`](../backlog/20251006-migration-base.md).
+   - [ ] Secrets rotacionados e validados segundo [`20251006-enforce-secret-strength`](../backlog/20251006-enforce-secret-strength.md).
+   - [ ] TLS e proteção do endpoint de métricas configurados (ver [`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md)).
+   - [ ] Sanitização de payloads/PII aplicada antes do rollout externo ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)).
 
 ## 13. Riscos & Mitigações
 
@@ -588,10 +608,10 @@ docker-compose run --rm api alembic upgrade head
 
 ## 8. Checklist Pré-Deploy
 
-- Secrets preenchidos.
-- Migrations aplicadas.
-- Tests de fumaça (login, providers, simulate, send).
-- Monitoramento ativo.
+- [ ] Secrets reforçados e validados antes do deploy ([`20251006-enforce-secret-strength`](../backlog/20251006-enforce-secret-strength.md)).
+- [ ] Migrations aplicadas e auditadas nos ambientes existentes ([`20251006-migration-base`](../backlog/20251006-migration-base.md)).
+- [ ] Tests de fumaça cobrindo fallback multicanal (bloqueados por [`20251006-circuit-breaker`](../backlog/20251006-circuit-breaker.md) e [`20250210-analytics-dashboard-sync`](../backlog/20250210-analytics-dashboard-sync.md)).
+- [ ] Monitoramento protegido e métricas autenticadas ([`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md)).
 ```
 
 ### docs/DEPLOYMENT.md
