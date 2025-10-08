@@ -86,6 +86,8 @@ class ContactRepository:
         channel: Optional[str] = None,
         channel_status: Optional[Union[OptInStatusEnum, Sequence[OptInStatusEnum]]] = None,
         channel_address: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> List[Contact]:
         """Retorna contatos com filtros opcionais por segmento e canal."""
 
@@ -131,5 +133,13 @@ class ContactRepository:
                     ContactChannelOptIn.channel_address == channel_address
                 )
 
-        return query.distinct().all()
+        query = query.distinct().order_by(Contact.created_at.desc())
+
+        if offset:
+            query = query.offset(offset)
+
+        if limit:
+            query = query.limit(limit)
+
+        return query.all()
 

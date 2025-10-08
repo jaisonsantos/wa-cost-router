@@ -1,6 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, orgs, integrations, rates, events, reports, rules, admin, messages, providers
+from app.api import (
+    admin,
+    auth,
+    events,
+    integrations,
+    messages,
+    orgs,
+    providers,
+    rates,
+    reports,
+    rules,
+)
+from app.api.routes import contacts
 
 app = FastAPI(title="WA Cost Router API", version="1.0.0")
 
@@ -24,6 +36,7 @@ app.include_router(rules.router, prefix="/rules", tags=["rules"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
 app.include_router(providers.router, prefix="/providers", tags=["providers"])
+app.include_router(contacts.router, prefix="/contacts", tags=["contacts"])
 
 @app.get("/")
 def read_root():
