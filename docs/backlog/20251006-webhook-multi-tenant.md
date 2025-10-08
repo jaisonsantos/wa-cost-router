@@ -7,6 +7,9 @@ owner: "unassigned"
 depends_on: []
 ---
 
+> - **Status:** Em andamento
+> - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
+
 ## Contexto
 
 O endpoint [`POST /integrations/wa/webhook`](../api/API_REFERENCE.md) grava eventos com `org_id` hardcoded (`00000000-0000-0000-0000-000000000000`), permitindo que mensagens de um tenant contaminem dados de outro. A verificação de assinatura Meta também não é validada, abrindo espaço para abuso.

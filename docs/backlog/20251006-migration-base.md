@@ -7,6 +7,9 @@ owner: "unassigned"
 depends_on: []
 ---
 
+> - **Status:** Pendente
+> - **Caso de uso:** [UC-01 — Gestão de contatos unificada](../current-cycle/USE_CASE_TRACEABILITY.md#uc-01--gest%C3%A3o-de-contatos-unificada)
+
 ## Contexto
 
 Criamos a migration [`000_base_schema`](../operations/MIGRATIONS.md) para substituir o seed `metadata.create_all`. Ambientes que já estavam em operação podem possuir schema divergente e precisam ser reconciliados antes da próxima release.

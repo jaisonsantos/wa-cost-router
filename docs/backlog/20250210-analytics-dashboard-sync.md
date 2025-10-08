@@ -1,5 +1,8 @@
 # 20250210 - Sincronizar dashboard de analytics (P2)
 
+> - **Status:** Pendente
+> - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
+
 ## Contexto
 O dashboard atual consome eventos limitados e não reflete os dados que serão gerados após a persistência de `MessageEvent` e `CostRecord`. Precisamos alinhar o frontend aos novos contratos para garantir métricas confiáveis.
 

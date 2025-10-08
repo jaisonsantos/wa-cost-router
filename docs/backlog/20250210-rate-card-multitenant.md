@@ -1,5 +1,8 @@
 # 20250210 - Rate cards por organização (P3)
 
+> - **Status:** Pendente
+> - **Caso de uso:** [UC-04 — Oferta white-label e governança comercial](../current-cycle/USE_CASE_TRACEABILITY.md#uc-04--oferta-white-label-e-governan%C3%A7a-comercial)
+
 ## Contexto
 Atualmente os rate cards são globais, impossibilitando acordos comerciais específicos por cliente. Com a evolução do produto, precisamos permitir tarifas por organização mantendo fallback global.
 

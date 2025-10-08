@@ -7,6 +7,9 @@ owner: "unassigned"
 depends_on: []
 ---
 
+> - **Status:** Pendente
+> - **Caso de uso:** [UC-04 — Oferta white-label e governança comercial](../current-cycle/USE_CASE_TRACEABILITY.md#uc-04--oferta-white-label-e-governan%C3%A7a-comercial)
+
 ## Contexto
 
 A migration [`002_encrypt_provider_credentials`](../../backend/alembic/versions/002_encrypt_provider_credentials.py) usa `APP_SECRET_KEY` para criptografar credenciais. Atualmente aceitamos defaults fracos (`please-change-me`). Precisamos garantir que ambientes de produção não iniciem com secrets inseguros.

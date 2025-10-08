@@ -7,6 +7,9 @@ owner: "unassigned"
 depends_on: []
 ---
 
+> - **Status:** Pendente
+> - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
+
 ## Contexto
 
 Alguns endpoints (`/messages/jobs`, `/rules/simulate-advanced`) retornam campos que divergem do esperado pela SPA (ver nota em [AGENTE](../current-cycle/AGENTE.md)). Precisamos consolidar contratos e documentar breaking changes.
