@@ -68,6 +68,7 @@ O README do Postman promete cobertura total, mas o CSV de exemplo não preenche 
 
 **Progresso recente (2024-10-07):**
 - ✅ T2 entregue — sandbox dos conectores, seeds determinísticas e Newman executando em < 60 s no modo fake.
+- ✅ Correção aplicada para `POST /messages/send` lidar com UUIDs de provedores, garantindo resposta 2xx na coleção Newman.
 - 🔜 Foco imediato em T3 para persistir `MessageEvent`/`CostRecord` reais após envio, destravando relatórios consistentes.
 
 ## Plano de testes e health-checks

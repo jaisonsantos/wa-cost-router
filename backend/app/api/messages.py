@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
+from uuid import UUID
 from app.core.database import get_db
 from app.api.dependencies import get_current_user
 from app.models.models import (
@@ -116,16 +117,36 @@ async def _attempt_delivery_with_fallback(
     org_id: str
 ) -> Dict[str, Any]:
     """Tenta entrega com retry e fallback"""
-    
-    providers_to_try = [routing_decision["provider_id"]] + routing_decision.get("fallback_chain", [])
+
+    org_uuid = _coerce_uuid(org_id)
+    if org_uuid is None:
+        logger.error("Invalid organization identifier %r for job %s", org_id, job.id)
+        job.status = JobStatusEnum.failed_final
+        db.commit()
+        return {
+            "status": job.status.value,
+            "message": "Invalid organization context",
+        }
+
+    raw_providers = [routing_decision.get("provider_id")]
+    raw_providers.extend(routing_decision.get("fallback_chain", []))
+
+    providers_to_try = []
+    for raw_identifier in raw_providers:
+        provider_uuid = _coerce_uuid(raw_identifier)
+        if provider_uuid is None:
+            logger.warning("Skipping invalid provider identifier %r", raw_identifier)
+            continue
+        providers_to_try.append(provider_uuid)
+
     attempt_number = 0
-    
+
     for provider_id in providers_to_try:
         attempt_number += 1
         
         # Obter credenciais
         credential = db.query(ProviderCredential).filter(
-            ProviderCredential.org_id == org_id,
+            ProviderCredential.org_id == org_uuid,
             ProviderCredential.provider_id == provider_id,
             ProviderCredential.is_active.is_(True)
         ).first()
@@ -136,7 +157,7 @@ async def _attempt_delivery_with_fallback(
 
         provider = db.query(Provider).filter(
             Provider.id == provider_id,
-            Provider.org_id == org_id,
+            Provider.org_id == org_uuid,
         ).first()
         if not provider:
             continue
@@ -237,12 +258,24 @@ def _infer_country_from_number(number: str) -> str:
         "+49": "DE",
         "+33": "FR"
     }
-    
+
     for code, country in country_codes.items():
         if number.startswith(code):
             return country
-    
+
     return "XX"  # Unknown
+
+
+def _coerce_uuid(value: Any) -> Optional[UUID]:
+    """Safely convert arbitrary identifiers into UUID objects."""
+
+    if isinstance(value, UUID):
+        return value
+
+    try:
+        return UUID(str(value))
+    except (TypeError, ValueError):
+        return None
 
 @router.get("/jobs")
 def list_message_jobs(
