@@ -13,7 +13,8 @@
 | Diretório | Propósito atual | Conteúdos chave |
 |-----------|-----------------|-----------------|
 | [`docs/current-cycle/`](current-cycle/README.md) | Porta de entrada para o ciclo ativo, com visão geral, plano de próximas implementações e sumário executivo técnico. | [`Ciclo Atual`](current-cycle/README.md), [`NEXT_IMPLEMENTATION_PLAN`](current-cycle/NEXT_IMPLEMENTATION_PLAN.md), [`AGENTE`](current-cycle/AGENTE.md) |
-| [`docs/archive/`](archive/) | Histórico consolidado das fases anteriores do produto, incluindo status do MVP, checklist de segurança e log de iterações. | [`ITERATION_LOG`](archive/ITERATION_LOG.md), [`MVP_IMPLEMENTATION_STATUS`](archive/MVP_IMPLEMENTATION_STATUS.md), [`MVP_FINAL_STATUS`](archive/MVP_FINAL_STATUS.md), [`MVP_SECURITY_CHECKLIST`](archive/MVP_SECURITY_CHECKLIST.md), [`IMPLEMENTATION_STATUS`](archive/IMPLEMENTATION_STATUS.md), [`MVP_PLANNING`](archive/MVP_PLANNING.md), [`BACKEND_README`](archive/BACKEND_README.md), [`CHANGELOG`](archive/CHANGELOG.md) |
+| [`docs/archive/`](archive/) | Histórico consolidado das fases anteriores do produto, com logs de iteração e registros técnicos legados ainda reutilizáveis. | [`ITERATION_LOG`](archive/ITERATION_LOG.md), [`BACKEND_README`](archive/BACKEND_README.md), [`CHANGELOG`](archive/CHANGELOG.md) |
+| [`docs/history/`](history/) | Linha do tempo dos ciclos encerrados com snapshots completos de status, planejamento e checklists. | [`2024-cycle-mvp/README`](history/2024-cycle-mvp/README.md), [`MVP_IMPLEMENTATION_STATUS`](history/2024-cycle-mvp/MVP_IMPLEMENTATION_STATUS.md), [`MVP_FINAL_STATUS`](history/2024-cycle-mvp/MVP_FINAL_STATUS.md), [`MVP_SECURITY_CHECKLIST`](history/2024-cycle-mvp/MVP_SECURITY_CHECKLIST.md), [`IMPLEMENTATION_STATUS`](history/2024-cycle-mvp/IMPLEMENTATION_STATUS.md), [`MVP_PLANNING`](history/2024-cycle-mvp/MVP_PLANNING.md) |
 | [`docs/backlog/`](backlog/README.md) | Pipeline priorizado de iniciativas futuras, organizado por arquivos `YYYYMMDD-slug.md` com contexto, critérios e dependências. | [`README`](backlog/README.md) e cards como [`20251006-contratos-api-fe`](backlog/20251006-contratos-api-fe.md), [`20251006-sanitizacao-pii`](backlog/20251006-sanitizacao-pii.md), [`20251006-webhook-multi-tenant`](backlog/20251006-webhook-multi-tenant.md), [`20250210-rate-card-multitenant`](backlog/20250210-rate-card-multitenant.md) |
 
 ## 3. Referência rápida de seções existentes
@@ -22,9 +23,9 @@
 - [Plano da Próxima Iteração](current-cycle/NEXT_IMPLEMENTATION_PLAN.md)
 - [Relatório do Agente Técnico](current-cycle/AGENTE.md)
 - [Log de Iterações](archive/ITERATION_LOG.md)
-- [Status do MVP](archive/MVP_IMPLEMENTATION_STATUS.md)
-- [Checklist de Segurança do MVP](archive/MVP_SECURITY_CHECKLIST.md)
-- [Planejamento do MVP](archive/MVP_PLANNING.md)
+- [Status do MVP](history/2024-cycle-mvp/MVP_IMPLEMENTATION_STATUS.md)
+- [Checklist de Segurança do MVP](history/2024-cycle-mvp/MVP_SECURITY_CHECKLIST.md)
+- [Planejamento do MVP](history/2024-cycle-mvp/MVP_PLANNING.md)
 - [Changelog histórico](archive/CHANGELOG.md)
 - [Backlog Prioritário](backlog/README.md)
 - [Cards do Backlog](backlog/)
@@ -43,14 +44,14 @@
   - Atualizar sempre que o foco do time mudar.
   - Referenciar diretamente tarefas do backlog ativas para facilitar o rastreamento.
 
-### 4.2 Histórico por iteração
+### 4.2 Histórico por ciclo e iteração
 
 - **Objetivo**: Preservar contexto passado, decisões e aprendizados concluídos.
-- **Localização recomendada**: `docs/archive/`.
+- **Localização recomendada**: `docs/history/` para snapshots completos por ciclo e `docs/archive/` para registros contínuos e notas que seguem referenciadas pelo time.
 - **Conteúdos típicos**:
   - Logs de iteração com resumo do que foi entregue e próximos passos concluídos (ex.: [`archive/ITERATION_LOG.md`](archive/ITERATION_LOG.md)).
-  - Estados consolidados do MVP e checklists de auditoria (ex.: [`archive/MVP_IMPLEMENTATION_STATUS.md`](archive/MVP_IMPLEMENTATION_STATUS.md), [`archive/MVP_SECURITY_CHECKLIST.md`](archive/MVP_SECURITY_CHECKLIST.md)).
-  - Documentos históricos de planejamento e mudanças (ex.: [`archive/MVP_PLANNING.md`](archive/MVP_PLANNING.md), [`archive/CHANGELOG.md`](archive/CHANGELOG.md)).
+  - Estados consolidados do MVP e checklists de auditoria (ex.: [`history/2024-cycle-mvp/MVP_IMPLEMENTATION_STATUS.md`](history/2024-cycle-mvp/MVP_IMPLEMENTATION_STATUS.md), [`history/2024-cycle-mvp/MVP_SECURITY_CHECKLIST.md`](history/2024-cycle-mvp/MVP_SECURITY_CHECKLIST.md)).
+  - Documentos históricos de planejamento e mudanças (ex.: [`history/2024-cycle-mvp/MVP_PLANNING.md`](history/2024-cycle-mvp/MVP_PLANNING.md), [`archive/CHANGELOG.md`](archive/CHANGELOG.md)).
 - **Boas práticas**:
   - Mover para o arquivo histórico correspondente assim que um ciclo for fechado.
   - Manter índice cronológico para facilitar consultas retroativas.
