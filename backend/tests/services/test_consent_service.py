@@ -25,7 +25,7 @@ def compile_uuid_sqlite(type_, compiler, **kw):
 
 
 from app.core.database import Base  # noqa: E402
-from app.models.models import Contact, OptInStatusEnum, Organization  # noqa: E402
+from app.models.models import Contact, ContactConsentAudit, OptInStatusEnum, Organization  # noqa: E402
 from app.services.contacts.consent_service import (  # noqa: E402
     ConsentService,
     ConsentValidationError,
@@ -75,6 +75,7 @@ def test_register_opt_in_updates_version_and_records_evidence(session):
         captured_at=initial_time,
         idempotency_key="initial-opt-in",
         evidence_uri="https://storage.local/optins/1",
+        request_ip="203.0.113.10",
     )
 
     assert opt_in.status == OptInStatusEnum.granted
@@ -82,6 +83,18 @@ def test_register_opt_in_updates_version_and_records_evidence(session):
     assert opt_in.source_metadata["agent"] == "qa-analyst"
     assert opt_in.source_metadata["channel"] == "whatsapp"
     assert opt_in.source_metadata["idempotency_key"] == "initial-opt-in"
+
+    audits = (
+        session.query(ContactConsentAudit)
+        .filter(ContactConsentAudit.contact_id == contact.id)
+        .order_by(ContactConsentAudit.created_at.asc())
+        .all()
+    )
+    assert len(audits) == 1
+    assert audits[0].agent == "qa-analyst"
+    assert audits[0].request_ip == "203.0.113.10"
+    assert audits[0].evidence_uri == "https://storage.local/optins/1"
+    assert audits[0].status == OptInStatusEnum.granted
 
     same = service.register_opt_in(
         org_id=org.id,
@@ -109,6 +122,7 @@ def test_register_opt_in_updates_version_and_records_evidence(session):
         legal_basis="consent",
         captured_at=updated_time,
         idempotency_key="updated-opt-in",
+        request_ip="198.51.100.4",
     )
 
     assert updated.version == 2
@@ -116,6 +130,18 @@ def test_register_opt_in_updates_version_and_records_evidence(session):
     assert updated.source_metadata["agent"] == "ops-engineer"
     assert updated.source_metadata["idempotency_key"] == "updated-opt-in"
     assert updated.source_metadata["channel"] == "whatsapp"
+
+    audits = (
+        session.query(ContactConsentAudit)
+        .filter(ContactConsentAudit.contact_id == contact.id)
+        .order_by(ContactConsentAudit.created_at.asc())
+        .all()
+    )
+    assert len(audits) == 2
+    assert audits[1].agent == "ops-engineer"
+    assert audits[1].request_ip == "198.51.100.4"
+    assert audits[1].status == OptInStatusEnum.granted
+    assert audits[1].opt_in.version == 2
 
 
 def test_revoke_opt_in_creates_new_version(session):
@@ -131,6 +157,7 @@ def test_revoke_opt_in_creates_new_version(session):
         agent="qa-analyst",
         legal_basis="consent",
         captured_at=datetime.now(timezone.utc) - timedelta(minutes=3),
+        request_ip="192.0.2.10",
     )
 
     revoked = service.revoke_opt_in(
@@ -142,6 +169,7 @@ def test_revoke_opt_in_creates_new_version(session):
         agent="compliance-user",
         captured_at=datetime.now(timezone.utc) - timedelta(minutes=1),
         idempotency_key="revoke-1",
+        request_ip="192.0.2.44",
     )
 
     assert revoked.version == initial.version + 1
@@ -149,6 +177,19 @@ def test_revoke_opt_in_creates_new_version(session):
     assert revoked.source_metadata["action"] == "revoked"
     assert revoked.source_metadata["agent"] == "compliance-user"
     assert revoked.source_metadata["idempotency_key"] == "revoke-1"
+
+    audits = (
+        session.query(ContactConsentAudit)
+        .filter(ContactConsentAudit.contact_id == contact.id)
+        .order_by(ContactConsentAudit.created_at.asc())
+        .all()
+    )
+    assert [entry.status for entry in audits] == [
+        OptInStatusEnum.granted,
+        OptInStatusEnum.revoked,
+    ]
+    assert audits[1].agent == "compliance-user"
+    assert audits[1].request_ip == "192.0.2.44"
 
     same_revocation = service.revoke_opt_in(
         org_id=org.id,
@@ -173,6 +214,7 @@ def test_revoke_opt_in_creates_new_version(session):
             agent="compliance-user",
             captured_at=datetime.now(timezone.utc) - timedelta(seconds=30),
             idempotency_key="revoke-2",
+            request_ip="198.51.100.55",
         )
 
 

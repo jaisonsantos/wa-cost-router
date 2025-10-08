@@ -117,6 +117,35 @@ class ContactImportJobResponse(BaseModel):
     updated_at: datetime
 
 
+class ContactConsentAuditItem(BaseModel):
+    """Representation of a single consent audit event."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    opt_in_id: UUID | None = None
+    opt_in_version: int | None = None
+    channel: str
+    channel_address: str
+    status: OptInStatusEnum
+    source: str
+    agent: str
+    request_ip: str | None = None
+    recorded_at: datetime
+    evidence_uri: str | None = None
+    proof_hash: str | None = None
+    context: dict[str, Any] | None = None
+
+
+class ContactConsentHistoryResponse(BaseModel):
+    """Envelope for consent audit history listings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[ContactConsentAuditItem]
+    count: int
+
+
 @router.get("/", response_model=ContactListResponse)
 def list_contacts(
     pagination: PaginationParams = Depends(get_pagination_params),
@@ -162,6 +191,46 @@ def list_contacts(
         offset=pagination.offset,
         count=len(items),
     )
+
+
+@router.get("/{contact_id}/consents/history", response_model=ContactConsentHistoryResponse)
+def get_contact_consent_history(
+    contact_id: UUID,
+    current_user: dict = Depends(require_contacts_read),
+    db: Session = Depends(get_db),
+):
+    """Return the consent audit history for a specific contact."""
+
+    repository = ContactRepository(db)
+    contact = repository.get_contact(org_id=current_user["org_id"], contact_id=contact_id)
+    if contact is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+
+    history = repository.list_consent_history(
+        org_id=current_user["org_id"],
+        contact_id=contact_id,
+    )
+
+    items = [
+        ContactConsentAuditItem(
+            id=entry.id,
+            opt_in_id=entry.opt_in_id,
+            opt_in_version=entry.opt_in.version if entry.opt_in else None,
+            channel=entry.channel,
+            channel_address=entry.channel_address,
+            status=entry.status,
+            source=entry.source,
+            agent=entry.agent,
+            request_ip=entry.request_ip,
+            recorded_at=entry.recorded_at,
+            evidence_uri=entry.evidence_uri,
+            proof_hash=entry.proof_hash,
+            context=entry.context,
+        )
+        for entry in history
+    ]
+
+    return ContactConsentHistoryResponse(items=items, count=len(items))
 
 
 @router.post(
