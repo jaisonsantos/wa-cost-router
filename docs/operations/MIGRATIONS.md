@@ -1,4 +1,4 @@
-[Docs](../overview/README.md) › [Operações](./OPERATIONS.md) › Migrations
+[Docs](../current-cycle/README.md) › [Operações](./OPERATIONS.md) › Migrations
 # Guia de Migrations
 
 A stack agora depende exclusivamente de migrations Alembic (sem `metadata.create_all`). A sequência recomendada garante que o schema esteja pronto **antes** da API e do worker inicializarem.

@@ -1,5 +1,5 @@
-[Docs](./README.md) › Overview
-# WA Cost Router — Visão Geral
+[Docs](./README.md) › Ciclo Atual
+# WA Cost Router — Ciclo Atual
 
 A plataforma WA Cost Router orquestra provedores WhatsApp para reduzir custos de envio de mensagens com regras dinâmicas, métricas em tempo real e integrações prontas para múltiplos tenants. Este índice centraliza toda a documentação funcional e técnica.
 
