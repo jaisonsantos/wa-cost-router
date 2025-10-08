@@ -19,6 +19,6 @@ Ao colocar os envios em uma fila dedicada, reduzimos latência percebida pelo cl
 ## DoD
 - `make dev` e `make ci` verdes com worker habilitado.
 - Coleção Postman com novo passo de verificação assíncrona (aguardando job completar).
-- Documentação atualizada em [`docs/operations/OPERATIONS.md`](../operations/OPERATIONS.md) e [`docs/overview/README.md`](../overview/README.md).
+- Documentação atualizada em [`docs/operations/OPERATIONS.md`](../operations/OPERATIONS.md) e [`docs/current-cycle/README.md`](../current-cycle/README.md).
 - Guia de deploy com instruções para escalar workers em [`docs/operations/DEPLOYMENT.md`](../operations/DEPLOYMENT.md).
 - Evidências (logs/prints) anexadas ao PR mostrando job processado e métricas expostas.

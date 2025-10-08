@@ -1,4 +1,4 @@
-[Docs](../overview/README.md) › [Pricing](./PRICING_BILLING.md)
+[Docs](../current-cycle/README.md) › [Pricing](./PRICING_BILLING.md)
 # Pricing & Billing (Stripe)
 
 ## Objetivo

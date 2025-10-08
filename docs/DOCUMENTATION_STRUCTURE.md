@@ -6,21 +6,21 @@
 ## 1. Revisão do material existente
 
 - O arquivo solicitado `docs/analysis/USE_CASE_GAP.md` não está presente no repositório atual. Recomenda-se restaurá-lo ou recriá-lo sob a nova taxonomia (ver seção [Referências transversais](#43-referências-transversais)) para consolidar análises de lacunas de uso.
-- Foram inventariados os diretórios ativos `docs/overview`, `docs/archive` e `docs/backlog`, listados na seção seguinte com links navegáveis.
+- Foram inventariados os diretórios ativos `docs/current-cycle`, `docs/archive` e `docs/backlog`, listados na seção seguinte com links navegáveis.
 
 ## 2. Inventário dos diretórios principais
 
 | Diretório | Propósito atual | Conteúdos chave |
 |-----------|-----------------|-----------------|
-| [`docs/overview/`](overview/README.md) | Porta de entrada para o ciclo ativo, com visão geral, plano de próximas implementações e sumário executivo técnico. | [`Visão Geral`](overview/README.md), [`NEXT_IMPLEMENTATION_PLAN`](overview/NEXT_IMPLEMENTATION_PLAN.md), [`AGENTE`](overview/AGENTE.md) |
+| [`docs/current-cycle/`](current-cycle/README.md) | Porta de entrada para o ciclo ativo, com visão geral, plano de próximas implementações e sumário executivo técnico. | [`Ciclo Atual`](current-cycle/README.md), [`NEXT_IMPLEMENTATION_PLAN`](current-cycle/NEXT_IMPLEMENTATION_PLAN.md), [`AGENTE`](current-cycle/AGENTE.md) |
 | [`docs/archive/`](archive/) | Histórico consolidado das fases anteriores do produto, incluindo status do MVP, checklist de segurança e log de iterações. | [`ITERATION_LOG`](archive/ITERATION_LOG.md), [`MVP_IMPLEMENTATION_STATUS`](archive/MVP_IMPLEMENTATION_STATUS.md), [`MVP_FINAL_STATUS`](archive/MVP_FINAL_STATUS.md), [`MVP_SECURITY_CHECKLIST`](archive/MVP_SECURITY_CHECKLIST.md), [`IMPLEMENTATION_STATUS`](archive/IMPLEMENTATION_STATUS.md), [`MVP_PLANNING`](archive/MVP_PLANNING.md), [`BACKEND_README`](archive/BACKEND_README.md), [`CHANGELOG`](archive/CHANGELOG.md) |
 | [`docs/backlog/`](backlog/README.md) | Pipeline priorizado de iniciativas futuras, organizado por arquivos `YYYYMMDD-slug.md` com contexto, critérios e dependências. | [`README`](backlog/README.md) e cards como [`20251006-contratos-api-fe`](backlog/20251006-contratos-api-fe.md), [`20251006-sanitizacao-pii`](backlog/20251006-sanitizacao-pii.md), [`20251006-webhook-multi-tenant`](backlog/20251006-webhook-multi-tenant.md), [`20250210-rate-card-multitenant`](backlog/20250210-rate-card-multitenant.md) |
 
 ## 3. Referência rápida de seções existentes
 
-- [Visão Geral](overview/README.md)
-- [Plano da Próxima Iteração](overview/NEXT_IMPLEMENTATION_PLAN.md)
-- [Relatório do Agente Técnico](overview/AGENTE.md)
+- [Ciclo Atual](current-cycle/README.md)
+- [Plano da Próxima Iteração](current-cycle/NEXT_IMPLEMENTATION_PLAN.md)
+- [Relatório do Agente Técnico](current-cycle/AGENTE.md)
 - [Log de Iterações](archive/ITERATION_LOG.md)
 - [Status do MVP](archive/MVP_IMPLEMENTATION_STATUS.md)
 - [Checklist de Segurança do MVP](archive/MVP_SECURITY_CHECKLIST.md)
@@ -34,11 +34,11 @@
 ### 4.1 Ciclo atual
 
 - **Objetivo**: Centralizar o que está em execução ou pronto para entrega imediata.
-- **Localização recomendada**: `docs/overview/`.
+- **Localização recomendada**: `docs/current-cycle/`.
 - **Conteúdos típicos**:
-  - Visão geral do produto, instruções de quick start e estrutura (ex.: [`overview/README.md`](overview/README.md)).
-  - Plano da sprint/iteração corrente (ex.: [`overview/NEXT_IMPLEMENTATION_PLAN.md`](overview/NEXT_IMPLEMENTATION_PLAN.md)).
-  - Relatórios executivos/técnicos vigentes (ex.: [`overview/AGENTE.md`](overview/AGENTE.md)).
+  - Visão geral do produto, instruções de quick start e estrutura (ex.: [`current-cycle/README.md`](current-cycle/README.md)).
+  - Plano da sprint/iteração corrente (ex.: [`current-cycle/NEXT_IMPLEMENTATION_PLAN.md`](current-cycle/NEXT_IMPLEMENTATION_PLAN.md)).
+  - Relatórios executivos/técnicos vigentes (ex.: [`current-cycle/AGENTE.md`](current-cycle/AGENTE.md)).
 - **Boas práticas**:
   - Atualizar sempre que o foco do time mudar.
   - Referenciar diretamente tarefas do backlog ativas para facilitar o rastreamento.
@@ -65,13 +65,13 @@
   - Procedimentos operacionais e de segurança (ex.: [`operations/OPERATIONS.md`](operations/OPERATIONS.md), [`security/SECURITY.md`](security/SECURITY.md)).
   - Estudos analíticos e avaliações de lacunas (ex.: reintroduzir `analysis/USE_CASE_GAP.md` com lições e oportunidades; novos relatórios seguem o mesmo diretório).
 - **Boas práticas**:
-  - Usar links cruzados para apontar de cada análise para backlog e overview quando surgirem ações.
+- Usar links cruzados para apontar de cada análise para backlog e ciclo atual quando surgirem ações.
   - Garantir versionamento explícito quando uma referência servir de base para políticas/processos.
 
 ## 5. Próximos passos sugeridos
 
 1. Criar `docs/analysis/USE_CASE_GAP.md` (ou restaurá-lo) dentro do novo diretório `analysis/`, seguindo o padrão de metadados utilizado neste documento.
-2. Atualizar `overview/NEXT_IMPLEMENTATION_PLAN.md` com referências diretas aos cards do backlog conforme a taxonomia.
+2. Atualizar `current-cycle/NEXT_IMPLEMENTATION_PLAN.md` com referências diretas aos cards do backlog conforme a taxonomia.
 3. Incluir esta estrutura no checklist de contribuição (ex.: `docs/CONTRIBUTING.md`) para reforçar onde cada artefato deve residir.
 
 ---

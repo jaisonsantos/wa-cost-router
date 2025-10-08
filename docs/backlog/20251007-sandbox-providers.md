@@ -37,12 +37,12 @@ Precisamos de um modo sandbox para curto-circuitar integrações externas, retor
 - [x] Atualizar `get_connector`/rotas (`backend/app/api/messages.py`, `backend/app/api/providers.py`) para usar o conector sandbox quando o toggle estiver ativo, garantindo que `DeliveryAttempt` e `CostRecord` sejam gravados com dados coerentes (incluindo `latency_ms` configurável e `provider_response` fake).
 - [x] Refatorar `backend/scripts/seed.py` (e demais seeds relacionados) para remover uso de `random`, alinhar credenciais fake às expectativas do sandbox e garantir dados consistentes para relatórios/routing.
 - [x] Criar/atualizar testes pytest cobrindo o fluxo sandbox (`backend/tests`) validando que nenhuma chamada HTTP externa é realizada e que os registros persistidos correspondem aos valores simulados.
-- [x] Atualizar documentação (`docs/operations/OPERATIONS.md`, `docs/architecture/ARCHITECTURE.md`, `docs/overview/README.md` se aplicável) descrevendo o modo sandbox, novas variáveis de ambiente e impacto na execução da stack/local CI.
+- [x] Atualizar documentação (`docs/operations/OPERATIONS.md`, `docs/architecture/ARCHITECTURE.md`, `docs/current-cycle/README.md` se aplicável) descrevendo o modo sandbox, novas variáveis de ambiente e impacto na execução da stack/local CI.
 - [x] Revisar coleção Postman (`docs/postman/wa-cost-router.postman_collection.json`) e README para garantir que os cenários utilizam o sandbox/credenciais seed e executar `make ci` para validar.
 
 ## Referências
 
-- [Plano de Próxima Etapa](../overview/NEXT_IMPLEMENTATION_PLAN.md)
+- [Plano de Próxima Etapa](../current-cycle/NEXT_IMPLEMENTATION_PLAN.md)
 - [Arquitetura](../architecture/ARCHITECTURE.md)
 - [Operações](../operations/OPERATIONS.md)
 - [Seeds](../../backend/scripts/seed.py)

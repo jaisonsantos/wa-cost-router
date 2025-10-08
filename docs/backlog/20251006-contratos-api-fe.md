@@ -9,7 +9,7 @@ depends_on: []
 
 ## Contexto
 
-Alguns endpoints (`/messages/jobs`, `/rules/simulate-advanced`) retornam campos que divergem do esperado pela SPA (ver nota em [AGENTE](../overview/AGENTE.md)). Precisamos consolidar contratos e documentar breaking changes.
+Alguns endpoints (`/messages/jobs`, `/rules/simulate-advanced`) retornam campos que divergem do esperado pela SPA (ver nota em [AGENTE](../current-cycle/AGENTE.md)). Precisamos consolidar contratos e documentar breaking changes.
 
 ## Escopo
 
@@ -34,7 +34,7 @@ Alguns endpoints (`/messages/jobs`, `/rules/simulate-advanced`) retornam campos 
 ## Referências
 
 - [API Reference](../api/API_REFERENCE.md)
-- [Visão geral](../overview/README.md)
+- [Visão geral](../current-cycle/README.md)
 - Código frontend: [`src/hooks/useApi.ts`](../../src/hooks/useApi.ts)
 
 ## Out of Scope

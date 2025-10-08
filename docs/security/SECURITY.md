@@ -1,4 +1,4 @@
-[Docs](../overview/README.md) › [Segurança](./SECURITY.md)
+[Docs](../current-cycle/README.md) › [Segurança](./SECURITY.md)
 # Segurança & Hardening
 
 ## Estado Atual

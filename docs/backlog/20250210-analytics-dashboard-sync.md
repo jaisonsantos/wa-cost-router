@@ -19,6 +19,6 @@ Ao sincronizar o dashboard com os eventos reais, stakeholders terão visibilidad
 ## DoD
 - `make dev` e `make ci` verdes com testes de frontend atualizados.
 - Coleção Postman validando endpoints consumidos pelo dashboard.
-- Documentação atualizada em [`docs/overview/README.md`](../overview/README.md) e [`docs/architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md).
+- Documentação atualizada em [`docs/current-cycle/README.md`](../current-cycle/README.md) e [`docs/architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md).
 - Registro das mudanças no roadmap em [`docs/roadmap/ROADMAP.md`](../roadmap/ROADMAP.md).
 - Evidências visuais (capturas de tela) anexadas ao PR mostrando dashboard atualizado.

@@ -1,4 +1,4 @@
-[Docs](../overview/README.md) › [Postman](./README.md)
+[Docs](../current-cycle/README.md) › [Postman](./README.md)
 # Coleção Postman
 
 A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis encadeadas para um fluxo E2E completo.

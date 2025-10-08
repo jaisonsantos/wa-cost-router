@@ -1,4 +1,4 @@
-[Docs](../overview/README.md) › [Operações](./OPERATIONS.md)
+[Docs](../current-cycle/README.md) › [Operações](./OPERATIONS.md)
 # CI avançado
 
 Este apêndice complementa a seção [Pipeline CI](./OPERATIONS.md#pipeline-ci) com detalhes sobre configuração de segredos, execução

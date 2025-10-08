@@ -1,4 +1,4 @@
-[Docs](../overview/README.md) › [API](./API_REFERENCE.md)
+[Docs](../current-cycle/README.md) › [API](./API_REFERENCE.md)
 # Referência da API
 
 Todas as rotas exigem `Authorization: Bearer <token>` salvo quando indicado. Exemplos abaixo assumem o ambiente local (`http://localhost:8000`). A coleção Postman (`docs/postman/wa-cost-router.postman_collection.json`) contém requisições nomeadas iguais às tabelas abaixo.
