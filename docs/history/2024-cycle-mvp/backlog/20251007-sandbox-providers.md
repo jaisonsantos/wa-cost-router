@@ -7,6 +7,9 @@ owner: "backend"
 depends_on: []
 ---
 
+> - **Status:** Concluído
+> - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../../../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
+
 ## Contexto
 
 Os conectores atuais (`Dialog360Connector`, `GupshupConnector`) realizam chamadas HTTP reais mesmo em desenvolvimento e CI. Como as credenciais de demo são fictícias, os requests retornam timeout/erro 401, atrasando a coleção Newman e impedindo que a API gere eventos/custos consistentes. Além disso, o seed usa dados aleatórios, o que dificulta comparar resultados entre execuções e validar métricas.
@@ -42,11 +45,11 @@ Precisamos de um modo sandbox para curto-circuitar integrações externas, retor
 
 ## Referências
 
-- [Plano de Próxima Etapa](../current-cycle/NEXT_IMPLEMENTATION_PLAN.md)
-- [Arquitetura](../architecture/ARCHITECTURE.md)
-- [Operações](../operations/OPERATIONS.md)
-- [Seeds](../../backend/scripts/seed.py)
-- [API Messages](../api/API_REFERENCE.md)
+- [Plano de Próxima Etapa](../../../current-cycle/NEXT_IMPLEMENTATION_PLAN.md)
+- [Arquitetura](../../../architecture/ARCHITECTURE.md)
+- [Operações](../../../operations/OPERATIONS.md)
+- [Seeds](../../../../backend/scripts/seed.py)
+- [API Messages](../../../api/API_REFERENCE.md)
 
 ## Out of Scope
 

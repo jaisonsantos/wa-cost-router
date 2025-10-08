@@ -7,6 +7,9 @@ owner: "unassigned"
 depends_on: []
 ---
 
+> - **Status:** Pendente
+> - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
+
 ## Contexto
 
 Atualmente qualquer tenant pode saturar `POST /messages/send` ou endpoints críticos sem restrição, comprometendo estabilidade e custo. Redis já está disponível na stack e pode ser usado para contadores TTL.

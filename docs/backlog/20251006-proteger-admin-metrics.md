@@ -7,6 +7,9 @@ owner: "unassigned"
 depends_on: []
 ---
 
+> - **Status:** Pendente
+> - **Caso de uso:** [UC-04 — Oferta white-label e governança comercial](../current-cycle/USE_CASE_TRACEABILITY.md#uc-04--oferta-white-label-e-governan%C3%A7a-comercial)
+
 ## Contexto
 
 O endpoint [`GET /admin/metrics`](../api/API_REFERENCE.md) está exposto sem autenticação, permitindo que qualquer usuário acesse métricas internas Prometheus. Em ambientes públicos isso pode revelar volumes, erros e configurações sensíveis.

@@ -7,6 +7,9 @@ owner: "unassigned"
 depends_on: ["20251006-rate-limiting"]
 ---
 
+> - **Status:** Pendente
+> - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
+
 ## Contexto
 
 Falhas consecutivas de um provedor (ex.: 360dialog) podem degradar a fila inteira, pois o motor tenta enviar repetidamente. Precisamos de um circuito que abra após N erros e utilize fallback automaticamente.

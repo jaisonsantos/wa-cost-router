@@ -7,6 +7,9 @@ owner: "unassigned"
 depends_on: []
 ---
 
+> - **Status:** Pendente
+> - **Caso de uso:** [UC-01 — Gestão de contatos unificada](../current-cycle/USE_CASE_TRACEABILITY.md#uc-01--gest%C3%A3o-de-contatos-unificada)
+
 ## Contexto
 
 Campos como `MessageJob.variables` e `DeliveryAttempt.provider_response` armazenam payloads brutos dos provedores, incluindo números de telefone e mensagens. Logs e respostas da API podem expor essas informações violando requisitos LGPD.

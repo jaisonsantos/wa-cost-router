@@ -1,5 +1,8 @@
 # 20250210 - Offload de envios para worker RQ (P2)
 
+> - **Status:** Pendente
+> - **Caso de uso:** [UC-03 — CRM e jornada integrada](../current-cycle/USE_CASE_TRACEABILITY.md#uc-03--crm-e-jornada-integrada)
+
 ## Contexto
 Após a criação do sandbox, o envio de mensagens ainda ocorre inline na API. Para suportar maior volume e evitar bloqueio da thread principal, precisamos mover o processamento para um worker dedicado usando RQ (ou equivalente) mantendo compatibilidade com o fluxo atual.
 
