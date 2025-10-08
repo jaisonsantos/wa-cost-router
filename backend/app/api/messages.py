@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Iterable
 from uuid import UUID
 from app.core.database import get_db
 from app.api.dependencies import get_current_user
@@ -110,6 +110,10 @@ async def send_message(
         raise HTTPException(status_code=400, detail="No provider available for this route")
     
     # 5. Tentar envio com fallback
+    estimated_cost_minor = _normalize_estimated_cost(
+        routing_decision.get("estimated_cost")
+    )
+
     try:
         result = await _attempt_delivery_with_fallback(
             db=db,
@@ -117,6 +121,7 @@ async def send_message(
             routing_decision=routing_decision,
             data=data,
             org_id=current_user["org_id"],
+            estimated_cost_minor=estimated_cost_minor,
         )
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(
@@ -137,7 +142,7 @@ async def send_message(
         job_id=str(job.id),
         status=result["status"],
         provider_used=result.get("provider_name"),
-        estimated_cost=routing_decision["estimated_cost"],
+        estimated_cost=estimated_cost_minor,
         message=result.get("message", "Message sent successfully")
     )
 
@@ -146,7 +151,8 @@ async def _attempt_delivery_with_fallback(
     job: MessageJob,
     routing_decision: Dict[str, Any],
     data: SendMessageRequest,
-    org_id: str
+    org_id: str,
+    estimated_cost_minor: int,
 ) -> Dict[str, Any]:
     """Tenta entrega com retry e fallback"""
 
@@ -160,8 +166,26 @@ async def _attempt_delivery_with_fallback(
             "message": "Invalid organization context",
         }
 
-    raw_providers = [routing_decision.get("provider_id")]
-    raw_providers.extend(routing_decision.get("fallback_chain", []))
+    raw_providers = []
+
+    primary_identifier = routing_decision.get("provider_id")
+    if primary_identifier is not None:
+        raw_providers.append(primary_identifier)
+
+    fallback_chain = routing_decision.get("fallback_chain")
+    if fallback_chain in (None, ""):
+        fallback_candidates: Iterable[Any] = []
+    elif isinstance(fallback_chain, Iterable) and not isinstance(fallback_chain, (str, bytes)):
+        fallback_candidates = fallback_chain
+    else:
+        logger.warning(
+            "Invalid fallback chain %r for job %s; ignoring",
+            fallback_chain,
+            job.id,
+        )
+        fallback_candidates = []
+
+    raw_providers.extend(list(fallback_candidates))
 
     providers_to_try = []
     for raw_identifier in raw_providers:
@@ -234,7 +258,7 @@ async def _attempt_delivery_with_fallback(
                     cost_record = CostRecord(
                         message_job_id=job.id,
                         provider_id=provider.id,
-                        price_eur=routing_decision["estimated_cost"],
+                        price_eur=estimated_cost_minor,
                         country_iso=job.country_iso,
                         category=job.template_category,
                         price_table_version="v1"  # TODO: pegar versão real da tabela de preços
@@ -273,11 +297,27 @@ async def _attempt_delivery_with_fallback(
     # Todos os providers falharam
     job.status = JobStatusEnum.failed_final
     db.commit()
-    
+
     return {
         "status": job.status.value,
         "message": "All providers failed"
     }
+
+
+def _normalize_estimated_cost(value: Any) -> int:
+    """Coerce arbitrary estimated cost values into a non-negative integer."""
+
+    if value is None:
+        return 0
+
+    try:
+        cost = int(value)
+    except (TypeError, ValueError):
+        logger.warning("Invalid estimated cost %r; defaulting to 0", value)
+        return 0
+
+    return max(cost, 0)
+
 
 def _infer_country_from_number(number: str) -> str:
     """Inferir país do código do número (simplificado)"""

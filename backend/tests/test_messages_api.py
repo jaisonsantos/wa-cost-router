@@ -35,6 +35,7 @@ from app.models.models import (  # noqa: E402
     ProviderCredential,
     RateCard,
     RoutingRule,
+    CostRecord,
 )
 from app.services.routing_engine import RoutingEngine  # noqa: E402
 import app.api.messages as messages_module  # noqa: E402
@@ -219,4 +220,72 @@ def test_send_message_handles_delivery_exception(client, db_session, monkeypatch
     assert payload["status"] == "failed_final"
     assert payload["message"] == "Delivery orchestration error"
     assert payload["provider_used"] is None
+
+
+def test_send_message_handles_non_iterable_fallback_chain(client, db_session, monkeypatch):
+    test_client, org_id = client
+    provider = _bootstrap_routing_stack(db_session, org_id)
+
+    def select_with_invalid_fallback(*args, **kwargs):
+        return {
+            "provider_id": str(provider.id),
+            "fallback_chain": "not-a-list",
+            "estimated_cost": 85,
+            "rule_id": None,
+            "rule_name": "test",
+        }
+
+    monkeypatch.setattr(RoutingEngine, "select_provider", select_with_invalid_fallback)
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "bad-fallback",
+            "to_number": "+5511999999999",
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Lia"]},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] in {"delivered", "delivered_with_fallback"}
+    assert payload["provider_used"] == "360dialog"
+
+
+def test_send_message_defaults_invalid_estimated_cost(client, db_session, monkeypatch):
+    test_client, org_id = client
+    provider = _bootstrap_routing_stack(db_session, org_id)
+
+    def select_with_invalid_cost(*args, **kwargs):
+        return {
+            "provider_id": str(provider.id),
+            "fallback_chain": [],
+            "estimated_cost": "not-a-number",
+            "rule_id": None,
+            "rule_name": "test",
+        }
+
+    monkeypatch.setattr(RoutingEngine, "select_provider", select_with_invalid_cost)
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "bad-cost",
+            "to_number": "+5511999999999",
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Noah"]},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["estimated_cost"] == 0
+
+    job_uuid = uuid.UUID(payload["job_id"])
+    stored_costs = db_session.query(CostRecord).filter(CostRecord.message_job_id == job_uuid).all()
+    assert len(stored_costs) == 1
+    assert stored_costs[0].price_eur == 0
 
