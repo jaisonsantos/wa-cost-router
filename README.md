@@ -9,6 +9,9 @@ cp backend/.env.example backend/.env  # configure secrets locais
 make dev                               # inicia db/redis, migrations, seed e sobe api/web/worker
 ```
 
+O `.env` exemplo já habilita o modo sandbox (`SANDBOX_PROVIDERS=true`), que simula chamadas aos provedores WhatsApp e mantém as
+respostas determinísticas para `make dev`, `make ci` e a coleção Postman.
+
 Comandos úteis:
 
 - `make migrate` – aplica migrations Alembic.

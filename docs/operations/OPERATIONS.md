@@ -15,6 +15,13 @@ Este guia cobre tarefas rotineiras para operar o WA Cost Router em ambientes de 
 
 Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Makefile padronizam a ordem correta (migrations → seed → serviços).
 
+## Modo sandbox dos conectores
+
+- `SANDBOX_PROVIDERS=true` (default em `.env.example`, `docker-compose.yml` e `make dev`) instrui a API/worker a usar `SandboxProviderConnector`, que não realiza chamadas HTTP externas.
+- Ajuste `SANDBOX_LATENCY_MS` para simular latência média (padrão: 100 ms). Use `0` para execuções instantâneas no CI.
+- `SANDBOX_FAILURE_RATE` aceita valores entre `0` e `1` para testar cenários de falha determinística; `0` garante que Newman termine sempre com sucesso.
+- Ao desativar o sandbox (`false`), forneça credenciais reais de provedores e valide limites de taxa/billing antes de expor em produção.
+
 ## Segredos do webhook WhatsApp
 
 - O secret usado para validar `X-Hub-Signature-256` fica armazenado criptografado em `wa_connection.webhook_secret_enc` (Fernet derivado de `APP_SECRET_KEY`).

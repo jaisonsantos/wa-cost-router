@@ -3,6 +3,8 @@
 
 A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis encadeadas para um fluxo E2E completo.
 
+> ℹ️ A stack local (`make dev`/`make ci`) roda com `SANDBOX_PROVIDERS=true`, portanto os requests de Providers/Messages executam em memória sem atingir provedores externos. Ajuste `SANDBOX_LATENCY_MS` e `SANDBOX_FAILURE_RATE` para simular cenários diferentes quando necessário.
+
 ## Estrutura
 
 1. **Auth** – registra usuário aleatório (`postman+timestamp`) com senha forte gerada no runtime e efetua login (token salvo automaticamente).

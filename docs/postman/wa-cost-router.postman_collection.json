@@ -197,6 +197,21 @@
         },
         {
           "name": "Providers - Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sandbox health check succeeds', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.healthy).to.eql(true);",
+                  "  pm.expect(body.latency_ms).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "url": {

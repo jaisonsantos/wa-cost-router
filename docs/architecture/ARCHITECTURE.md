@@ -8,6 +8,8 @@ React SPA --> FastAPI --> PostgreSQL
           RoutingEngine    |
               |            |
         ProviderConnector (HTTPX) --> Provedores externos
+              |\
+              | \__ SandboxProviderConnector (modo dev/CI)
 ```
 
 - **Frontend** (`src/`): React + React Query, AuthContext.
@@ -16,6 +18,7 @@ React SPA --> FastAPI --> PostgreSQL
 - **Persistência**: `MessageJob`, `DeliveryAttempt`, `CostRecord`, `MessageEvent`.
 - **Observabilidade**: `/admin/metrics` (Prometheus), logging padrão.
 - **Integrações**: `integrations.py` recebe Webhooks WhatsApp (mapear `org_id`).
+- **Sandbox**: quando `SANDBOX_PROVIDERS=true`, `get_connector` retorna `SandboxProviderConnector`, que gera IDs/latências determinísticas e evita chamadas HTTP reais.
 - **Trabalhos assíncronos**: `worker.py` (Redis + RQ) pronto para offloading futuro.
 
 Fluxo de envio:

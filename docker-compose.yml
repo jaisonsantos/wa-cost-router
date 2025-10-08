@@ -35,6 +35,9 @@ services:
       JWT_SECRET: change-this-in-production
       APP_SECRET_KEY: please-change-me-in-production
       WA_VERIFY_TOKEN: my-verify-token
+      SANDBOX_PROVIDERS: "true"
+      SANDBOX_LATENCY_MS: "100"
+      SANDBOX_FAILURE_RATE: "0"
     depends_on:
       db:
         condition: service_healthy
@@ -49,6 +52,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/wa_cost_router
       REDIS_URL: redis://redis:6379/0
+      SANDBOX_PROVIDERS: "true"
+      SANDBOX_LATENCY_MS: "100"
+      SANDBOX_FAILURE_RATE: "0"
     depends_on:
       - db
       - redis

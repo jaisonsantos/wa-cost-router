@@ -1,8 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
-import httpx
+import asyncio
+import hashlib
+import json
 import logging
 from datetime import datetime
+
+import httpx
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -208,15 +214,126 @@ class GupshupConnector(ProviderConnector):
             }
 
 
+class SandboxProviderConnector(ProviderConnector):
+    """Conector fake usado quando SANDBOX_PROVIDERS estiver habilitado."""
+
+    def __init__(self, provider_name: str, credentials: Dict[str, Any], base_url: Optional[str] = None):
+        super().__init__(credentials, base_url)
+        self.provider_name = provider_name
+
+    async def send_message(
+        self,
+        to_number: str,
+        template_id: str,
+        variables: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        latency_ms = self._resolve_latency_ms()
+        if latency_ms:
+            await asyncio.sleep(latency_ms / 1000)
+
+        fingerprint = self._build_fingerprint(to_number, template_id, variables)
+        should_fail = self._should_fail(fingerprint)
+
+        response_payload = {
+            "provider": self.provider_name,
+            "template_id": template_id,
+            "to": to_number,
+            "variables": variables,
+            "mode": "sandbox",
+        }
+
+        if should_fail:
+            return {
+                "success": False,
+                "error_code": "SANDBOX_FAILURE",
+                "error_message": "Sandbox configured failure",
+                "latency_ms": latency_ms,
+                "response": response_payload,
+            }
+
+        provider_message_id = f"sndbx-{fingerprint[:12]}"
+        return {
+            "success": True,
+            "provider_message_id": provider_message_id,
+            "latency_ms": latency_ms,
+            "response": {
+                **response_payload,
+                "provider_message_id": provider_message_id,
+            },
+        }
+
+    async def health_check(self) -> Dict[str, Any]:
+        latency_ms = self._resolve_latency_ms()
+        if latency_ms:
+            await asyncio.sleep(latency_ms / 1000)
+
+        return {
+            "healthy": True,
+            "status_code": 200,
+            "latency_ms": latency_ms,
+            "mode": "sandbox",
+        }
+
+    def _build_fingerprint(self, to_number: str, template_id: str, variables: Dict[str, Any]) -> str:
+        serialized = json.dumps({
+            "provider": self.provider_name,
+            "to": to_number,
+            "template_id": template_id,
+            "variables": variables,
+        }, sort_keys=True)
+        return hashlib.sha256(serialized.encode()).hexdigest()
+
+    def _should_fail(self, fingerprint: str) -> bool:
+        failure_rate = self._resolve_failure_rate()
+        if failure_rate == 0:
+            return False
+
+        sample = int(fingerprint[:8], 16) / 0xFFFFFFFF
+        return sample < failure_rate
+
+    @staticmethod
+    def _resolve_latency_ms() -> int:
+        raw_value = settings.SANDBOX_LATENCY_MS
+        try:
+            latency_ms = int(raw_value)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid SANDBOX_LATENCY_MS value %r; defaulting to 0 ms",
+                raw_value,
+            )
+            return 0
+
+        return max(latency_ms, 0)
+
+    @staticmethod
+    def _resolve_failure_rate() -> float:
+        raw_value = settings.SANDBOX_FAILURE_RATE
+        try:
+            failure_rate = float(raw_value)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid SANDBOX_FAILURE_RATE value %r; defaulting to 0.0",
+                raw_value,
+            )
+            return 0.0
+
+        return min(max(failure_rate, 0.0), 1.0)
+
+
 def get_connector(provider_name: str, credentials: Dict[str, Any], base_url: Optional[str] = None) -> ProviderConnector:
-    """Factory para obter conector apropriado"""
+    """Factory para obter conector apropriado respeitando o modo sandbox"""
+
+    if settings.SANDBOX_PROVIDERS:
+        return SandboxProviderConnector(provider_name, credentials, base_url)
+
     connectors = {
         "360dialog": Dialog360Connector,
         "gupshup": GupshupConnector
     }
-    
-    connector_class = connectors.get(provider_name.lower())
+
+    connector_key = provider_name.lower()
+    connector_class = connectors.get(connector_key)
     if not connector_class:
         raise ValueError(f"Unknown provider: {provider_name}")
-    
+
     return connector_class(credentials, base_url)
