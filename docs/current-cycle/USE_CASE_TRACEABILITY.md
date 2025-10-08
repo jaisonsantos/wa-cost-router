@@ -1,0 +1,18 @@
+# USE_CASE_TRACEABILITY — Matriz de rastreabilidade do ciclo
+
+## Sumário
+- [1. Matriz de rastreabilidade](#1-matriz-de-rastreabilidade)
+- [2. Convenções e futuras expansões](#2-convenções-e-futuras-expansões)
+
+## 1. Matriz de rastreabilidade
+| Caso de uso | Status atual | Backlog / Plano | Roadmap | Documentos de suporte |
+| --- | --- | --- | --- | --- |
+| UC-01 — Gestão de contatos unificada | Em preparação — discovery consolidado e kick-off das tarefas T1/T2 priorizado para montar catálogo e timeline multi-tenant. | [Quadro de tasks prioritárias (T1, T2)](./NEXT_IMPLEMENTATION_PLAN.md#quadro-de-tasks-priorizadas)<br>[Backlog: Sanitização de PII](../backlog/20251006-sanitizacao-pii.md) | [Fase 1 – Hardening](../roadmap/ROADMAP.md#fase-1--hardening-mês-1) | [Análise de lacunas](../analysis/USE_CASE_GAP.md#uc-01--gestão-de-contatos-unificada)<br>[Modelagem de dados](../architecture/DATA_MODEL.md)<br>[Referência da API](../api/API_REFERENCE.md) |
+| UC-02 — Atendimento multicanal orquestrado | Em preparação — protótipo de SLA validado e início do épico E2 via tarefas T3/T4 para habilitar canais inbound/outbound. | [Quadro de tasks prioritárias (T3, T4)](./NEXT_IMPLEMENTATION_PLAN.md#quadro-de-tasks-priorizadas)<br>[Backlog: Webhook multi-tenant](../backlog/20251006-webhook-multi-tenant.md)<br>[Backlog: Dashboard analytics](../backlog/20250210-analytics-dashboard-sync.md) | [Fase 2 – Observabilidade & Resiliência](../roadmap/ROADMAP.md#fase-2--observabilidade--resiliência-mês-2) | [Análise de lacunas](../analysis/USE_CASE_GAP.md#uc-02--atendimento-multicanal-orquestrado)<br>[Arquitetura](../architecture/ARCHITECTURE.md)<br>[Operações](../operations/OPERATIONS.md) |
+| UC-03 — CRM e jornada integrada | Planejado — épico E3 priorizado para conectar HubSpot/Salesforce com retries monitorados; aguardando dependências de contatos e multicanal. | [Quadro de tasks prioritárias (T5)](./NEXT_IMPLEMENTATION_PLAN.md#quadro-de-tasks-priorizadas)<br>[Backlog: Worker offload](../backlog/20250210-worker-offload.md) | [Fase 3 – Monetização & Governança](../roadmap/ROADMAP.md#fase-3--monetização--governança-mês-3-4) | [Análise de lacunas](../analysis/USE_CASE_GAP.md#uc-03--crm-e-jornada-integrada)<br>[Arquitetura](../architecture/ARCHITECTURE.md)<br>[Segurança](../security/SECURITY.md) |
+| UC-04 — Oferta white-label e governança comercial | Planejado — épico E4 priorizado; T6 preparará branding customizado, RBAC e auditoria antes do piloto com parceiros. | [Quadro de tasks prioritárias (T6)](./NEXT_IMPLEMENTATION_PLAN.md#quadro-de-tasks-priorizadas)<br>[Backlog: Proteger métricas admin](../backlog/20251006-proteger-admin-metrics.md)<br>[Backlog: Enforce secret strength](../backlog/20251006-enforce-secret-strength.md) | [Fase 3 – Monetização & Governança](../roadmap/ROADMAP.md#fase-3--monetização--governança-mês-3-4) | [Análise de lacunas](../analysis/USE_CASE_GAP.md#uc-04--oferta-white-label-e-governança-comercial)<br>[Arquitetura](../architecture/ARCHITECTURE.md)<br>[Deployment](../operations/DEPLOYMENT.md) |
+
+## 2. Convenções e futuras expansões
+- A tabela foi estruturada para receber novas colunas (ex.: `Owner`, `Release`, `KPIs`) sem quebrar o layout; adicionar campos basta atualizar o cabeçalho e replicar nas linhas existentes.
+- Sempre que um status mudar, referencie commits/PRs na célula correspondente e mantenha links para backlog, roadmap e documentos sincronizados.
+- Para novos casos de uso, reutilize o padrão `UC-XX` e acrescente-os ao final da tabela, preservando a ordem cronológica de priorização do [`USE_CASE_GAP`](../analysis/USE_CASE_GAP.md).
