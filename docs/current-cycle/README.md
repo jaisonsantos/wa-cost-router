@@ -46,6 +46,7 @@ Outros comandos úteis:
 | [Preços](../pricing/PRICING_BILLING.md) | Modelo de cobrança e cálculos de economia. |
 | [Roadmap](../roadmap/ROADMAP.md) | Evolução planejada por trimestre. |
 | [Backlog Prioritário](../backlog/README.md) | Itens P1/P2/P3 com subtarefas e referências cruzadas. |
+| [Matriz de Casos de Uso](./USE_CASE_TRACEABILITY.md) | Status UC-01 a UC-04 com links para backlog, roadmap e documentação de suporte. |
 | [Postman](../postman/README.md) | Guia de uso da coleção e variáveis de ambiente. |
 
 ## Convenções chave

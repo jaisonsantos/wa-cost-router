@@ -20,6 +20,8 @@ O mapeamento de lacunas em [`docs/analysis/USE_CASE_GAP.md`](../analysis/USE_CAS
 
 O plano desta etapa prioriza entregar esses blocos para liberar o piloto multicanal com parceiros, mantendo a base técnica alinhada às expectativas comerciais e de governança.
 
+Para acompanhar o progresso por caso de uso, utilize a matriz dedicada em [`USE_CASE_TRACEABILITY`](./USE_CASE_TRACEABILITY.md).
+
 ## Épicos e objetivos mensuráveis
 ### E1. Plataforma de contatos e consentimento (P0)
 **Objetivo mensurável:** Catálogo de contatos multi-tenant com APIs de CRUD/importação, timeline vinculada a mensagens e cobertura Newman, atendendo à UC-01 do [`USE_CASE_GAP`](../analysis/USE_CASE_GAP.md).
@@ -116,6 +118,7 @@ Criar os seguintes arquivos em [`docs/backlog/`](../backlog):
 - [Guia de Migrations](../operations/MIGRATIONS.md)
 - [Segurança](../security/SECURITY.md)
 - [Postman](../postman/README.md)
+- [Matriz de casos de uso](./USE_CASE_TRACEABILITY.md)
 - [Backlog Prioritário](../backlog/README.md)
 
 Este plano consolida a próxima etapa crítica antes do rollout externo, garantindo que documentação, scripts, coleção Postman e pipelines permaneçam alinhados ao código.

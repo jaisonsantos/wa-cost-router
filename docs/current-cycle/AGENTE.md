@@ -10,6 +10,7 @@
   - `GET /rates` passou a exigir autenticação, eliminando vazamento público.
 
 - **Pendências para go-live externo**: mapeamento multi-tenant do webhook WhatsApp, sanitização de payloads/PII e proteção de `/admin/metrics`. Também é necessário substituir o seed baseado em `create_all` por migrations completas.
+- **Matriz de rastreabilidade**: consulte [`USE_CASE_TRACEABILITY`](./USE_CASE_TRACEABILITY.md) para acompanhar status dos casos de uso UC-01 a UC-04 e seus vínculos com backlog e roadmap.
 
 ## 2. Mapa do Repositório
 
