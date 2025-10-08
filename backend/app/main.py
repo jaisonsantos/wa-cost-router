@@ -12,7 +12,7 @@ from app.api import (
     reports,
     rules,
 )
-from app.api.routes import contacts
+from app.api.routes import contact_segments, contacts
 
 app = FastAPI(title="WA Cost Router API", version="1.0.0")
 
@@ -37,6 +37,11 @@ app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
 app.include_router(providers.router, prefix="/providers", tags=["providers"])
 app.include_router(contacts.router, prefix="/contacts", tags=["contacts"])
+app.include_router(
+    contact_segments.router,
+    prefix="/contact-segments",
+    tags=["contact_segments"],
+)
 
 @app.get("/")
 def read_root():
