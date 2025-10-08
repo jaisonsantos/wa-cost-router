@@ -196,9 +196,9 @@
 
 | Fase | Objetivos | Tarefas (DoD / riscos / estimativa) |
 | --- | --- | --- |
-| **Fase 1 – Hardening** | Multi-tenancy & segurança | (a) Filtrar `org_id` em providers/RoutingEngine + testes multi-org (3d). (b) Criptografar `ProviderCredential` (migração + decrypt nos conectores) (4d). (c) Ajustar contratos API/UI (2d). |
-| **Fase 2 – Observabilidade & Resiliência** | Estabilizar operação | (a) Circuit breaker + métricas Prometheus (4d). (b) Validação E.164 e sanitização de logs (2d). (c) Rate limiting por org (Redis) (3d). |
-| **Fase 3 – Monetização & Governança** | Escalar produto | (a) Stripe Billing/Tax (7d). (b) RBAC + API keys (4d). (c) Webhooks externos e auditoria (7d). |
+| **Fase 1 – Contatos & Opt-in** | Catálogo multi-tenant e consentimento | (a) `T1` — catalogar/deduplicar contatos + migrations legadas (3d). (b) `T2` — timeline + opt-in mascarado (4d). (c) Sanitização de PII + validação E.164 (`20251006-sanitizacao-pii`, `20251006-validacao-e164`) (3d). |
+| **Fase 2 – Atendimento Multicanal** | Roteamento inbound/outbound com SLA | (a) `T3` — webhook multi-tenant + assinatura (3d). (b) `T3`/`T4` — circuit breaker + rate limiting por org (`20251006-circuit-breaker`, `20251006-rate-limiting`) (7d). (c) `T4` — dashboard alinhado (`20250210-analytics-dashboard-sync`) (3d). |
+| **Fase 3 – Governança & Monetização** | Billing, RBAC e integrações premium | (a) `T5` — conectores CRM + worker offload (`20250210-worker-offload`) (5d). (b) `T6` — RBAC/branding + proteger métricas (`20251006-proteger-admin-metrics`) (5d). (c) Billing e rate cards customizados (`20250210-rate-card-multitenant`) (7d). |
 
 ## 11. Suite de Testes Manuais (15–30 min)
 
@@ -697,38 +697,36 @@ Implementar cobrança recorrente com medição de uso (mensagens enviadas) e imp
 ```markdown
 # Roadmap
 
-## Fase 1 – Hardening (Mês 1)
+## Fase 1 – Contatos & Opt-in (Mês 1)
 
-- Multi-tenant seguro (providers, routing, webhook).
-- Criptografia de credenciais.
-- Contratos API/UI alinhados (FE mostra dados corretos).
-- Validação de números (E.164) e mascaramento de payloads.
+- Catálogo multi-tenant e consentimento auditável alinhados a UC-01.
+- Sanitização de PII e validação E.164 aplicadas a payloads.
+- Contratos API/UI revisados para telas de contatos e disparos.
 
-## Fase 2 – Observabilidade & Resiliência (Mês 2)
+## Fase 2 – Atendimento Multicanal (Mês 2)
 
-- Circuit breaker por provedor + métricas Prometheus.
-- Rate limiting por org e rota.
-- Alertas automáticos (latência, taxa de sucesso, economia negativa).
-- Worker assíncrono para envios pesados.
+- Webhook WhatsApp multi-tenant com verificação de assinatura.
+- Circuit breaker e rate limiting por organização monitorados.
+- Dashboard multicanal refletindo SLAs e economia em tempo real.
 
-## Fase 3 – Monetização & Governança (Mês 3-4)
+## Fase 3 – Governança & Monetização (Mês 3-4)
 
-- Stripe Billing + Tax (metered).
-- RBAC (owner/member) e API keys.
-- Portal de integrações (webhooks externos, audit trail).
-- Sincronização automática de price tables (fonte oficial Meta/fornecedor).
+- Billing metered e tarifação customizada por tenant.
+- RBAC/branding white-label e métricas administrativas protegidas.
+- Conectores CRM e worker assíncrono habilitados.
 
 ## Definition of Done (por fase)
 
-- **Fase 1**: teste multi-tenant aprovado, credenciais criptografadas, UI exibe dados corretos.
-- **Fase 2**: dashboards Prometheus/Grafana ativos, circuit breaker validado com load test.
-- **Fase 3**: cobrança ativa com 2 design partners, logs auditáveis e alertas configurados.
+- **Fase 1 – Contatos & Opt-in**: catálogo multi-tenant higienizado e contratos SPA ↔ API validados.
+- **Fase 2 – Atendimento Multicanal**: webhook seguro operando com fallback monitorado e dashboard atualizado.
+- **Fase 3 – Governança & Monetização**: billing ativo com governança auditável e integrações CRM em produção.
 
-## Dependências
+## Quadro de dependências críticas
 
-- Migration base (pré-Fase 1).
-- Time jurídico para LGPD/contratos (Fase 3).
-- Contas de teste Stripe e provedores WhatsApp.
+- Sanitização de PII (`20251006-sanitizacao-pii`).
+- Proteção `/admin/metrics` (`20251006-proteger-admin-metrics`).
+- Enforce de secrets (`20251006-enforce-secret-strength`).
+- Rate limiting multi-tenant (`20251006-rate-limiting`).
 ```
 
 ### docs/CHANGELOG.md
