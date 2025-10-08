@@ -1,7 +1,7 @@
 [Docs](../current-cycle/README.md) › [Backlog](./README.md)
 # Backlog Prioritário
 
-Os itens abaixo seguem o formato `YYYYMMDD-<slug>.md` com frontmatter contendo tipo, prioridade (P1 crítico → P3 baixo), estimativa e dependências. Cada card detalha contexto, escopo, critérios de aceite, subtarefas e referências cruzadas para documentação e endpoints relevantes.
+Os itens abaixo seguem o formato `YYYYMMDD-<slug>.md` com frontmatter contendo tipo, prioridade (P1 crítico → P3 baixo), estimativa e dependências. Cada card detalha contexto, escopo, critérios de aceite, subtarefas e referências cruzadas para documentação e endpoints relevantes. Consulte o [índice por caso de uso](./INDEX_BY_USE_CASE.md) para navegar rapidamente pelos cards alinhados à matriz do ciclo.
 
 ## Processo de priorização orientado pela matriz de casos de uso
 
