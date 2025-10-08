@@ -35,6 +35,11 @@ Outros comandos úteis:
 
 | Área | Conteúdo |
 |------|----------|
+| [AGENTE do ciclo](./AGENTE.md) | Síntese executiva, pendências críticas e direcionadores de foco. |
+| [Plano de Próxima Etapa](./NEXT_IMPLEMENTATION_PLAN.md) | Sequenciamento das entregas "Next Up" e dependências entre squads. |
+| [Matriz de Casos de Uso](./USE_CASE_TRACEABILITY.md) | Status UC-01 a UC-04 com rastreabilidade para backlog, roadmap e documentação de suporte. |
+| [Índice do Backlog por Caso de Uso](../backlog/INDEX_BY_USE_CASE.md) | Visão cruzada dos itens priorizados por UC e links para cada história. |
+| [Backlog Prioritário](../backlog/README.md) | Itens P1/P2/P3 com subtarefas e referências cruzadas. |
 | [Arquitetura](../architecture/ARCHITECTURE.md) | Componentes principais, fluxos e responsabilidades. |
 | [Modelagem de Dados](../architecture/DATA_MODEL.md) | Tabelas, relacionamentos e entidades de domínio. |
 | [Referência da API](../api/API_REFERENCE.md) | Contratos dos endpoints e links para a coleção Postman. |
@@ -45,8 +50,6 @@ Outros comandos úteis:
 | [Segurança](../security/SECURITY.md) | Controles atuais, riscos conhecidos e próximos passos. |
 | [Preços](../pricing/PRICING_BILLING.md) | Modelo de cobrança e cálculos de economia. |
 | [Roadmap](../roadmap/ROADMAP.md) | Evolução planejada por trimestre. |
-| [Backlog Prioritário](../backlog/README.md) | Itens P1/P2/P3 com subtarefas e referências cruzadas. |
-| [Matriz de Casos de Uso](./USE_CASE_TRACEABILITY.md) | Status UC-01 a UC-04 com links para backlog, roadmap e documentação de suporte. |
 | [Postman](../postman/README.md) | Guia de uso da coleção e variáveis de ambiente. |
 
 ## Convenções chave

@@ -44,10 +44,12 @@ Use `make ci` para replicar localmente a sequência de checks descrita em [Opera
 
 ## Documentação
 
-- [Ciclo atual e índice completo](docs/current-cycle/README.md)
+- [Ciclo atual (roadmap, plano e governança)](docs/current-cycle/README.md)
+- [Histórico de ciclos anteriores](docs/history/2024-cycle-mvp/README.md)
+- [Matriz de casos de uso e rastreabilidade](docs/current-cycle/USE_CASE_TRACEABILITY.md)
+- [Backlog priorizado](docs/backlog/README.md)
 - [Referência da API](docs/api/API_REFERENCE.md)
 - [Coleção Postman + ambiente](docs/postman/README.md)
-- [Backlog priorizado](docs/backlog/README.md)
 
 ## Stack
 
