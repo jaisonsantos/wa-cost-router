@@ -11,67 +11,56 @@
 - [Navegação entre docs](#navegação-entre-docs)
 
 ## Resumo executivo
-O produto ainda não consegue calcular custos reais por provedor porque os rate cards ficam desacoplados das credenciais (seeds e importadores não vinculam tarifa → provedor) e o motor de roteamento só procura `RateCard.source == provider.name`, o que devolve custo zero e bloqueia o fallback automático.
+O mapeamento de lacunas em [`docs/analysis/USE_CASE_GAP.md`](../analysis/USE_CASE_GAP.md) evidenciou que o MVP atual atende apenas ao disparo outbound no WhatsApp. Faltam estruturas essenciais para operar em produção com clientes que exigem catálogo de contatos, atendimento multicanal e integração com o CRM já existente.
 
-Além disso, os simuladores exigem categorias em caixa alta, mas o frontend envia `marketing/utility`, e há chamadas sem payload (ex.: `/rules/simulate`) que geram 422 antes mesmo do cálculo.
+- **Gestão de contatos (UC-01)**: números ficam isolados em `MessageJob` e não há consentimento, atributos nem API de consulta, inviabilizando segmentação e compliance.
+- **Atendimento multicanal (UC-02)**: o roteador não suporta canais inbound nem monitora filas/SLA, obrigando operações a manter pilhas paralelas.
+- **Integrações CRM (UC-03)**: não existem conectores ou webhooks outbound para sincronizar tickets, oportunidades e timeline de mensagens.
+- **Oferta white-label (UC-04)**: branding fixo, ausência de RBAC granular e relatórios customizados impedem parceiros de revender o produto.
 
-O modo sandbox para conectores foi entregue: `SANDBOX_PROVIDERS` habilita respostas determinísticas, elimina timeouts e deixa seeds alinhadas ao cenário fake. O próximo passo crítico é persistir eventos/custos reais após o envio (T3) para liberar relatórios consistentes.
-
-No frontend, o `API_BASE_URL` é hardcoded para localhost, impedindo deploy multiambiente, e há bugs de contrato (ex.: modal Gupshup case sensitive, Settings exibe dados estáticos).
-
-Na documentação, o guia de migrations ignora a revisão `003_add_message_job_fk` e o `AGENTE` mantém notas defasadas (ex.: seed com `metadata.create_all`).
-
-O README do Postman promete cobertura total, mas o CSV de exemplo não preenche campos necessários para a nova modelagem (provider).
+O plano desta etapa prioriza entregar esses blocos para liberar o piloto multicanal com parceiros, mantendo a base técnica alinhada às expectativas comerciais e de governança.
 
 ## Épicos e objetivos mensuráveis
-### E1. Routing & costing confiáveis (P0)
-**Objetivo mensurável:** `POST /messages/send` deve selecionar um provedor real com tarifa registrada, gerar `MessageEvent`/`CostRecord` com valores > 0 e permitir simulação consistente, validado pela coleção Newman.
+### E1. Plataforma de contatos e consentimento (P0)
+**Objetivo mensurável:** Catálogo de contatos multi-tenant com APIs de CRUD/importação, timeline vinculada a mensagens e cobertura Newman, atendendo à UC-01 do [`USE_CASE_GAP`](../analysis/USE_CASE_GAP.md).
 
-### E2. Contratos FE ↔ API e DX (P0)
-**Objetivo mensurável:** Fluxos de regras, settings e providers funcionam sem erros 422 e exibem os dados reais; smoke manual cobre simulate (rápida + avançada) e modais de credenciais.
+### E2. Orquestração de atendimento multicanal (P0)
+**Objetivo mensurável:** Entradas e saídas em WhatsApp, e-mail e chat web compartilhando contratos unificados, filas e SLAs monitoradas com alertas operacionais, conforme UC-02.
 
-### E3. Segurança & multi-tenant hardening (P0)
-**Objetivo mensurável:** Secrets fracos bloqueiam boot em produção, `/admin/metrics` requer credencial, payloads de mensagens e números ficam mascarados; Postman valida resposta 401/403 quando omitido.
+### E3. CRM sincronizado com jornada (P0)
+**Objetivo mensurável:** Conectores prioritários (HubSpot/Salesforce) entregam sincronização bidirecional de contatos e tickets com retries monitorados, alinhados à UC-03.
 
-### E4. Observabilidade, docs e pipeline (P1)
-**Objetivo mensurável:** `make ci`/GitHub Actions continuam verdes após reorganização de docs, métricas de envio expostas (Prometheus) e documentação navegável aponta para assets corretos.
+### E4. White-label e governança comercial (P1)
+**Objetivo mensurável:** Tenants configuram branding, domínios e perfis de acesso diferenciados, gerando relatórios com identidade do parceiro segundo UC-04.
 
 ## Quadro de tasks priorizadas
 | ID | Título | Prioridade | Owner sugerido | Estimativa | Dependências | Risco | DoD |
 |----|--------|------------|----------------|------------|--------------|-------|-----|
-| T1 | Vincular rate cards a provedores e corrigir seleção de custos | P0 | Backend | 5d | E1 | Alto (migração de dados) | • Migration Alembic adiciona `provider_id` + backfill idempotente cruzando por nome (fallback seguro).<br>• Atualizar `RoutingEngine`, seeds e importador CSV/API para usar `provider_id` (incluindo fallback por `provider_name` no CSV).<br>• Revisar docs: [`DATA_MODEL`](../architecture/DATA_MODEL.md), [`API_REFERENCE`](../api/API_REFERENCE.md), [`MIGRATIONS`](../operations/MIGRATIONS.md).<br>• Postman: request "Rates - Import CSV" com arquivo de exemplo alinhado ao fluxo automatizado.<br>• `make dev` + `make ci` verdes com base limpa e existente. |
-| T2 | Sandbox de conectores e seeds determinísticas | P0 | Backend | 4d | T1 | Médio | ✅ Entregue. Toggle `SANDBOX_PROVIDERS` ativo por padrão no dev/CI, seeds determinísticas e docs/Postman atualizados. |
-| T3 | Persistir `MessageEvent` + baseline ao enviar | P0 | Backend | 3d | T1 | Médio | • Após envio, gravar `MessageEvent` com custos baseline/otimizado e atualizar relatórios.<br>• Ajustar queries de `/messages/jobs` e `/reports/summary` para usar novos registros.<br>• Postman valida valores > 0 nas rotas.<br>• Atualizar [`API_REFERENCE`](../api/API_REFERENCE.md) e [`ARCHITECTURE`](../architecture/ARCHITECTURE.md).<br>• `make dev` + `make ci` verdes. |
-| T4 | Normalizar categorias e payloads dos simuladores | P0 | Full-stack | 3d | T1 | Baixo | • Backend aceita categorias case-insensitive com default configurável e payload padrão para `/rules/simulate`.<br>• Frontend envia payload real, ajusta toasts/validações e remove TODO de economia.<br>• Postman atualiza requests de simulação com testes de contrato.<br>• Atualizar [`API_REFERENCE`](../api/API_REFERENCE.md) e docs de FE em [`ARCHITECTURE`](../architecture/ARCHITECTURE.md).<br>• `make dev` + `make ci` verdes + smoke FE. |
-| T5 | Configuração de base URL e providers UI | P0 | Frontend | 2d | - | Baixo | • Substituir literal `http://localhost:8000` por `import.meta.env.VITE_API_BASE` com fallback seguro.<br>• Modal de credenciais Gupshup case-insensitive orientado por `provider.type`/`metadata`.<br>• Documentar variáveis em [`DEPLOYMENT`](../operations/DEPLOYMENT.md) e [`docs/postman/README.md`](../postman/README.md).<br>• Smoke manual: login → Settings → credenciais 360dialog/Gupshup.<br>• `make dev` + `make ci` verdes. |
-| T6 | Settings conectada aos dados reais | P1 | Frontend | 4d | T1, T2 | Médio | • Remover mocks (`ConnectionsState`) e consumir `/integrations/wa/connections`, `/rates`, `/orgs/current`.<br>• Exibir estado/erros reais e atualizar gráficos/listas.<br>• Documentar fluxo com capturas em [`Ciclo Atual`](./README.md).<br>• Postman verifica rotas usadas pelo FE.<br>• `make dev` + `make ci` verdes. |
-| T7 | Enforcement de secrets fortes | P0 | Backend | 1d | - | Baixo | • Validar em boot (exceto dev) que `APP_SECRET_KEY`/`JWT_SECRET` não usam defaults.<br>• Atualizar `.env.example`, [`SECURITY`](../security/SECURITY.md), [`OPERATIONS`](../operations/OPERATIONS.md).<br>• Postman README destaca requisito.<br>• `make dev` + `make ci` verdes. |
-| T8 | Sanitização de PII em payloads e respostas | P0 | Backend | 3d | T3 | Alto | • Helpers mascaram números (`+55*****9999`) e truncam `provider_response` antes de persistir/retornar.<br>• Atualizar schemas de `messages/jobs`, webhooks e logs.<br>• Tests pytest garantindo mascaramento.<br>• Atualizar [`SECURITY`](../security/SECURITY.md), [`API_REFERENCE`](../api/API_REFERENCE.md) e Postman asserts.<br>• `make dev` + `make ci` verdes. |
-| T9 | Proteger `/admin/metrics` | P0 | Backend | 1d | - | Baixo | • Implementar autenticação via header/token configurável.<br>• Documentar em [`OPERATIONS`](../operations/OPERATIONS.md) e [`SECURITY`](../security/SECURITY.md).<br>• Postman adiciona requests 200/401.<br>• `make dev` + `make ci` verdes. |
-| T10 | Validação E.164 em `POST /messages/send` | P1 | Backend | 2d | T3 | Médio | • Integrar `phonenumbers` para normalizar/rejeitar inválidos.<br>• Atualizar seeds/Postman com números válidos.<br>• Documentar ajustes em [`API_REFERENCE`](../api/API_REFERENCE.md) e [`OPERATIONS`](../operations/OPERATIONS.md).<br>• `make dev` + `make ci` verdes. |
-| T11 | Observabilidade de tentativas de envio | P1 | Backend | 3d | T3 | Médio | • Instrumentar métricas Prometheus (sucesso, retries, fallback) e logs estruturados.<br>• Atualizar [`OPERATIONS`](../operations/OPERATIONS.md) com métricas/dashboards.<br>• Postman verifica `/admin/metrics` com token.<br>• `make dev` + `make ci` verdes. |
-| T12 | Harmonizar pipeline e docs | P1 | DevOps | 2d | T1–T5 | Baixo | • Consolidar targets `ci`/`ci-pipeline` em Makefile e GitHub Actions.<br>• Atualizar [`MIGRATIONS`](../operations/MIGRATIONS.md) com revisão `003_add_message_job_fk` e mover notas obsoletas do `AGENTE` para [`archive`](../archive).<br>• Atualizar `README.md` raiz e [`Ciclo Atual`](./README.md) com índice navegável.<br>• `make dev` + `make ci` verdes. |
-| T13 | Atualizar coleção Postman e README | P0 | QA | 2d | T1–T5 | Médio | • Incluir todos os endpoints com variáveis (`provider_id`, `metrics_token`, etc.), pre-request scripts e asserts de payload.<br>• Atualizar [`docs/postman/README.md`](../postman/README.md) com execução via Newman e integração ao `Makefile`/CI.<br>• Smoke Newman cobre regras, mensagens, relatórios, admin/metrics.<br>• `make dev` + `make ci` verdes com coleção rodando. |
+| T1 | Catálogo de contatos multi-tenant | P0 | Backend | 5d | E1 | Alto (migração de dados) | • Caso de uso: UC-01 — Gestão de contatos unificada ([`USE_CASE_GAP`](../analysis/USE_CASE_GAP.md)).<br>• Criar tabela de contatos com `org_id`, atributos customizáveis, opt-in/out e índices de deduplicação.<br>• Expor endpoints REST/CSV para CRUD e importação com validação de consentimento.<br>• Atualizar [`DATA_MODEL`](../architecture/DATA_MODEL.md), [`API_REFERENCE`](../api/API_REFERENCE.md) e exemplos na coleção Postman.<br>• `make dev` + `make ci` verdes com migração aplicada em base existente. |
+| T2 | Timeline e vinculação de mensagens a contatos | P0 | Backend | 3d | T1 | Médio | • Caso de uso: UC-01 — Gestão de contatos unificada.<br>• Persistir `contact_id` em `MessageJob`, eventos e relatórios, garantindo retrocompatibilidade via backfill.<br>• Ajustar consultas de relatórios/dashboard para exibir métricas por contato e consentimento.<br>• Atualizar [`API_REFERENCE`](../api/API_REFERENCE.md), [`ARCHITECTURE`](../architecture/ARCHITECTURE.md) e scripts `seed`/Postman.<br>• `make dev` + `make ci` verdes. |
+| T3 | Infra de canais inbound/outbound unificados | P0 | Backend | 6d | E2 | Alto (novos conectores) | • Caso de uso: UC-02 — Atendimento multicanal orquestrado.<br>• Implementar abstração de canais com contratos de envio/recebimento e filas por canal (WhatsApp, e-mail, chat web mínimo).<br>• Disponibilizar webhooks inbound com roteamento por `contact_id` e preferências.<br>• Atualizar [`ARCHITECTURE`](../architecture/ARCHITECTURE.md), [`API_REFERENCE`](../api/API_REFERENCE.md) e [`OPERATIONS`](../operations/OPERATIONS.md).<br>• `make dev` + `make ci` verdes + smoke manual validando recebimento inbound. |
+| T4 | Monitoramento de SLA e painel de atendimento | P0 | Full-stack | 4d | T3 | Médio | • Caso de uso: UC-02 — Atendimento multicanal orquestrado.<br>• Construir métricas de fila/SLA (tempo primeira resposta, backlog) e expor em dashboard no frontend.<br>• Adicionar alertas Prometheus + documentação operacional para thresholds.<br>• Atualizar [`ARCHITECTURE`](../architecture/ARCHITECTURE.md), [`OPERATIONS`](../operations/OPERATIONS.md) e capturas em [`Ciclo Atual`](./README.md).<br>• `make dev` + `make ci` verdes + smoke FE cobrindo dashboards. |
+| T5 | Conectores CRM prioritários e reconciliamento | P0 | Integrations | 5d | E3 | Alto (terceiros) | • Caso de uso: UC-03 — CRM e jornada integrada.<br>• Entregar conectores HubSpot e Salesforce com sync bidirecional de contatos, tickets e oportunidades, incluindo retries/dead-letter.<br>• Expor webhooks configuráveis por tenant e registrar falhas em observabilidade.<br>• Atualizar [`INTEGRATIONS`](../architecture/INTEGRATIONS.md), [`OPERATIONS`](../operations/OPERATIONS.md) e [`SECURITY`](../security/SECURITY.md).<br>• `make dev` + `make ci` verdes + testes Newman simulando callbacks. |
+| T6 | White-label, RBAC e branding por tenant | P1 | Frontend/Platform | 4d | E4 | Médio | • Caso de uso: UC-04 — Oferta white-label e governança comercial.<br>• Implementar theming (logo/cores), domínios customizados e RBAC (partner admin, org admin, agent) com auditoria de ações.<br>• Atualizar [`ARCHITECTURE`](../architecture/ARCHITECTURE.md), [`DEPLOYMENT`](../operations/DEPLOYMENT.md) e [`SECURITY`](../security/SECURITY.md).<br>• `make dev` + `make ci` verdes + smoke FE validando troca de branding. |
 
 ## Mapa de impacto
 | Área | Impacto esperado |
 |------|-----------------|
-| API backend | Novas migrations, validações, métricas; dependências adicionais (`phonenumbers`). |
-| Banco de dados | Alteração da tabela `rate_card`, dados seeds, criação de `MessageEvent` outbound. |
-| Frontend | Ajuste de contratos (simulação, settings, providers), configuração por ambiente. |
-| Worker | Sandbox reduz necessidade de worker no curto prazo; manter pronto para futura fila. |
-| Postman/QA | Novos asserts, variáveis e scripts conforme tasks T1–T13. |
-| Docs | Atualização e reorganização (AGENTE, MIGRATIONS, API, OPERATIONS, Postman). |
-| CI/CD | Alvos `make` e workflows revisados; execução continua exigindo `make ci`. |
-| Segurança | Enforce de secrets, mascaramento PII, proteção `/admin/metrics`. |
-| Observabilidade | Métricas Prometheus e logging estruturado para tentativas de envio. |
+| API backend | Novas entidades de contato, contratos multicanal e webhooks inbound/outbound para CRM. |
+| Banco de dados | Tabelas de contatos/timeline, índices de deduplicação e auditoria de consentimento. |
+| Frontend | Dashboards de SLA, configurações de branding e ferramentas de gestão de contatos. |
+| Integrações | Conectores HubSpot/Salesforce, filas de retry e monitoramento dedicado. |
+| Postman/QA | Cenários cobrindo contatos, multicanal e CRM com variáveis por tenant. |
+| Docs | Atualização de Data Model, API, Operations, Deployment, Security e novo `analysis/USE_CASE_GAP`. |
+| CI/CD | Pipelines cobrindo novos serviços externos simulados e smoke multicanal. |
+| Segurança | RBAC partner/org, trilhas de auditoria e política de opt-in/out aplicada. |
+| Observabilidade | Métricas de SLA, filas por canal e status de sincronização CRM. |
 
 **Progresso recente (2024-10-07):**
-- ✅ T2 entregue — sandbox dos conectores, seeds determinísticas e Newman executando em < 60 s no modo fake.
-- ✅ `POST /messages/send` agora captura falhas inesperadas do motor de roteamento/entrega, respondendo 2xx com logs detalhados em vez de 500 na coleção Newman.
-- ✅ Normalizamos custos estimados e cadeias de fallback inválidas no sandbox, garantindo respostas 2xx mesmo quando regras retornam dados inconsistentes.
-- ✅ Blindamos a persistência inicial do `MessageJob`, evitando 500 caso o primeiro commit falhe e retornando resposta idempotente/`failed_final` controlada.
-- 🔜 Foco imediato em T3 para persistir `MessageEvent`/`CostRecord` reais após envio, destravando relatórios consistentes.
+- ✅ Discovery com squads de atendimento, growth e parceiros consolidou os requisitos UC-01 a UC-04 no [`USE_CASE_GAP`](../analysis/USE_CASE_GAP.md).
+- ✅ Levantamento de dados históricos exportado do CRM sandbox para suportar modelagem de contatos e timeline.
+- ✅ Protótipo de dashboard de SLA validado com equipe de operações para calibrar métricas alvo.
+- 🔜 Kick-off de T1/T3 para implementar catálogo de contatos e infraestrutura multicanal antes das integrações CRM.
 
 ## Plano de testes e health-checks
 ### Automação local / CI
@@ -113,10 +102,10 @@ Criar os seguintes arquivos em [`docs/backlog/`](../backlog):
 ## Riscos, rollout e rollback
 | Épico | Riscos | Mitigação | Rollout | Rollback |
 |-------|--------|-----------|---------|----------|
-| E1 | Migração de dados quebrar histórico de rate; sandbox habilitado em prod inadvertidamente. | Scripts de backfill idempotentes, flag sandbox default `false`, feature toggle com testes. | Deploy canário com sandbox desligado e verificação manual de custo > 0 após release. | Downgrade da migration (backup) + flag sandbox revertido. |
-| E2 | Mudança de contratos quebrar SPA ou Postman existente. | Atualizar tipos TS e Postman na mesma PR, smoke manual antes do merge. | Feature toggles quando possível, validação em staging. | Reverter build frontend/endpoints mantendo compatibilidade. |
-| E3 | Bloqueio por secrets fortes em ambientes de dev/CI. | Documentar defaults aceitos para `ENV=development`, ajustar GitHub secrets antes do merge. | Ativar check somente quando `ENV=production`. | Remover validação (flag) ou redefinir secrets válidos. |
-| E4 | Consolidar `ci`/`ci-pipeline` pode quebrar workflow externo. | Notificar time, manter alias temporário, atualizar docs. | Merge com monitoramento do pipeline GitHub; reverter se falhar. | Reverter Makefile/workflow para estado anterior. |
+| E1 | Migrações de contatos podem corromper histórico ou violar LGPD por ausência de consentimento. | Backfill idempotente com dry-run, backups por tenant e validação de opt-in antes de publicar. | Deploy por tenant iniciando pelo sandbox interno com monitoração de duplicatas. | Restaurar backup anterior e reexecutar migração com ajustes. |
+| E2 | Inbound channels podem causar sobrecarga ou filas não monitoradas. | Feature flags por canal, limites de throughput e dashboards de SLA com alertas antes do GA. | Ativar canal por parceiro piloto com playbook de observabilidade. | Desabilitar canal via flag e drenar filas pendentes. |
+| E3 | Integrações CRM podem falhar por limites de API ou mapeamento inconsistente. | Retries com dead-letter, monitoramento dedicado e homologação conjunta com parceiros. | Habilitar conectores por org com checklist de credenciais e mapping aprovado. | Pausar conector específico e reprocessar mensagens a partir da fila de retry. |
+| E4 | Customizações white-label podem quebrar login/domínio ou expor dados entre tenants. | Testes automatizados de RBAC, validação de domínio antes de apontar DNS e auditoria contínua. | Rollout progressivo por parceiro com verificação manual de branding. | Reverter branding para default e restaurar perfis anteriores a partir do backup. |
 
 ## Navegação entre docs
 - [Visão geral](./README.md)
