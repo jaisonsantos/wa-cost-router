@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Iterable, List, Optional, Sequence, Union
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.models import (
     Contact,
     ContactChannelOptIn,
+    ContactConsentAudit,
     ContactSegment,
     ContactSegmentMembership,
     ContactStatusEnum,
@@ -142,4 +143,37 @@ class ContactRepository:
             query = query.limit(limit)
 
         return query.all()
+
+    def list_consent_history(
+        self,
+        *,
+        org_id,
+        contact_id,
+        channel: Optional[str] = None,
+        channel_address: Optional[str] = None,
+    ) -> List[ContactConsentAudit]:
+        """Retorna eventos de auditoria de consentimento para um contato."""
+
+        query = (
+            self.db.query(ContactConsentAudit)
+            .options(joinedload(ContactConsentAudit.opt_in))
+            .filter(
+                ContactConsentAudit.org_id == org_id,
+                ContactConsentAudit.contact_id == contact_id,
+            )
+        )
+
+        if channel is not None:
+            query = query.filter(ContactConsentAudit.channel == channel)
+
+        if channel_address is not None:
+            query = query.filter(ContactConsentAudit.channel_address == channel_address)
+
+        return (
+            query.order_by(
+                ContactConsentAudit.recorded_at.desc(),
+                ContactConsentAudit.created_at.desc(),
+            )
+            .all()
+        )
 

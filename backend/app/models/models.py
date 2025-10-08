@@ -263,6 +263,11 @@ class Contact(Base):
         back_populates="contact",
         cascade="all, delete-orphan",
     )
+    consent_audits = relationship(
+        "ContactConsentAudit",
+        back_populates="contact",
+        cascade="all, delete-orphan",
+    )
     segments = relationship(
         "ContactSegment",
         secondary="contact_segment_membership",
@@ -307,6 +312,68 @@ class ContactChannelOptIn(Base):
 
     organization = relationship("Organization")
     contact = relationship("Contact", back_populates="channel_opt_ins")
+    audit_entries = relationship(
+        "ContactConsentAudit",
+        back_populates="opt_in",
+    )
+
+
+class ContactConsentAudit(Base):
+    __tablename__ = "contact_consent_audit"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    contact_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("contact.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    opt_in_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("contact_channel_opt_in.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    channel = Column(String, nullable=False)
+    channel_address = Column(String, nullable=False)
+    status = Column(Enum(OptInStatusEnum), nullable=False)
+    source = Column(String, nullable=False)
+    agent = Column(String, nullable=False)
+    request_ip = Column(String(45))
+    evidence_uri = Column(String)
+    proof_hash = Column(String)
+    context = Column(JSON)
+    recorded_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_contact_consent_audit_contact_channel",
+            "contact_id",
+            "channel",
+        ),
+        Index(
+            "ix_contact_consent_audit_recorded_at",
+            "recorded_at",
+        ),
+    )
+
+    contact = relationship("Contact", back_populates="consent_audits")
+    opt_in = relationship("ContactChannelOptIn", back_populates="audit_entries")
 
 
 class ContactSegment(Base):

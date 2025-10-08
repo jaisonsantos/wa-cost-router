@@ -28,6 +28,7 @@ from app.core.database import Base  # noqa: E402
 from app.models.models import (  # noqa: E402
     Contact,
     ContactChannelOptIn,
+    ContactConsentAudit,
     ContactSegment,
     ContactSegmentMembership,
     ContactStatusEnum,
@@ -199,11 +200,73 @@ def test_list_contacts_filters_by_channel_and_status(session):
         revoked_contact.id,
     }
 
-    by_address = repo.list_contacts(
+
+def test_list_consent_history_returns_audit_entries(session):
+    org = _create_org(session)
+    repo = ContactRepository(session)
+
+    contact = repo.create_contact(
+        id=uuid.uuid4(),
         org_id=org.id,
-        channel="whatsapp",
-        channel_address=granted_contact.phone,
+        phone="+5511999999999",
+        status=ContactStatusEnum.active,
     )
 
-    assert {contact.id for contact in by_address} == {granted_contact.id}
+    opt_in = ContactChannelOptIn(
+        id=uuid.uuid4(),
+        org_id=org.id,
+        contact_id=contact.id,
+        channel="whatsapp",
+        channel_address=contact.phone,
+        status=OptInStatusEnum.granted,
+        version=1,
+        captured_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+        source="manual",
+    )
+    session.add(opt_in)
+    session.commit()
+
+    older_audit = ContactConsentAudit(
+        id=uuid.uuid4(),
+        org_id=org.id,
+        contact_id=contact.id,
+        opt_in=opt_in,
+        channel="whatsapp",
+        channel_address=contact.phone,
+        status=OptInStatusEnum.granted,
+        source="manual",
+        agent="qa-analyst",
+        request_ip="203.0.113.10",
+        recorded_at=datetime.now(timezone.utc) - timedelta(minutes=9),
+    )
+
+    newer_audit = ContactConsentAudit(
+        id=uuid.uuid4(),
+        org_id=org.id,
+        contact_id=contact.id,
+        opt_in=opt_in,
+        channel="whatsapp",
+        channel_address=contact.phone,
+        status=OptInStatusEnum.revoked,
+        source="manual",
+        agent="compliance",
+        request_ip="203.0.113.11",
+        recorded_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+
+    session.add_all([older_audit, newer_audit])
+    session.commit()
+
+    history = repo.list_consent_history(org_id=org.id, contact_id=contact.id)
+
+    assert [entry.id for entry in history] == [newer_audit.id, older_audit.id]
+    assert history[0].opt_in is not None
+    assert history[0].opt_in.version == opt_in.version
+
+    filtered = repo.list_consent_history(
+        org_id=org.id,
+        contact_id=contact.id,
+        channel_address="+5500000000000",
+    )
+    assert filtered == []
 

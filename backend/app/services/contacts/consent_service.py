@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.models.models import ContactChannelOptIn, OptInStatusEnum
+from app.models.models import ContactChannelOptIn, ContactConsentAudit, OptInStatusEnum
 from app.services.contacts.repository import ContactRepository
 
 
@@ -85,6 +85,7 @@ class ConsentService:
         evidence_uri: Optional[str] = None,
         proof_hash: Optional[str] = None,
         source_metadata: Optional[Dict[str, Any]] = None,
+        request_ip: Optional[str] = None,
     ) -> ContactChannelOptIn:
         """Registra ou atualiza um opt-in, respeitando regras de validação."""
 
@@ -134,6 +135,20 @@ class ConsentService:
         )
 
         self.db.add(opt_in)
+        self._record_audit(
+            org_id=org_id,
+            contact_id=contact.id,
+            opt_in=opt_in,
+            channel=channel,
+            channel_address=channel_address,
+            status=OptInStatusEnum.granted,
+            source=source,
+            agent=agent,
+            request_ip=request_ip,
+            evidence_uri=evidence_uri,
+            proof_hash=proof_hash,
+            context=payload_metadata,
+        )
         self.db.commit()
         self.db.refresh(opt_in)
         return opt_in
@@ -150,6 +165,9 @@ class ConsentService:
         captured_at: Optional[datetime] = None,
         idempotency_key: Optional[str] = None,
         source_metadata: Optional[Dict[str, Any]] = None,
+        evidence_uri: Optional[str] = None,
+        proof_hash: Optional[str] = None,
+        request_ip: Optional[str] = None,
     ) -> ContactChannelOptIn:
         """Revoga o opt-in mais recente do contato para o canal informado."""
 
@@ -186,9 +204,25 @@ class ConsentService:
             captured_at=captured_at,
             source=source,
             source_metadata=payload_metadata,
+            evidence_uri=evidence_uri,
+            proof_hash=proof_hash,
         )
 
         self.db.add(opt_in)
+        self._record_audit(
+            org_id=org_id,
+            contact_id=contact.id,
+            opt_in=opt_in,
+            channel=channel,
+            channel_address=channel_address,
+            status=OptInStatusEnum.revoked,
+            source=source,
+            agent=agent,
+            request_ip=request_ip,
+            evidence_uri=evidence_uri,
+            proof_hash=proof_hash,
+            context=payload_metadata,
+        )
         self.db.commit()
         self.db.refresh(opt_in)
         return opt_in
@@ -247,4 +281,37 @@ class ConsentService:
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
+
+    def _record_audit(
+        self,
+        *,
+        org_id,
+        contact_id,
+        opt_in: ContactChannelOptIn,
+        channel: str,
+        channel_address: str,
+        status: OptInStatusEnum,
+        source: str,
+        agent: str,
+        request_ip: Optional[str],
+        evidence_uri: Optional[str],
+        proof_hash: Optional[str],
+        context: Optional[Dict[str, Any]],
+    ) -> None:
+        audit_entry = ContactConsentAudit(
+            org_id=org_id,
+            contact_id=contact_id,
+            opt_in=opt_in,
+            channel=channel,
+            channel_address=channel_address,
+            status=status,
+            source=source,
+            agent=agent,
+            request_ip=request_ip,
+            evidence_uri=evidence_uri,
+            proof_hash=proof_hash,
+            context=dict(context) if context else None,
+        )
+
+        self.db.add(audit_entry)
 
