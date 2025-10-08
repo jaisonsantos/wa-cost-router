@@ -13,14 +13,14 @@ DC ?= docker compose
 endif
 
 help: ## Show this help message
-@echo "Usage: make [target]"
-@echo ""
-@echo "Targets:"
-@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
-@echo ""
-@echo "Sandbox:"
-@echo "  SANDBOX_PROVIDERS=true (default) evita chamadas HTTP externas nos conectores."
-@echo "  Ajuste SANDBOX_LATENCY_MS e SANDBOX_FAILURE_RATE para simular cenários específicos."
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
+	@echo ""
+	@echo "Sandbox:"
+	@echo "  SANDBOX_PROVIDERS=true (default) evita chamadas HTTP externas nos conectores."
+	@echo "  Ajuste SANDBOX_LATENCY_MS e SANDBOX_FAILURE_RATE para simular cenários específicos."
 
 install: ## Install frontend dependencies (local npm)
 	npm install
@@ -155,9 +155,9 @@ migrate: ## Run Alembic migrations
 
 makemigration: ## Create a new Alembic revision (usage: make makemigration name=add-table)
 	@if [ -z "$(name)" ]; then \
-            echo "Missing migration name. Use: make makemigration name=<slug>"; \
-            exit 1; \
-        fi
+	    echo "Missing migration name. Use: make makemigration name=<slug>"; \
+	    exit 1; \
+	fi
 	$(DC) run --rm api alembic revision -m "$(name)"
 
 seed: ## Seed demo data (organizations, jobs)
