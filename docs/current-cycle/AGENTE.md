@@ -3,19 +3,28 @@
 
 ## 1. Resumo Executivo
 
-- **Situação atual**: MVP endurecido para piloto interno com os principais gaps fechados.
+- **Status do MVP**: endurecido para piloto interno, mas ainda não atinge 100% das metas definidas para o piloto externo.
   - APIs de providers e motor de roteamento agora respeitam `org_id` em todas as consultas.
-  - Credenciais de provedores passam a ser criptografadas em repouso (Fernet) e migration 002 cobre dados existentes.
-  - Endpoints de mensagens entregam contratos alinhados ao frontend (`is_configured`, `provider_name`, custos acumulados).
-  - `GET /rates` passou a exigir autenticação, eliminando vazamento público.
-
-- **Pendências para go-live externo**: mapeamento multi-tenant do webhook WhatsApp, sanitização de payloads/PII e proteção de `/admin/metrics`. Também é necessário substituir o seed baseado em `create_all` por migrations completas.
+  - Credenciais de provedores passam a ser criptografadas em repouso (Fernet) e a migration 002 cobre dados existentes.
+  - Endpoints de mensagens alinharam contratos com o frontend (`is_configured`, `provider_name`, custos acumulados).
+  - `GET /rates` agora exige autenticação, eliminando vazamento público.
+- **Pendências críticas para 100% das metas**:
+  - Mapeamento multi-tenant do webhook WhatsApp e sanitização de payloads/PII continuam bloqueando o piloto externo.
+  - O endpoint `/admin/metrics` segue sem proteção; circuito de provedores e rate limiting multicanal ainda não foram validados.
+  - Seeds ainda dependem de `create_all`; é necessário concluir a migração para `alembic upgrade` + `seed` em sequência.
 - **Matriz de rastreabilidade**: consulte [`USE_CASE_TRACEABILITY`](./USE_CASE_TRACEABILITY.md) para acompanhar status dos casos de uso UC-01 a UC-04 e seus vínculos com backlog e roadmap.
 
 ### Estado em 2025-10-08
 - O MVP continua bloqueado para o piloto externo porque o webhook WhatsApp ainda não está multi-tenant, mantendo o item crítico [`20251006-webhook-multi-tenant`](../backlog/20251006-webhook-multi-tenant.md) aberto.
 - As salvaguardas de conformidade seguem pendentes: sanitização de payloads e logs ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)) e proteção do endpoint de métricas administrativas ([`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md)).
 - A resiliência multicanal não está validada; o fallback automático depende do circuito de provedores [`20251006-circuit-breaker`](../backlog/20251006-circuit-breaker.md) e o frontend ainda não expõe indicadores multicanal alinhados ao backlog [`20250210-analytics-dashboard-sync`](../backlog/20250210-analytics-dashboard-sync.md).
+
+### Próximos passos herdados
+
+| Fonte | Referência | Como prosseguir |
+| --- | --- | --- |
+| Plano de implementação | [`NEXT_IMPLEMENTATION_PLAN.md`](./NEXT_IMPLEMENTATION_PLAN.md) | Executar as tarefas "Next Up" priorizando hardening multi-tenant e ajustes de contratos.
+| Roadmap revisado | [`README.md`](./README.md) | Sincronizar entregas com o roadmap vigente e reavaliar riscos antes de abrir o piloto externo.
 
 ## 2. Mapa do Repositório
 
@@ -58,75 +67,51 @@
 
 ## 3. Inventário de Endpoints
 
-### POST `/messages/send`
-- **Auth**: Bearer.
-- **Request**: `idempotency_key`, `to_number`, `template_id`, `template_category`, `variables`, `country_iso?`.  
-- **Response**: `job_id`, `status`, `provider_used?`, `estimated_cost?`, `message`.  
-- **Notas**: grava `MessageJob`, `DeliveryAttempt`, `CostRecord` (`price_table_version="v1"`). Sem validação E.164; `variables` e `provider_response` ficam armazenados.
+### Endpoints prototipados (MVP)
 
+| Endpoint | Cobertura atual | Lacunas conhecidas |
+| --- | --- | --- |
+| `POST /messages/send` | Autenticado, grava `MessageJob`, `DeliveryAttempt` e `CostRecord` com `price_table_version="v1"`. | Falta validação E.164 e sanitização dos campos `variables`/`provider_response` (PII exposta). |
+| `GET /messages/jobs` | Lista jobs com `template_category`, `total_cost_minor` e filtros por status. | Retorno limitado a 100 itens; contratos ainda precisam de revisão com a SPA. |
+| `GET /messages/jobs/{job_id}` | Devolve tentativas com `provider_name`, `attempt.id` e custos agregados. | Erros retornam texto bruto do provedor. |
+| `POST /rules` / `PATCH /rules/{id}` / `POST /rules/{id}/toggle` | CRUD funcional; toggle retorna `{is_enabled}`. | Atualização exige payload completo; falta auditoria de mudanças. |
+| `POST /rules/simulate-advanced` | Calcula estimativas `total_baseline/total_optimized`. | Contrato diverge do frontend (`baseline_cost`, `optimized_cost`, `total_savings`, `provider_comparison`). |
+| `GET /reports/dashboard-metrics` | Disponibiliza métricas agregadas (`total_messages`, `saved_minor`, etc.). | Requer `MessageEvent` externo; sem baseline real sem ingestão automática. |
+| `GET /reports/provider-metrics` | Exibe performance por provedor. | Falta particionamento por org quando novos providers forem inseridos. |
+| `GET /providers` / `POST /providers/credentials` | Lista providers e salva credenciais criptografadas (Fernet). | Health-checks ainda dependem de credenciais hardcoded para demo. |
+| `GET /rates` | Autenticação obrigatória e ordenação por `effective_from`. | Tarifas ainda globais, sem `org_id`. |
+| `POST /integrations/wa/connections` | Persiste tokens WA criptografados. | Sem rotação/expiração automática. |
 
-- **cURL**:
-  ```bash
-  curl -X POST http://localhost:8000/messages/send \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    -d '{"idempotency_key":"demo-001","to_number":"+5511999999999","template_id":"welcome","template_category":"marketing","variables":{}}'
-  ```
+### Endpoints pendentes ou incompletos
 
-### GET `/messages/jobs`
-- **Resposta**: `MessageJob[]` (lista direta com `template_category`, `total_cost_minor`).
-- **Notas**: filtragem por status valida enum; retorna até 100 itens ordenados por `created_at`.
+| Endpoint/fluxo | Status | Impacto |
+| --- | --- | --- |
+| `POST /integrations/wa/webhook` | `org_id` hardcoded; sem roteamento multi-tenant. | Bloqueia o piloto externo (item [`20251006-webhook-multi-tenant`](../backlog/20251006-webhook-multi-tenant.md)). |
+| `/admin/metrics` | Público, sem autenticação ou RBAC. | Exposição de métricas sensíveis até que [`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md) seja concluído. |
+| Rate limiting por tenant | Não implementado. | Risco de abuso e instabilidade enquanto [`20251006-circuit-breaker`](../backlog/20251006-circuit-breaker.md) estiver aberto. |
+| Sanitização de payloads/logs | Não implementada. | Requisito de conformidade pendente ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)). |
 
+### Páginas prototipadas (SPA)
 
+| Página | Status atual | Observações |
+| --- | --- | --- |
+| Login / Register | Fluxos básicos prontos com consumo das APIs de autenticação. | Falta hardening de UX (tratamento de erro, políticas de senha). |
+| Dashboard | Exibe cards de métricas conforme `GET /reports/dashboard-metrics`. | Indicadores multicanal ainda mockados. |
+| Messages | Lista jobs e detalhes usando `GET /messages/jobs` e `GET /messages/jobs/{job_id}`. | Falta alinhamento de contrato para campos adicionais e filtros avançados. |
+| Providers | CRUD completo para cadastro e health-check. | Tela ainda assume um único tenant. |
+| Rules | Editor de regras com fallback chain. | Não registra histórico de alterações nem simulações persistidas. |
+| Reports | Consome métricas agregadas dos endpoints de relatórios. | Gráficos não refletem dados multicanal reais. |
+| Settings | Ajustes gerais e tokens. | RBAC e branding white-label não estão expostos. |
+| NotFound / Index | Fluxos básicos de roteamento. | Sem customização por org. |
 
+### Páginas e fluxos pendentes
 
-### GET `/messages/jobs/{job_id}`
-- **Resposta**: dados do job + tentativas com `provider_name`, `attempt.id`, custos agregados.
-- **Notas**: tentativas ordenadas por `attempt_number`; inclui `error_message` quando presente.
-
-### GET `/reports/dashboard-metrics`
-- **Resposta**: `total_messages`, `total_cost_minor`, `baseline_cost_minor`, `saved_minor`, `success_rate`, `avg_latency_ms`, `top_countries`, `top_templates`, `alerts`, `recommendations`. Depende de `MessageEvent` populado externamente.
-
-
-
-### GET `/reports/provider-metrics`
-- **Resposta**: lista de `{provider_id,name,total_sent,success_rate,avg_latency_ms,total_cost_minor}`.
-
-
-
-### POST `/rules/simulate-advanced`
-- **Request**: `{countries[], volumes{}, category}`.  
-- **Resposta**: `{total_baseline,total_optimized,total_saved,breakdown[],recommended_route{}}`.  
-- **Gap**: UI usa `baseline_cost`, `optimized_cost`, `total_savings`, `provider_comparison`. Ajustar contrato.
-
-
-
-
-### POST `/rules`, PATCH `/rules/{id}`, POST `/rules/{id}/toggle`
-- CRUD básico; update requer payload completo; toggle retorna `{is_enabled}`.
-
-
-
-### POST `/providers/credentials`
-- **Request**: `provider_id`, `credentials` (JSON). Valida `org_id` do provider e armazena payload criptografado (Fernet).
-- **Resposta**: `{status:"credentials_saved"}`.
-
-
-
-### GET `/providers`
-- **Resposta**: `[ {id,name,type,status,has_credentials,is_configured} ]`.
-- **Saúde**: `POST /providers/{id}/health` valida `org_id` e descriptografa credenciais antes do teste.
-
-
-
-### GET `/rates`
-- **Auth obrigatório**; lista até 100 tarifas ordenadas por `effective_from` (sem escopo por org ainda).
-
-
-
-### Integrações
-- `POST /integrations/wa/connections` armazena token com Fernet.  
-- `POST /integrations/wa/webhook` grava `MessageEvent` com org hardcoded.
+| Página/fluxo | Status | Dependências |
+| --- | --- | --- |
+| Branding/white-label | Não iniciado. | Depende do épico de governança e do backlog [`20250210-worker-offload`](../backlog/20250210-worker-offload.md). |
+| RBAC por tenant / gestão de usuários | Não iniciado. | Bloqueado pela definição de papéis no roadmap do ciclo e pelo hardening de autenticação. |
+| Indicadores multicanal em tempo real | Parcial (mock). | Necessita concluir [`20250210-analytics-dashboard-sync`](../backlog/20250210-analytics-dashboard-sync.md) e instrumentar circuit breaker. |
+| Monitoramento de custos avançados | Não iniciado. | Depende da ingestão automática de baseline e trilhas de auditoria de custos. |
 
 
 
