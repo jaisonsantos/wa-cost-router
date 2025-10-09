@@ -15,6 +15,11 @@ import {
   ProviderHealth,
   ProviderMetric,
   RateEntry,
+  ContactListResponse,
+  ContactConsentHistoryResponse,
+  Contact,
+  OptInStatus,
+  ContactStatus,
   Rule,
   RuleCreatePayload,
   RuleUpdatePayload,
@@ -204,6 +209,63 @@ class ApiClient {
     return this.request<ProviderHealth>(`/providers/${providerId}/health`, {
       method: "POST",
     });
+  }
+
+  // Contacts
+  async getContacts(params: {
+    limit?: number;
+    offset?: number;
+    status?: ContactStatus;
+    channel?: string;
+    opt_in_status?: OptInStatus[];
+    segment_id?: string[];
+    segment_slug?: string[];
+    channel_address?: string;
+  } = {}): Promise<ContactListResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params.limit !== undefined) {
+      searchParams.append("limit", params.limit.toString());
+    }
+
+    if (params.offset !== undefined) {
+      searchParams.append("offset", params.offset.toString());
+    }
+
+    if (params.status) {
+      searchParams.append("status", params.status);
+    }
+
+    if (params.channel) {
+      searchParams.append("channel", params.channel);
+    }
+
+    if (params.opt_in_status?.length) {
+      params.opt_in_status.forEach((status) => searchParams.append("opt_in_status", status));
+    }
+
+    if (params.segment_id?.length) {
+      params.segment_id.forEach((segmentId) => searchParams.append("segment_id", segmentId));
+    }
+
+    if (params.segment_slug?.length) {
+      params.segment_slug.forEach((segmentSlug) => searchParams.append("segment_slug", segmentSlug));
+    }
+
+    if (params.channel_address) {
+      searchParams.append("channel_address", params.channel_address);
+    }
+
+    const query = searchParams.toString();
+    return this.request<ContactListResponse>(`/contacts${query ? `?${query}` : ""}`);
+  }
+
+  async getContact(contactId: string): Promise<Contact> {
+    return this.request<Contact>(`/contacts/${contactId}`);
+  }
+
+  async getContactConsentHistory(contactId: string): Promise<ContactConsentHistoryResponse> {
+    return this.request<ContactConsentHistoryResponse>(`/contacts/${contactId}/consents/history`);
   }
 
   // Messages
