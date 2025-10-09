@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import (
@@ -36,6 +37,8 @@ from app.models.models import (
 from app.core.normalization import normalize_international_phone, strip_to_none
 from app.services.contacts import ContactRepository, enqueue_contact_import
 from app.services.storage import TemporaryObjectStorage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -120,35 +123,82 @@ def _coerce_contact_status(value: Any) -> ContactStatusEnum:
     return ContactStatusEnum.active
 
 
+def _safe_uuid(value: Any, fallback: UUID) -> UUID:
+    """Return a UUID parsed from ``value`` or a fallback placeholder."""
+
+    if isinstance(value, UUID):
+        return value
+
+    if value is None:
+        return fallback
+
+    try:
+        return UUID(str(value))
+    except Exception:  # pragma: no cover - defensive parsing
+        return fallback
+
+
+def _fallback_contact(contact: Contact) -> ContactResponse:
+    """Return a minimal payload when serialization raises an unexpected error."""
+
+    now = datetime.now(timezone.utc)
+    contact_id = _safe_uuid(getattr(contact, "id", None), uuid4())
+    org_id = _safe_uuid(getattr(contact, "org_id", None), UUID(int=0))
+
+    return ContactResponse.model_construct(
+        id=contact_id,
+        org_id=org_id,
+        external_id=None,
+        full_name=None,
+        first_name=None,
+        last_name=None,
+        email=None,
+        phone=None,
+        status=ContactStatusEnum.active,
+        attributes=None,
+        source="manual",
+        source_metadata=None,
+        proof_hash=None,
+        created_at=_coerce_datetime(getattr(contact, "created_at", now)),
+        updated_at=_coerce_datetime(getattr(contact, "updated_at", now)),
+    )
+
+
 def _serialize_contact(contact: Contact) -> ContactResponse:
     """Convert a SQLAlchemy contact model into the public response schema."""
 
-    raw_payload = {
-        "id": contact.id,
-        "org_id": contact.org_id,
-        "external_id": _coerce_optional_string(getattr(contact, "external_id", None)),
-        "full_name": _coerce_optional_string(getattr(contact, "full_name", None)),
-        "first_name": _coerce_optional_string(getattr(contact, "first_name", None)),
-        "last_name": _coerce_optional_string(getattr(contact, "last_name", None)),
-        "email": _sanitize_email(getattr(contact, "email", None)),
-        "phone": _sanitize_phone(getattr(contact, "phone", None)),
-        "status": _coerce_contact_status(getattr(contact, "status", None)),
-        "attributes": _as_optional_dict(getattr(contact, "attributes", None)),
-        "source": _normalize_source(getattr(contact, "source", None)),
-        "source_metadata": _as_optional_dict(getattr(contact, "source_metadata", None)),
-        "proof_hash": _coerce_optional_string(getattr(contact, "proof_hash", None)),
-        "created_at": _coerce_datetime(getattr(contact, "created_at", None)),
-        "updated_at": _coerce_datetime(getattr(contact, "updated_at", None)),
-    }
-
     try:
-        return ContactResponse.model_validate(raw_payload)
-    except ValidationError:
-        # Legacy datasets can still surface unexpected shapes that bypass the
-        # sanitizers above. Falling back to ``model_construct`` allows the API
-        # to return a best-effort payload instead of bubbling a 500 response
-        # during CI executions while we continue hardening upstream data flows.
-        return ContactResponse.model_construct(**raw_payload)
+        raw_payload = {
+            "id": contact.id,
+            "org_id": contact.org_id,
+            "external_id": _coerce_optional_string(getattr(contact, "external_id", None)),
+            "full_name": _coerce_optional_string(getattr(contact, "full_name", None)),
+            "first_name": _coerce_optional_string(getattr(contact, "first_name", None)),
+            "last_name": _coerce_optional_string(getattr(contact, "last_name", None)),
+            "email": _sanitize_email(getattr(contact, "email", None)),
+            "phone": _sanitize_phone(getattr(contact, "phone", None)),
+            "status": _coerce_contact_status(getattr(contact, "status", None)),
+            "attributes": _as_optional_dict(getattr(contact, "attributes", None)),
+            "source": _normalize_source(getattr(contact, "source", None)),
+            "source_metadata": _as_optional_dict(getattr(contact, "source_metadata", None)),
+            "proof_hash": _coerce_optional_string(getattr(contact, "proof_hash", None)),
+            "created_at": _coerce_datetime(getattr(contact, "created_at", None)),
+            "updated_at": _coerce_datetime(getattr(contact, "updated_at", None)),
+        }
+
+        try:
+            return ContactResponse.model_validate(raw_payload)
+        except ValidationError:
+            # Legacy datasets can still surface unexpected shapes that bypass the
+            # sanitizers above. Falling back to ``model_construct`` allows the API
+            # to return a best-effort payload instead of bubbling a 500 response
+            # during CI executions while we continue hardening upstream data flows.
+            return ContactResponse.model_construct(**raw_payload)
+    except Exception:  # pragma: no cover - defensive guard
+        logger.exception(
+            "Failed to serialize contact payload", extra={"contact_id": getattr(contact, "id", None)}
+        )
+        return _fallback_contact(contact)
 
 
 class ContactBase(BaseModel):

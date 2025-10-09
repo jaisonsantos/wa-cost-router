@@ -150,3 +150,46 @@ def test_serialize_policy_with_invalid_payload_returns_defaults():
     assert isinstance(serialized, SegmentPolicyResponse)
     assert serialized.limits.max_daily_messages is None
     assert serialized.opt_out.channels == []
+
+
+def test_serialize_contact_handles_unexpected_exception(monkeypatch):
+    contact = Contact(
+        id=uuid.uuid4(),
+        org_id=uuid.uuid4(),
+        status=ContactStatusEnum.active,
+        created_at=datetime(2024, 5, 1, tzinfo=timezone.utc),
+        updated_at=datetime(2024, 5, 2, tzinfo=timezone.utc),
+    )
+
+    def _raise(*args, **kwargs):  # pragma: no cover - executed during test
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("app.api.routes.contacts._sanitize_email", _raise)
+
+    serialized = _serialize_contact(contact)
+
+    assert serialized.email is None
+    assert serialized.status == ContactStatusEnum.active
+    assert serialized.source == "manual"
+
+
+def test_serialize_segment_handles_unexpected_exception(monkeypatch):
+    segment = ContactSegment(
+        id=uuid.uuid4(),
+        org_id=uuid.uuid4(),
+        slug="fallback-test",
+        name="Fallback Test",
+        created_at=datetime(2024, 6, 1, tzinfo=timezone.utc),
+        updated_at=datetime(2024, 6, 2, tzinfo=timezone.utc),
+    )
+
+    def _raise(*args, **kwargs):  # pragma: no cover - executed during test
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("app.api.routes.contact_segments._normalize_name", _raise)
+
+    serialized = _serialize_segment(segment)
+
+    assert serialized.name.startswith("segment-")
+    assert serialized.slug.startswith("segment-")
+    assert serialized.policy is None
