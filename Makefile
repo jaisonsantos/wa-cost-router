@@ -1,7 +1,10 @@
 .PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web \
-	lint lint-fix lint-backend frontend-dev install migrate seed seed-providers clean \
-	shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env \
-	ci ci-backend ci-frontend ci-e2e ci-pipeline test-backend
+        lint lint-fix lint-backend frontend-dev install migrate seed seed-providers clean \
+        shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env \
+        ci ci-backend ci-frontend ci-e2e ci-pipeline test-backend
+
+export RATE_LIMIT_MESSAGES_PER_MIN ?= 120
+export RATE_LIMIT_LOGIN_PER_MIN ?= 20
 
 # Prefer the standalone docker-compose binary when available and fall back to
 # the Docker CLI plugin (`docker compose`). This mirrors the default GitHub

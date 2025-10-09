@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+import fakeredis
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -29,6 +30,7 @@ from app.core.config import settings  # noqa: E402
 from app.core.database import Base, get_db  # noqa: E402
 from app.core.security import encrypt_credentials  # noqa: E402
 from app.main import app  # noqa: E402
+from app.core.rate_limiter import RateLimiter, get_rate_limiter  # noqa: E402
 from app.models.models import (  # noqa: E402
     Contact,
     ContactChannelOptIn,
@@ -89,8 +91,15 @@ def client(db_session, monkeypatch):
         finally:
             pass
 
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    limiter = RateLimiter(fake, key_prefix=f"messages-{org_id}")
+
+    def override_rate_limiter():
+        return limiter
+
     app.dependency_overrides[get_current_user] = override_current_user
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_rate_limiter] = override_rate_limiter
 
     monkeypatch.setattr(settings, "SANDBOX_PROVIDERS", True)
     monkeypatch.setattr(settings, "SANDBOX_LATENCY_MS", 0)
@@ -101,6 +110,7 @@ def client(db_session, monkeypatch):
 
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_rate_limiter, None)
 
 
 DEFAULT_NUMBER = "+5511999999999"
@@ -172,6 +182,54 @@ def _bootstrap_routing_stack(db_session, org_id, *, to_number: str = DEFAULT_NUM
     db_session.commit()
 
     return provider, contact
+
+
+def test_send_message_enforces_rate_limit(client, db_session, monkeypatch):
+    test_client, org_id = client
+
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    limiter = RateLimiter(fake, key_prefix="messages-test")
+
+    def override_rate_limiter():
+        return limiter
+
+    app.dependency_overrides[get_rate_limiter] = override_rate_limiter
+    monkeypatch.setattr(settings, "RATE_LIMIT_MESSAGES_PER_MIN", 2)
+
+    try:
+        _bootstrap_routing_stack(db_session, org_id)
+
+        for attempt in range(2):
+            response = test_client.post(
+                "/messages/send",
+                json={
+                    "idempotency_key": f"rate-limit-{attempt}",
+                    "to_number": DEFAULT_NUMBER,
+                    "template_id": "welcome",
+                    "template_category": "MARKETING",
+                    "variables": {"body_params": ["John"]},
+                },
+            )
+            assert response.status_code == 200
+            assert response.headers["X-RateLimit-Remaining"] in {"1", "0"}
+
+        response = test_client.post(
+            "/messages/send",
+            json={
+                "idempotency_key": "rate-limit-final",
+                "to_number": DEFAULT_NUMBER,
+                "template_id": "welcome",
+                "template_category": "MARKETING",
+                "variables": {"body_params": ["John"]},
+            },
+        )
+
+        assert response.status_code == 429
+        assert response.headers["Retry-After"].isdigit()
+        assert response.headers["X-RateLimit-Remaining"] == "0"
+        assert response.json()["detail"].startswith("Rate limit exceeded")
+    finally:
+        app.dependency_overrides.pop(get_rate_limiter, None)
 
 
 def test_send_message_rejects_invalid_to_number(client):

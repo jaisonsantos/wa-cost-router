@@ -17,6 +17,7 @@ segredos no GitHub:
 | `WA_APP_SECRET` | Assinatura dos callbacks WhatsApp. | Reutiliza o valor fake de desenvolvimento quando não há webhook real. |
 | `STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` | Placeholders para integrações futuras. | Pode usar os valores fake do `.env.example` até que billing esteja ativo. |
 | `SMTP_HOST` e `SMTP_PORT` | Permitem enviar emails nos cenários de teste. | Mantêm apontamento para `mailhog`. |
+| `RATE_LIMIT_MESSAGES_PER_MIN` / `RATE_LIMIT_LOGIN_PER_MIN` | Controlam os limites de requisições por minuto utilizados nos testes automatizados. | Defaults exportados pelo workflow (`120` e `20`), ajustáveis conforme necessidade. |
 
 Os valores `DATABASE_URL`, `REDIS_URL` e `VITE_API_BASE` já são definidos pelo próprio workflow ao usar `docker-compose`, mas podem
 ser sobrescritos com secrets caso o pipeline aponte para infraestrutura gerenciada.

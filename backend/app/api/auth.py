@@ -1,15 +1,24 @@
 import hashlib
+import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
 from email_validator import EmailNotValidError, validate_email
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token
+from app.core.rate_limiter import (
+    RateLimitExceeded,
+    RateLimitStatus,
+    RateLimiter,
+    get_rate_limiter,
+)
 from app.models.models import (
     Contact,
     ContactChannelOptIn,
@@ -61,6 +70,7 @@ def _normalize_email(value: str) -> str:
         raise ValueError(str(exc)) from exc
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _bootstrap_demo_contact(db: Session, org_id) -> None:
@@ -160,6 +170,68 @@ ROLE_DEFAULT_PERMISSIONS: dict[RoleEnum, list[str]] = {
 }
 
 
+@dataclass
+class LoginRateLimitContext:
+    db: Session
+    user: User | None
+    org_user: OrganizationUser | None
+    rate_status: RateLimitStatus
+
+
+def _rate_limit_login(
+    req: "LoginRequest",
+    response: Response,
+    limiter: RateLimiter = Depends(get_rate_limiter),
+    db: Session = Depends(get_db),
+) -> LoginRateLimitContext:
+    scope = "auth_login"
+    normalized_email = req.email
+
+    user = db.query(User).filter(User.email == normalized_email).first()
+    org_user: OrganizationUser | None = None
+
+    if user:
+        org_user = (
+            db.query(OrganizationUser)
+            .filter(OrganizationUser.user_id == user.id)
+            .first()
+        )
+        identifier = str(org_user.org_id) if org_user else f"user:{user.id}"
+    else:
+        identifier = f"email:{hashlib.sha256(normalized_email.encode()).hexdigest()[:16]}"
+
+    try:
+        status = limiter.hit(
+            scope,
+            identifier,
+            limit=settings.RATE_LIMIT_LOGIN_PER_MIN,
+            ttl_seconds=60,
+        )
+    except RateLimitExceeded as exc:
+        logger.warning(
+            "Rate limit exceeded for login",
+            extra={
+                "event": "rate_limit_exceeded",
+                "scope": scope,
+                "identifier": identifier,
+                "email": normalized_email,
+                "retry_after": exc.retry_after,
+                "limit": exc.limit,
+            },
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded for login",
+            headers={
+                "Retry-After": str(exc.retry_after),
+                "X-RateLimit-Remaining": "0",
+            },
+        ) from exc
+
+    response.headers["X-RateLimit-Remaining"] = str(status.remaining)
+    return LoginRateLimitContext(db=db, user=user, org_user=org_user, rate_status=status)
+
+
 def _build_token_claims(user_id: UUID, org_id: UUID, role: RoleEnum) -> dict[str, object]:
     """Generate JWT claims embedding permission scopes for the given role."""
 
@@ -201,16 +273,27 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     return TokenResponse(access_token=token)
 
 @router.post("/login", response_model=TokenResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == req.email).first()
+def login(
+    req: LoginRequest,
+    context: LoginRateLimitContext = Depends(_rate_limit_login),
+):
+    db = context.db
+    user = context.user
+
     if not user or not verify_password(req.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
     # Get user's first org
-    org_user = db.query(OrganizationUser).filter(OrganizationUser.user_id == user.id).first()
+    org_user = context.org_user
+    if org_user is None:
+        org_user = (
+            db.query(OrganizationUser)
+            .filter(OrganizationUser.user_id == user.id)
+            .first()
+        )
     if not org_user:
         raise HTTPException(status_code=400, detail="User not linked to any organization")
-    
+
     token_claims = _build_token_claims(user.id, org_user.org_id, org_user.role)
     token = create_access_token(token_claims)
     return TokenResponse(access_token=token)

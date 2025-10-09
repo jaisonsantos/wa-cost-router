@@ -5,3 +5,4 @@ ruff
 mypy
 types-redis
 types-requests
+fakeredis==2.21.1

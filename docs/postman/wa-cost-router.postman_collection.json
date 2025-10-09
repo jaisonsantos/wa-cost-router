@@ -494,6 +494,92 @@
           }
         },
         {
+          "name": "Messages - Rate Limit Demo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  pm.test(\"Messages send exposes remaining quota\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"X-RateLimit-Remaining\")).to.exist;",
+                  "  });",
+                  "",
+                  "  if (pm.environment.get(\"rate_limit_demo_enabled\") !== \"true\") {",
+                  "    return;",
+                  "  }",
+                  "",
+                  "  const baseUrl = pm.environment.get(\"base_url\");",
+                  "  const authHeader = pm.request.headers.get(\"Authorization\");",
+                  "  const makePayload = () => ({",
+                  "    idempotency_key: `postman-rate-${Date.now()}-${Math.random().toString(16).slice(2)}`,",
+                  "    to_number: \"+5511999999999\",",
+                  "    template_id: \"welcome\",",
+                  "    template_category: \"MARKETING\",",
+                  "    variables: { body_params: [\"Rate Limit\"] }",
+                  "  });",
+                  "",
+                  "  const buildRequest = () => {",
+                  "    const headers = [",
+                  "      { key: \"Content-Type\", value: \"application/json\" }",
+                  "    ];",
+                  "    if (authHeader) {",
+                  "      headers.push({ key: \"Authorization\", value: authHeader });",
+                  "    }",
+                  "    return {",
+                  "      url: `${baseUrl}/messages/send`,",
+                  "      method: \"POST\",",
+                  "      header: headers,",
+                  "      body: { mode: \"raw\", raw: JSON.stringify(makePayload()) }",
+                  "    };",
+                  "  };",
+                  "",
+                  "  pm.sendRequest(buildRequest(), function (firstErr, firstRes) {",
+                  "    pm.test(\"Rate limit demo priming request succeeds\", function () {",
+                  "      pm.expect(firstErr).to.be.null;",
+                  "      pm.expect(firstRes.code).to.be.oneOf([200, 202]);",
+                  "    });",
+                  "",
+                  "    pm.sendRequest(buildRequest(), function (secondErr, secondRes) {",
+                  "      pm.test(\"Rate limit demo returns 429\", function () {",
+                  "        pm.expect(secondErr).to.be.null;",
+                  "        pm.expect(secondRes.code).to.eql(429);",
+                  "        pm.expect(secondRes.headers.get(\"Retry-After\")).to.match(/^[0-9]+$/);",
+                  "        pm.expect(secondRes.headers.get(\"X-RateLimit-Remaining\")).to.eql(\"0\");",
+                  "      });",
+                  "    });",
+                  "  });",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"postman-rate-demo-{{$timestamp}}\",\n  \"to_number\": \"+5511999999999\",\n  \"template_id\": \"welcome\",\n  \"template_category\": \"MARKETING\",\n  \"variables\": {\n    \"body_params\": [\"Rate Limit\"]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/messages/send",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "send"
+              ]
+            }
+          }
+        },
+        {
           "name": "Messages - Jobs",
           "request": {
             "method": "GET",

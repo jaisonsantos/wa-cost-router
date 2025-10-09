@@ -11,6 +11,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  RATE_LIMIT_MESSAGES_PER_MIN: 120
+  RATE_LIMIT_LOGIN_PER_MIN: 20
+
 jobs:
   backend:
     name: Backend

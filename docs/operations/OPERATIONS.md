@@ -22,6 +22,12 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 - `SANDBOX_FAILURE_RATE` aceita valores entre `0` e `1` para testar cenários de falha determinística; `0` garante que Newman termine sempre com sucesso.
 - Ao desativar o sandbox (`false`), forneça credenciais reais de provedores e valide limites de taxa/billing antes de expor em produção.
 
+## Rate limiting transacional
+
+- Variáveis `RATE_LIMIT_MESSAGES_PER_MIN` e `RATE_LIMIT_LOGIN_PER_MIN` definem o número de chamadas permitidas por minuto e são exportadas automaticamente pelos targets do `Makefile` (valores padrão: 120 e 20 respectivamente).
+- Ajuste temporariamente os limites para testes de carga ou demonstração (`RATE_LIMIT_MESSAGES_PER_MIN=2 make test-backend`).
+- Eventos de estouro são registrados com `event=rate_limit_exceeded` nos logs da API, permitindo integração futura com Prometheus/Alertmanager.
+
 ## Segredos do webhook WhatsApp
 
 - O secret usado para validar `X-Hub-Signature-256` fica armazenado criptografado em `wa_connection.webhook_secret_enc` (Fernet derivado de `APP_SECRET_KEY`).
@@ -37,6 +43,7 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
   2. `frontend` — instala dependências com `npm ci`, roda `npm run lint` e `npm run build`, publicando o artefato `frontend-dist` com a pasta `dist/`.
   3. `e2e` — depende dos jobs anteriores, sobe a stack com Docker Compose, reaproveita os seeds demo e executa os testes Postman/Newman (ver [guia](../postman/README.md)). O relatório JUnit (`newman-report.xml`) é enviado como artefato para inspeção.
 - **Depuração**: reexecute jobs individuais pelo GitHub (`Re-run failed jobs`) para validar correções rápidas. Para reproduzir localmente, utilize `make ci`, que encadeia `ci-backend`, `ci-frontend` e `ci-e2e` com os mesmos comandos do pipeline. Falhas no passo E2E geralmente aparecem no relatório Newman; baixe o artefato ou rode `make ci-e2e` para gerar um novo.
+- **Limites de taxa no CI**: o workflow exporta `RATE_LIMIT_MESSAGES_PER_MIN=120` e `RATE_LIMIT_LOGIN_PER_MIN=20` garantindo que a suíte Newman opere dentro do teto padrão; ajuste via secrets caso ambientes gerenciados exijam limites distintos.
 - **Referências**: detalhes de secrets, variáveis e troubleshooting ampliado em [CI avançado](./CI.md).
 
 ## Ordem de subida recomendada
@@ -71,6 +78,7 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 ## Checklist pré-deploy
 
 - ✅ Variáveis sensíveis definidas (`APP_SECRET_KEY`, `JWT_SECRET`, `DATABASE_URL`, `REDIS_URL`).
+- ✅ Limites de taxa revisados conforme necessidade (`RATE_LIMIT_MESSAGES_PER_MIN`, `RATE_LIMIT_LOGIN_PER_MIN`).
 - ✅ `make migrate` executado na release candidata.
 - ✅ `make postman-test` e smoke tests manuais (login, criar provider, enviar mensagem, consultar job).
 - ✅ Monitoramento Prometheus + logs centralizados configurados.
