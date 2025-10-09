@@ -1,7 +1,17 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "./ui/button";
-import { LayoutDashboard, FileText, Settings, Activity, LogOut, Satellite, MessageSquare, Users } from "lucide-react";
+import {
+  LayoutDashboard,
+  FileText,
+  Settings,
+  Activity,
+  LogOut,
+  Satellite,
+  MessageSquare,
+  Users,
+  Tags,
+} from "lucide-react";
 
 interface SimpleLayoutProps {
   children: React.ReactNode;
@@ -37,6 +47,16 @@ export default function SimpleLayout({ children }: SimpleLayoutProps) {
                 <Link to="/contacts">
                   <Users className="h-4 w-4 mr-2" />
                   Contatos
+                </Link>
+              </Button>
+              <Button
+                variant={location.pathname === "/segments" ? "default" : "ghost"}
+                size="sm"
+                asChild
+              >
+                <Link to="/segments">
+                  <Tags className="h-4 w-4 mr-2" />
+                  Segmentos
                 </Link>
               </Button>
               <Button
