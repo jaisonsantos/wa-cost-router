@@ -28,5 +28,10 @@ class Settings(BaseSettings):
     CRM_POLLING_INTERVAL_SECONDS: int = 300
     CRM_MAX_PAGE_SIZE: int = 100
 
+    OPT_IN_EMAIL_TEMPLATE_ID: str = "request-whatsapp-opt-in"
+    OPT_IN_MAX_ATTEMPTS: int = 3
+    OPT_IN_RETRY_MINUTES: int = 120
+    OPT_IN_WEBHOOK_TOKEN: str = "change-me-optin"
+
 
 settings = Settings()

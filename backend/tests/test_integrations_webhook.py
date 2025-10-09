@@ -3,6 +3,7 @@ import hmac
 import json
 import sys
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -28,8 +29,19 @@ def compile_uuid(element, compiler, **kw):  # pragma: no cover - compile hook
 from app.api.dependencies import get_current_user  # noqa: E402
 from app.core.database import Base, get_db  # noqa: E402
 from app.core.security import decrypt_token, encrypt_token  # noqa: E402
+from app.core.config import settings  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models.models import MessageEvent, Organization, WAConnection  # noqa: E402
+import app.api.opt_in as opt_in_module  # noqa: E402
+from app.models.models import (  # noqa: E402
+    Contact,
+    ContactChannelOptIn,
+    ContactOptInRequest,
+    MessageEvent,
+    OptInRequestStatusEnum,
+    Organization,
+    WAConnection,
+)
+from app.services.contacts import OptInRequestService  # noqa: E402
 
 TEST_ENGINE = create_engine(
     "sqlite://",
@@ -91,6 +103,31 @@ def _create_connection(db_session, *, verify_token="verify-token", phone_id="pho
     db_session.flush()
 
     return connection, secret
+
+
+def _create_opt_in_request(db_session):
+    org = Organization(id=uuid.uuid4(), name="Opt Org")
+    db_session.add(org)
+    db_session.flush()
+
+    contact = Contact(
+        org_id=org.id,
+        email="optin@example.com",
+        phone="+5511999999000",
+    )
+    db_session.add(contact)
+    db_session.commit()
+    db_session.refresh(contact)
+
+    service = OptInRequestService(db_session)
+    request = service.enqueue_request(
+        org_id=org.id,
+        contact_id=contact.id,
+        requested_channel="whatsapp",
+        requested_address=contact.phone,
+    )
+
+    return request, contact
 
 
 def test_webhook_verify_returns_challenge_for_valid_token(client, db_session):
@@ -207,6 +244,95 @@ def test_webhook_receive_ignores_events_with_invalid_signature(client, db_sessio
 
     assert response.status_code == 200
     assert response.json() == {"status": "ignored", "processed": 0}
+
+
+def test_opt_in_webhook_confirms_request(client, db_session, monkeypatch):
+    request_record, contact = _create_opt_in_request(db_session)
+    monkeypatch.setattr(settings, "OPT_IN_WEBHOOK_TOKEN", "unit-token")
+
+    payload = {
+        "request_id": str(request_record.id),
+        "org_id": str(contact.org_id),
+        "status": "confirmed",
+        "channel": "whatsapp",
+        "channel_address": contact.phone,
+        "agent": "email-provider",
+        "captured_at": datetime.utcnow().isoformat() + "Z",
+        "metadata": {"provider": "email"},
+    }
+
+    response = client.post(
+        "/opt-in/webhook",
+        json=payload,
+        headers={"X-Opt-In-Token": "unit-token"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "confirmed"
+
+    refreshed = db_session.get(ContactOptInRequest, request_record.id)
+    assert refreshed.status == OptInRequestStatusEnum.confirmed
+    assert refreshed.opt_in_id is not None
+    opt_in = db_session.get(ContactChannelOptIn, refreshed.opt_in_id)
+    assert opt_in is not None
+    assert opt_in.status.value == "granted"
+
+
+def test_opt_in_webhook_rejects_invalid_token(client, db_session, monkeypatch):
+    request_record, contact = _create_opt_in_request(db_session)
+    monkeypatch.setattr(settings, "OPT_IN_WEBHOOK_TOKEN", "expected-token")
+
+    payload = {
+        "request_id": str(request_record.id),
+        "org_id": str(contact.org_id),
+        "status": "confirmed",
+        "channel": "whatsapp",
+        "channel_address": contact.phone,
+    }
+
+    response = client.post(
+        "/opt-in/webhook",
+        json=payload,
+        headers={"X-Opt-In-Token": "wrong"},
+    )
+
+    assert response.status_code == 403
+    refreshed = db_session.get(ContactOptInRequest, request_record.id)
+    assert refreshed.status == OptInRequestStatusEnum.sent
+
+
+def test_opt_in_webhook_async_enqueues_job(client, db_session, monkeypatch):
+    request_record, contact = _create_opt_in_request(db_session)
+    monkeypatch.setattr(settings, "OPT_IN_WEBHOOK_TOKEN", "async-token")
+
+    enqueued = []
+
+    def fake_enqueue(request_id, payload):
+        enqueued.append((request_id, payload))
+
+    monkeypatch.setattr(opt_in_module, "enqueue_opt_in_confirmation", fake_enqueue)
+
+    payload = {
+        "request_id": str(request_record.id),
+        "org_id": str(contact.org_id),
+        "status": "confirmed",
+        "channel": "whatsapp",
+        "channel_address": contact.phone,
+    }
+
+    response = client.post(
+        "/opt-in/webhook",
+        params={"async": "true"},
+        json=payload,
+        headers={"X-Opt-In-Token": "async-token"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "enqueued"
+    assert enqueued
+    refreshed = db_session.get(ContactOptInRequest, request_record.id)
+    assert refreshed.status == OptInRequestStatusEnum.sent
     assert db_session.query(MessageEvent).count() == 0
 
 
