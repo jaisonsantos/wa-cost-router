@@ -49,6 +49,24 @@ def test_serialize_contact_coerces_missing_status(status_value, expected):
     assert serialized.status == expected
 
 
+def test_serialize_contact_discards_invalid_email_and_strings():
+    contact = Contact(
+        id=uuid.uuid4(),
+        org_id=uuid.uuid4(),
+        full_name={"unexpected": "value"},
+        email="invalid-email",
+        phone=12345,
+        created_at=datetime(2024, 3, 10, tzinfo=timezone.utc),
+        updated_at=datetime(2024, 3, 11, tzinfo=timezone.utc),
+    )
+
+    serialized = _serialize_contact(contact)
+
+    assert serialized.email is None
+    assert serialized.full_name is None
+    assert serialized.phone is None
+
+
 def test_serialize_segment_recovers_missing_slug_and_name():
     segment_id = uuid.uuid4()
     segment = ContactSegment(

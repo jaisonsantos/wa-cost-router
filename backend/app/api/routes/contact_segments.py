@@ -72,6 +72,15 @@ def _normalize_name(value: Any, *, fallback: str) -> str:
     return fallback
 
 
+def _coerce_optional_string(value: Any) -> str | None:
+    """Return a stripped string when possible, otherwise ``None``."""
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return None
+
+
 def _serialize_policy(policy: ContactSegmentPolicy | None) -> SegmentPolicyResponse | None:
     """Convert stored routing policies into the public response schema."""
 
@@ -99,11 +108,11 @@ def _serialize_segment(segment: ContactSegment) -> ContactSegmentResponse:
         "org_id": segment.org_id,
         "slug": normalized_slug,
         "name": normalized_name,
-        "description": segment.description,
+        "description": _coerce_optional_string(getattr(segment, "description", None)),
         "criteria": _as_optional_dict(getattr(segment, "criteria", None)),
         "source": _normalize_segment_source(getattr(segment, "source", None)),
         "source_metadata": _as_optional_dict(getattr(segment, "source_metadata", None)),
-        "proof_hash": getattr(segment, "proof_hash", None),
+        "proof_hash": _coerce_optional_string(getattr(segment, "proof_hash", None)),
         "created_at": _coerce_datetime(getattr(segment, "created_at", None)),
         "updated_at": _coerce_datetime(getattr(segment, "updated_at", None)),
         "policy": policy_model.model_dump() if policy_model else None,

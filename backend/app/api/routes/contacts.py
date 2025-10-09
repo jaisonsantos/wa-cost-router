@@ -8,7 +8,7 @@ from typing import Any, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -30,6 +30,44 @@ from app.services.contacts import ContactRepository, enqueue_contact_import
 from app.services.storage import TemporaryObjectStorage
 
 router = APIRouter()
+
+_email_adapter = TypeAdapter(EmailStr)
+
+
+def _coerce_optional_string(value: Any) -> str | None:
+    """Return a stripped string when possible, otherwise ``None``."""
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return None
+
+
+def _sanitize_phone(value: Any) -> str | None:
+    """Ensure phone numbers are returned as normalized strings when present."""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        return candidate or None
+    return None
+
+
+def _sanitize_email(value: Any) -> str | None:
+    """Return a valid email string or ``None`` when the stored value is invalid."""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if not candidate:
+            return None
+
+        try:
+            return _email_adapter.validate_python(candidate)
+        except (ValidationError, ValueError):
+            return None
+        except Exception:  # pragma: no cover - defensive catch for adapter internals
+            return None
+
+    return None
 
 
 def _as_optional_dict(value: Any) -> dict[str, Any] | None:
@@ -80,17 +118,17 @@ def _serialize_contact(contact: Contact) -> ContactResponse:
     raw_payload = {
         "id": contact.id,
         "org_id": contact.org_id,
-        "external_id": contact.external_id,
-        "full_name": contact.full_name,
-        "first_name": contact.first_name,
-        "last_name": contact.last_name,
-        "email": contact.email,
-        "phone": contact.phone,
+        "external_id": _coerce_optional_string(getattr(contact, "external_id", None)),
+        "full_name": _coerce_optional_string(getattr(contact, "full_name", None)),
+        "first_name": _coerce_optional_string(getattr(contact, "first_name", None)),
+        "last_name": _coerce_optional_string(getattr(contact, "last_name", None)),
+        "email": _sanitize_email(getattr(contact, "email", None)),
+        "phone": _sanitize_phone(getattr(contact, "phone", None)),
         "status": _coerce_contact_status(getattr(contact, "status", None)),
         "attributes": _as_optional_dict(getattr(contact, "attributes", None)),
         "source": _normalize_source(getattr(contact, "source", None)),
         "source_metadata": _as_optional_dict(getattr(contact, "source_metadata", None)),
-        "proof_hash": getattr(contact, "proof_hash", None),
+        "proof_hash": _coerce_optional_string(getattr(contact, "proof_hash", None)),
         "created_at": _coerce_datetime(getattr(contact, "created_at", None)),
         "updated_at": _coerce_datetime(getattr(contact, "updated_at", None)),
     }
