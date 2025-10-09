@@ -96,6 +96,89 @@ export interface Provider {
 
 export type ProviderCredentialInput = Record<string, unknown>;
 
+export type ContactStatus = "active" | "inactive" | "archived";
+
+export type OptInStatus = "granted" | "revoked" | "pending";
+
+export interface ContactOptIn {
+  id: string;
+  channel: string;
+  channel_address: string;
+  status: OptInStatus;
+  version: number;
+  captured_at: string;
+  source: string;
+  legal_basis?: string | null;
+  evidence_uri?: string | null;
+  proof_hash?: string | null;
+}
+
+export interface ContactSegmentSummary {
+  id: string;
+  name: string;
+  slug?: string;
+  description?: string | null;
+}
+
+export interface ContactNote {
+  id: string;
+  author: string;
+  content: string;
+  created_at: string;
+  updated_at?: string;
+  visibility?: "internal" | "shared";
+  tags?: string[];
+}
+
+export interface Contact {
+  id: string;
+  org_id: string;
+  external_id?: string | null;
+  full_name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  status: ContactStatus;
+  attributes?: Record<string, unknown> | null;
+  source: string;
+  source_metadata?: Record<string, unknown> | null;
+  proof_hash?: string | null;
+  created_at: string;
+  updated_at: string;
+  channel_opt_ins?: ContactOptIn[];
+  segments?: ContactSegmentSummary[];
+  notes?: ContactNote[];
+}
+
+export interface ContactListResponse {
+  items: Contact[];
+  limit: number;
+  offset: number;
+  count: number;
+}
+
+export interface ContactConsentAuditItem {
+  id: string;
+  opt_in_id?: string | null;
+  opt_in_version?: number | null;
+  channel: string;
+  channel_address: string;
+  status: OptInStatus;
+  source: string;
+  agent: string;
+  request_ip?: string | null;
+  recorded_at: string;
+  evidence_uri?: string | null;
+  proof_hash?: string | null;
+  context?: Record<string, unknown> | null;
+}
+
+export interface ContactConsentHistoryResponse {
+  items: ContactConsentAuditItem[];
+  count: number;
+}
+
 export interface ProviderHealth {
   provider_id: string;
   provider_name: string;
