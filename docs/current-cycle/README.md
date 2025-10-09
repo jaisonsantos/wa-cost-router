@@ -41,6 +41,21 @@ Outros comandos úteis:
 | **M4 — Sanitização e playbooks** | 30/10/2024 | Logs e payloads mascarados com playbooks atualizados. | Alinhamento segurança/compliance. |
 | **M5 — Beta HubSpot** | 08/11/2024 | Sincronização inicial de opt-ins/opt-outs com parceiros piloto. | Proteção de métricas administrativas ([`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md)). |
 
+## Objetivos, escopo e critérios de aceite compartilhados
+
+- **Objetivo principal:** finalizar o ciclo de contatos/opt-ins multi-tenant provendo catálogo unificado, governança de consentimento e importação auditável para o piloto externo.
+- **Escopo mínimo:**
+  - Migração controlada do catálogo (`contact_profile`), deduplicação por `org_id` e importação CSV com relatório de inconsistências.
+  - Versionamento de opt-ins com auditoria (`/contacts/{id}/consents`) e histórico exposto na SPA.
+  - Webhook WhatsApp multi-tenant com validação de opt-in antes de responder e sanitização de PII nos novos fluxos.
+  - Playbooks de conformidade atualizados, conector HubSpot em beta e métricas/observabilidade alinhadas.
+- **Critérios de aceite:**
+  1. `alembic upgrade` + `seed` executam sem intervenção manual e geram catálogo íntegro para múltiplas organizações.
+  2. Consentimentos ativos são idempotentes, rastreáveis e refletem as versões no endpoint de histórico.
+  3. Importações CSV produzem relatórios de erro assinados, atualizando `contact_import_job` e seeds históricos em `docs/history/<ciclo>/`.
+  4. Webhook WA rejeita automaticamente contatos sem opt-in registrado e registra auditoria (`contact_consent_audit`).
+  5. O [índice do backlog por caso de uso](../backlog/INDEX_BY_USE_CASE.md) sinaliza todos os cards UC-01/UC-02 como **P0 concluído** antes do encerramento do ciclo.
+
 ## Dependências e alinhamentos críticos
 
 - **Segurança (P0):** `20251006-sanitizacao-pii`, `20251006-proteger-admin-metrics` e `20251006-enforce-secret-strength` precisam estar concluídos para liberar o piloto externo.
