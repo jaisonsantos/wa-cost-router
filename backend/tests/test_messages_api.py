@@ -28,6 +28,7 @@ def compile_uuid(element, compiler, **kw):
 from app.api.dependencies import get_current_user  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.core.database import Base, get_db  # noqa: E402
+from app.core.circuit_breaker import CircuitBreakerStore  # noqa: E402
 from app.core.security import encrypt_credentials  # noqa: E402
 from app.main import app  # noqa: E402
 from app.core.rate_limiter import RateLimiter, get_rate_limiter  # noqa: E402
@@ -47,6 +48,7 @@ from app.models.models import (  # noqa: E402
     MessageJob,
 )
 from app.services.routing_engine import RoutingEngine  # noqa: E402
+import app.services.routing_engine as routing_engine_module  # noqa: E402
 import app.api.messages as messages_module  # noqa: E402
 
 
@@ -97,15 +99,29 @@ def client(db_session, monkeypatch):
     def override_rate_limiter():
         return limiter
 
+    circuit_fake = fakeredis.FakeRedis(decode_responses=True)
+    circuit_store = CircuitBreakerStore(
+        circuit_fake,
+        key_prefix=f"circuit-{org_id}",
+        threshold=1,
+        cooldown_seconds=5,
+    )
+
+    def override_circuit_breaker_store():
+        return circuit_store
+
     app.dependency_overrides[get_current_user] = override_current_user
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_rate_limiter] = override_rate_limiter
+    monkeypatch.setattr(messages_module, "get_circuit_breaker_store", override_circuit_breaker_store)
+    monkeypatch.setattr(routing_engine_module, "get_circuit_breaker_store", override_circuit_breaker_store)
 
     monkeypatch.setattr(settings, "SANDBOX_PROVIDERS", True)
     monkeypatch.setattr(settings, "SANDBOX_LATENCY_MS", 0)
     monkeypatch.setattr(settings, "SANDBOX_FAILURE_RATE", 0.0)
 
     with TestClient(app) as test_client:
+        test_client.circuit_breaker_store = circuit_store  # type: ignore[attr-defined]
         yield test_client, org_id
 
     app.dependency_overrides.pop(get_db, None)
@@ -547,4 +563,134 @@ def test_send_message_rolls_back_on_commit_error(client, db_session, monkeypatch
     payload = response.json()
     assert payload["status"] == "failed_final"
     assert payload["message"] == "Delivery orchestration error"
+
+
+def test_circuit_breaker_opens_and_triggers_fallback(client, db_session, monkeypatch):
+    test_client, org_id = client
+    breaker_store: CircuitBreakerStore = test_client.circuit_breaker_store  # type: ignore[attr-defined]
+    primary, _ = _bootstrap_routing_stack(db_session, org_id)
+
+    fallback = Provider(
+        org_id=org_id,
+        name="gupshup",
+        type="whatsapp",
+        status="active",
+    )
+    db_session.add(fallback)
+    db_session.flush()
+
+    fallback_credential = ProviderCredential(
+        org_id=org_id,
+        provider_id=fallback.id,
+        credentials_encrypted=encrypt_credentials({"api_key": "sandbox"}),
+    )
+    db_session.add(fallback_credential)
+
+    fallback_rate = RateCard(
+        provider_id=fallback.id,
+        effective_from=datetime.utcnow(),
+        source="test",
+        country_iso="BR",
+        category="MARKETING",
+        unit_cost_minor=120,
+        currency="USD",
+    )
+    db_session.add(fallback_rate)
+
+    rule = db_session.query(RoutingRule).filter(RoutingRule.org_id == org_id).first()
+    assert rule is not None
+    rule.actions_json = {
+        "primary_provider": str(primary.id),
+        "fallback_chain": [str(fallback.id)],
+    }
+    db_session.commit()
+
+    class FailingConnector:
+        def __init__(self, name: str, *_: object, **__: object) -> None:
+            self.name = name
+
+        async def send_message(self, **_: object) -> dict:
+            return {
+                "success": False,
+                "error_code": "500",
+                "error_message": "primary down",
+                "latency_ms": 5,
+                "response": {},
+            }
+
+    class SuccessfulConnector:
+        def __init__(self, name: str, *_: object, **__: object) -> None:
+            self.name = name
+
+        async def send_message(self, **_: object) -> dict:
+            return {
+                "success": True,
+                "provider_message_id": "fallback-1",
+                "latency_ms": 3,
+                "response": {},
+            }
+
+    def fake_connector(provider_name: str, credentials: dict, base_url: str | None = None):
+        if provider_name == primary.name:
+            return FailingConnector(provider_name, credentials, base_url)
+        return SuccessfulConnector(provider_name, credentials, base_url)
+
+    monkeypatch.setattr(messages_module, "get_connector", fake_connector)
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "circuit-fallback",
+            "to_number": DEFAULT_NUMBER,
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Jane"]},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "delivered_with_fallback"
+    assert payload["provider_used"] == fallback.name
+
+    primary_state = breaker_store.get_state(str(primary.id))
+    assert primary_state.state == "open"
+    fallback_state = breaker_store.get_state(str(fallback.id))
+    assert fallback_state.state == "closed"
+
+
+def test_circuit_breaker_resets_on_success(client, db_session, monkeypatch):
+    test_client, org_id = client
+    breaker_store: CircuitBreakerStore = test_client.circuit_breaker_store  # type: ignore[attr-defined]
+    provider, _ = _bootstrap_routing_stack(db_session, org_id)
+
+    class SuccessfulConnector:
+        def __init__(self, name: str, *_: object, **__: object) -> None:
+            self.name = name
+
+        async def send_message(self, **_: object) -> dict:
+            return {
+                "success": True,
+                "provider_message_id": "success-1",
+                "latency_ms": 2,
+                "response": {},
+            }
+
+    monkeypatch.setattr(messages_module, "get_connector", SuccessfulConnector)
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "circuit-success",
+            "to_number": DEFAULT_NUMBER,
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Jo"]},
+        },
+    )
+
+    assert response.status_code == 200
+    state = breaker_store.get_state(str(provider.id))
+    assert state.state == "closed"
+    assert state.failure_count == 0
 

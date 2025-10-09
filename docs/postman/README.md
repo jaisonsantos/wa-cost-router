@@ -64,6 +64,13 @@ Todos os requests foram configurados para funcionar em sequência via Newman, us
 3. Execute **Messages - Rate Limit Demo**: a primeira chamada confirma o header `X-RateLimit-Remaining`; as chamadas subsequentes feitas via script retornam `429` com `Retry-After` e `X-RateLimit-Remaining: 0`.
 4. Restaure os limites padrão removendo as variáveis ou definindo valores maiores antes de repetir o fluxo normal de mensagens.
 
+### Demonstração de circuit breaker (rota com fallback)
+
+1. Suba a API exportando valores baixos para abrir o circuito rapidamente: `CIRCUIT_BREAKER_THRESHOLD=1 SANDBOX_FAILURE_RATE=1 make dev`.
+2. No Postman, execute **Messages - Send** duas vezes com o mesmo `to_number`. A primeira chamada falhará no provedor principal; a segunda utilizará o fallback imediatamente.
+3. Consulte **Admin - Metrics** ou rode `docker compose exec redis redis-cli GET circuit:<provider_uuid>` para confirmar `state":"open"` e verifique os gauges `admin_circuit_breakers_open_total` / `messages_circuit_breaker_state{provider_id}`.
+4. Restaure `SANDBOX_FAILURE_RATE=0` e realize novo envio para fechar o circuito (estado volta para `closed`).
+
 ## Executando testes automatizados
 
 ```bash

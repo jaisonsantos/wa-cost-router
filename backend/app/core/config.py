@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     SANDBOX_LATENCY_MS: int = 100
     SANDBOX_FAILURE_RATE: float = 0.0
 
+    CIRCUIT_BREAKER_THRESHOLD: int = 3
+    CIRCUIT_BREAKER_COOLDOWN_SECONDS: int = 60
+
     CRM_WEBHOOK_SECRET: str = "change-me"
     CRM_POLLING_INTERVAL_SECONDS: int = 300
     CRM_MAX_PAGE_SIZE: int = 100

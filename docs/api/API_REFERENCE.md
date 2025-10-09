@@ -250,6 +250,13 @@ Agenda envio aplicando roteamento e fallback.
 - `403 Forbidden` – contato com opt-out registrado (gera enfileiramento de reconfirmação).
 - `429 Too Many Requests` – limite de envios por `org_id` excedido; inclui headers `Retry-After` e `X-RateLimit-Remaining: 0` para orientar o retry.
 
+**Circuit breaker & métricas**
+- Falhas consecutivas por provedor são persistidas em Redis (`circuit:{provider_id}`) com limiar configurável via `CIRCUIT_BREAKER_THRESHOLD` e cooldown `CIRCUIT_BREAKER_COOLDOWN_SECONDS`.
+- Estados `open` e `half-open` bloqueiam o provedor tanto no `RoutingEngine` quanto no fallback do envio, forçando o uso da cadeia restante.
+- Sucessos zeram o contador e fecham o circuito. Falhas registram logs estruturados e alimentam `messages_delivery_attempts_total{outcome="failure|exception|success|skipped_circuit"}`.
+- Métricas agregadas expostas em Prometheus: `messages_send_total` (status final), `messages_circuit_breaker_state{provider_id}` (0=closed,1=half-open,2=open).
+- Para simular falha em sandbox, ajuste `SANDBOX_FAILURE_RATE` ou force respostas de erro nos conectores; após atingir o limiar, observe o bloqueio na próxima seleção.
+
 ### `GET /messages/jobs`
 Lista até 100 jobs mais recentes. Filtros:
 - `status` (enum `queued`, `processing`, `delivered`, `failed_final`, `delivered_with_fallback`). Valores inválidos → `400`.
@@ -432,7 +439,7 @@ Headers: `X-Opt-In-Token` deve corresponder ao segredo configurado (`settings.OP
 Resposta `{"status": "ok"}` para monitoramento básico.
 
 ### `GET /admin/metrics`
-Exibe métricas Prometheus (`text/plain; version=0.0.4`). Cada chamada incrementa `app_requests_total`. **Importante**: rota ainda está pública; proteja-a antes de expor externamente.
+Exibe métricas Prometheus (`text/plain; version=0.0.4`). Cada chamada incrementa `app_requests_total` e `admin_metrics_scrapes_total`, atualiza `admin_metrics_last_scrape_timestamp` e reporta gauges `admin_circuit_breakers_open_total` / `admin_circuit_breakers_half_open_total`. **Importante**: rota ainda está pública; proteja-a antes de expor externamente.
 
 ## Recursos auxiliares
 

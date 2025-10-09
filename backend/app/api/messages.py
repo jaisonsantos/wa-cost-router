@@ -15,6 +15,11 @@ from app.api.dependencies import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import decrypt_credentials
+from app.core.circuit_breaker import (
+    CircuitBreakerStore,
+    CircuitState,
+    get_circuit_breaker_store,
+)
 from app.core.rate_limiter import (
     RateLimitExceeded,
     RateLimitStatus,
@@ -34,9 +39,28 @@ from app.services.contacts import OptInRequestService
 from app.services.provider_connectors import get_connector
 from app.services.routing import ContactOptOutError
 from app.services.routing_engine import RoutingEngine
+from prometheus_client import Counter, Gauge
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+MESSAGES_SEND_COUNTER = Counter(
+    "messages_send_total",
+    "Total de requisições /messages/send processadas",
+    labelnames=["status", "provider"],
+)
+
+DELIVERY_ATTEMPTS_COUNTER = Counter(
+    "messages_delivery_attempts_total",
+    "Total de tentativas de entrega por provedor",
+    labelnames=["provider_id", "provider", "outcome"],
+)
+
+CIRCUIT_STATE_GAUGE = Gauge(
+    "messages_circuit_breaker_state",
+    "Estado atual do circuito por provedor (0=closed,1=half-open,2=open)",
+    labelnames=["provider_id"],
+)
 
 
 @dataclass
@@ -199,7 +223,8 @@ async def send_message(
     db.refresh(job)
     
     # 4. Escolher provedor via motor de decisão
-    engine = RoutingEngine(db, current_user["org_id"])
+    circuit_breaker = get_circuit_breaker_store()
+    engine = RoutingEngine(db, current_user["org_id"], circuit_breaker=circuit_breaker)
     try:
         routing_decision = engine.select_provider(
             country_iso=country_iso,
@@ -285,6 +310,7 @@ async def send_message(
             data=data,
             org_id=current_user["org_id"],
             estimated_cost_minor=estimated_cost_minor,
+            circuit_breaker=circuit_breaker,
         )
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(
@@ -307,6 +333,19 @@ async def send_message(
             "message": "Delivery orchestration error",
         }
     
+    final_provider = result.get("provider_name") or "none"
+    try:
+        MESSAGES_SEND_COUNTER.labels(status=result["status"], provider=final_provider).inc()
+    except Exception:  # pragma: no cover - metrics failures must not break API
+        logger.exception(
+            "Failed to record messages_send_total metric",
+            extra={
+                "event": "metrics_error",
+                "metric": "messages_send_total",
+                "provider": final_provider,
+            },
+        )
+
     return SendMessageResponse(
         job_id=str(job.id),
         status=result["status"],
@@ -322,6 +361,7 @@ async def _attempt_delivery_with_fallback(
     data: SendMessageRequest,
     org_id: str,
     estimated_cost_minor: int,
+    circuit_breaker: CircuitBreakerStore,
 ) -> Dict[str, Any]:
     """Tenta entrega com retry e fallback"""
 
@@ -371,8 +411,38 @@ async def _attempt_delivery_with_fallback(
 
     for provider_id in providers_to_try:
         attempt_number += 1
-        
-        # Obter credenciais
+
+        provider = db.query(Provider).filter(
+            Provider.id == provider_id,
+            Provider.org_id == org_uuid,
+        ).first()
+        if not provider:
+            logger.warning("Provider %s not found for org %s", provider_id, org_uuid)
+            continue
+
+        state = circuit_breaker.get_state(str(provider.id))
+        _record_circuit_state(provider.id, state)
+        if state.is_blocked():
+            logger.info(
+                "Skipping provider %s on attempt %s due to circuit state %s",
+                provider.id,
+                attempt_number,
+                state.state,
+                extra={
+                    "event": "circuit_breaker_skip",
+                    "provider_id": str(provider.id),
+                    "provider_name": provider.name,
+                    "state": state.state,
+                    "failure_count": state.failure_count,
+                },
+            )
+            DELIVERY_ATTEMPTS_COUNTER.labels(
+                provider_id=str(provider.id),
+                provider=provider.name,
+                outcome="skipped_circuit",
+            ).inc()
+            continue
+
         credential = db.query(ProviderCredential).filter(
             ProviderCredential.org_id == org_uuid,
             ProviderCredential.provider_id == provider_id,
@@ -383,20 +453,12 @@ async def _attempt_delivery_with_fallback(
             logger.warning(f"No credentials for provider {provider_id}")
             continue
 
-        provider = db.query(Provider).filter(
-            Provider.id == provider_id,
-            Provider.org_id == org_uuid,
-        ).first()
-        if not provider:
-            continue
-
         try:
             credentials_payload = decrypt_credentials(credential.credentials_encrypted)
         except Exception as exc:
             logger.error(f"Invalid credentials payload for provider {provider_id}: {exc}")
             continue
 
-        # Tentar envio com retries
         for retry in range(3):
             connector = get_connector(
                 provider.name,
@@ -426,6 +488,20 @@ async def _attempt_delivery_with_fallback(
                 except Exception:
                     logger.exception("Failed to record delivery exception for provider %s", provider.id)
                     raise
+
+                new_state = circuit_breaker.mark_failure(str(provider.id))
+                _record_circuit_state(provider.id, new_state)
+                _log_circuit_transition(
+                    provider_id=provider.id,
+                    provider_name=provider.name,
+                    state=new_state,
+                    reason="exception",
+                )
+                DELIVERY_ATTEMPTS_COUNTER.labels(
+                    provider_id=str(provider.id),
+                    provider=provider.name,
+                    outcome="exception",
+                ).inc()
                 break
 
             attempt = DeliveryAttempt(
@@ -442,6 +518,15 @@ async def _attempt_delivery_with_fallback(
             db.add(attempt)
 
             if result["success"]:
+                new_state = circuit_breaker.mark_success(str(provider.id))
+                _record_circuit_state(provider.id, new_state)
+                _log_circuit_transition(
+                    provider_id=provider.id,
+                    provider_name=provider.name,
+                    state=new_state,
+                    reason="success",
+                )
+
                 cost_record = CostRecord(
                     message_job_id=job.id,
                     provider_id=provider.id,
@@ -459,6 +544,12 @@ async def _attempt_delivery_with_fallback(
                 )
                 _commit_or_raise(db)
 
+                DELIVERY_ATTEMPTS_COUNTER.labels(
+                    provider_id=str(provider.id),
+                    provider=provider.name,
+                    outcome="success",
+                ).inc()
+
                 return {
                     "status": job.status.value,
                     "provider_name": provider.name,
@@ -468,6 +559,20 @@ async def _attempt_delivery_with_fallback(
             if result.get("error_code") in ["429", "timeout"]:
                 await asyncio.sleep(2 ** retry)
                 continue
+
+            new_state = circuit_breaker.mark_failure(str(provider.id))
+            _record_circuit_state(provider.id, new_state)
+            _log_circuit_transition(
+                provider_id=provider.id,
+                provider_name=provider.name,
+                state=new_state,
+                reason="failure",
+            )
+            DELIVERY_ATTEMPTS_COUNTER.labels(
+                provider_id=str(provider.id),
+                provider=provider.name,
+                outcome="failure",
+            ).inc()
 
             break
 
@@ -479,6 +584,57 @@ async def _attempt_delivery_with_fallback(
         "status": job.status.value,
         "message": "All providers failed"
     }
+
+
+def _record_circuit_state(provider_id: UUID | str, state: CircuitState) -> None:
+    try:
+        value_map = {"closed": 0, "half-open": 1, "open": 2}
+        CIRCUIT_STATE_GAUGE.labels(provider_id=str(provider_id)).set(value_map.get(state.state, 0))
+    except Exception:  # pragma: no cover - metrics failures must not break API
+        logger.exception(
+            "Failed to record circuit state metric",
+            extra={"event": "metrics_error", "metric": "messages_circuit_breaker_state"},
+        )
+
+
+def _log_circuit_transition(
+    *,
+    provider_id: UUID | str,
+    provider_name: str,
+    state: CircuitState,
+    reason: str,
+) -> None:
+    payload = {
+        "event": "circuit_breaker_state",
+        "provider_id": str(provider_id),
+        "provider_name": provider_name,
+        "state": state.state,
+        "failure_count": state.failure_count,
+        "reason": reason,
+    }
+
+    if state.state == "open":
+        logger.warning(
+            "Circuit breaker opened for provider %s (%s) after %s",
+            provider_name,
+            provider_id,
+            reason,
+            extra=payload,
+        )
+    elif state.state == "half-open":
+        logger.info(
+            "Circuit breaker half-open for provider %s (%s)",
+            provider_name,
+            provider_id,
+            extra=payload,
+        )
+    elif state.state == "closed" and reason == "success":
+        logger.info(
+            "Circuit breaker closed for provider %s (%s)",
+            provider_name,
+            provider_id,
+            extra=payload,
+        )
 
 
 def _normalize_estimated_cost(value: Any) -> int:
