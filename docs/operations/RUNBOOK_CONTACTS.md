@@ -39,8 +39,8 @@ Este runbook descreve como operar a importação de contatos, executar rollback 
    - ✅ Garantir que não existem jobs `contacts_import` ativos para o mesmo `org_id` via `GET /admin/jobs?type=contacts_import&status=running`.
 2. **Execução** (Dados & Ingestão)
    - Subir o arquivo para o bucket S3 interno (`s3://wa-cost-router-imports/<org_id>/<timestamp>.csv`).
-   - Criar job via API administrativa: `POST /admin/contacts/import` com payload `{ "org_id": "...", "source_uri": "s3://...", "dry_run": false }`.
-   - Monitorar logs do worker (`make logs worker`) e acompanhar métricas `contacts_import_processed_total`.
+   - Criar job via API multi-tenant: `POST /contacts/imports` enviando o CSV pelo formulário (`multipart/form-data`). O endpoint retorna o `job_id` e status inicial (`pending`).
+   - Monitorar logs do worker (`make logs worker`) e acompanhar métricas `contacts_import_processed_total`. Consultar o status pelo Postman (`GET /contacts/imports/{job_id}`) ou diretamente no banco (`SELECT status FROM contact_import_job WHERE id = ...`).
 3. **Validação pós-importação** (Operações)
    - Revisar relatório gerado em `s3://wa-cost-router-imports/<org_id>/<timestamp>-report.json`.
    - Executar `GET /admin/contacts/stats?org_id=...` confirmando contagens e taxa de deduplicação.
@@ -65,9 +65,9 @@ Este runbook descreve como operar a importação de contatos, executar rollback 
 
 | Tipo de solicitação | SLA | Responsável primário | Passos-chave |
 |---------------------|-----|----------------------|--------------|
-| Confirmação de tratamento | 7 dias corridos | Privacidade & Compliance | Validar consentimento ativo, gerar relatório de tratamento por `org_id` e enviar resposta ao requisitante. |
-| Correção de dados | 5 dias úteis | Dados & Ingestão | Executar `PATCH /admin/contacts/{id}` com campos ajustados, registrar justificativa e evidência. |
-| Portabilidade | 15 dias corridos | Dados & Ingestão + Operações | Exportar CSV filtrado, anonimizar metadados sensíveis e enviar via canal seguro. |
+| Confirmação de tratamento | 7 dias corridos | Privacidade & Compliance | Validar consentimento ativo (`GET /contacts/{id}/consents/history`), gerar relatório de tratamento por `org_id` e enviar resposta ao requisitante. |
+| Correção de dados | 5 dias úteis | Dados & Ingestão | Executar `PATCH /contacts/{id}` com campos ajustados, registrar justificativa e evidência. |
+| Portabilidade | 15 dias corridos | Dados & Ingestão + Operações | Exportar CSV filtrado via reuso do arquivo de importação ou script dedicado, anonimizar metadados sensíveis e enviar via canal seguro. |
 | Exclusão total (direito ao esquecimento) | 10 dias corridos | Operações (execução) + Privacidade (auditoria) | Seguir processo de exclusão sob demanda descrito abaixo, armazenando comprovantes. |
 
 - Todas as solicitações devem ser registradas no sistema de tickets (`LGPD-###`) e vinculadas ao `org_id` e contato.

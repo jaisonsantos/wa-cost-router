@@ -24,6 +24,7 @@
 
 ## Entregáveis
 - Incrementos funcionais descritos na seção “Próxima Milestone” do [plano de implementação](docs/current-cycle/NEXT_IMPLEMENTATION_PLAN.md).
+- ADR [`20251008-contact-domain`](docs/current-cycle/adr/20251008-contact-domain.md) registrando entidades, relacionamentos e controles LGPD/GDPR do catálogo de contatos multi-tenant.
 - Documentação e playbooks atualizados de acordo com as necessidades do ciclo, seguindo o mapeamento mantido no [roadmap do ciclo](docs/current-cycle/README.md) e no [backlog priorizado](docs/current-cycle/AGENTE.md).
 - Evidências de mitigação dos gaps registrados em [`docs/analysis/USE_CASE_GAP.md`](docs/analysis/USE_CASE_GAP.md).
 

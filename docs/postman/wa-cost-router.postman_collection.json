@@ -2,7 +2,7 @@
   "info": {
     "name": "WA Cost Router",
     "_postman_id": "4f6d5d8b-1d2c-4a8d-9b1e-0c1234567890",
-    "description": "Cole\u00e7\u00e3o completa da API WA Cost Router para desenvolvimento local.",
+    "description": "Coleção completa da API WA Cost Router para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -552,7 +552,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -579,7 +584,12 @@
           "name": "Contacts - List",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/contacts?limit=5",
               "host": [
@@ -622,6 +632,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
               }
             ],
             "body": {
@@ -647,6 +661,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
               }
             ],
             "body": {
@@ -673,6 +691,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
               }
             ],
             "body": {
@@ -699,6 +721,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
               }
             ],
             "body": {
@@ -721,7 +747,12 @@
           "name": "Contacts - Consent History",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/contacts/{{contact_id}}/consents/history",
               "host": [
@@ -732,6 +763,29 @@
                 "{{contact_id}}",
                 "consents",
                 "history"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Contacts - Import Job Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/contacts/imports/{{contact_import_job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts",
+                "imports",
+                "{{contact_import_job_id}}"
               ]
             }
           }

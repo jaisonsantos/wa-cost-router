@@ -14,6 +14,9 @@ A stack agora depende exclusivamente de migrations Alembic (sem `metadata.create
 | `004_add_wa_webhook_secret` | `backend/alembic/versions/004_add_wa_webhook_secret.py` | Adiciona `webhook_secret_enc` a `wa_connection` e inicialmente impõe `webhook_verify_token` único. |
 | `005_link_rate_cards_to_providers` | `backend/alembic/versions/005_link_rate_cards_to_providers.py` | Adiciona `provider_id` a `rate_card`, faz backfill por nome e remove registros órfãos. |
 | `006_relax_wa_verify_token_scope` | `backend/alembic/versions/006_relax_wa_verify_token_scope.py` | Restringe a unicidade de `webhook_verify_token` ao par (`org_id`, token). |
+| `007_add_contact_domain` | `backend/alembic/versions/007_add_contact_domain.py` | Cria o catálogo de contatos multi-tenant (contatos, opt-ins, segmentos, import jobs) com enums dedicados. |
+| `008_add_contact_consent_audit` | `backend/alembic/versions/008_add_contact_consent_audit.py` | Introduz a trilha de auditoria de consentimento com índices por canal e `recorded_at`. |
+| `009_add_contact_segment_policy` | `backend/alembic/versions/009_add_contact_segment_policy.py` | Acrescenta políticas por segmento (`limits`, `opt_out`) e garante relacionamento 1:1. |
 
 Nova migrations devem sempre apontar `down_revision` para a última revisão do quadro acima.
 
@@ -29,6 +32,15 @@ Nova migrations devem sempre apontar `down_revision` para a última revisão do 
 - **`006_relax_wa_verify_token_scope`**:
   - Dropa a unique global de `webhook_verify_token` em `wa_connection` e cria unique composta por `org_id` + token.
   - Permite que ambientes de demo reutilizem tokens padrão (ex.: `my-verify-token`) sem conflitar com o seed.
+- **`007_add_contact_domain`**:
+  - Cria tabelas de contatos, opt-ins, segmentos e jobs de importação. Executa criação condicional de enums (`contactstatusenum`, `optinstatusenum`, `contactimportstatusenum`).
+  - Exige que `DATABASE_URL` aponte para Postgres 12+ (uso de `JSON` e índices compostos). Após o upgrade, reexecute `make seed` apenas se precisar de dados demo.
+- **`008_add_contact_consent_audit`**:
+  - Deve ser aplicada logo após `007`. Armazena eventos de consentimento imutáveis com `request_ip` e `evidence_uri`.
+  - Certifique-se de que o bucket de storage está configurado antes de habilitar o fluxo de importação (relatórios referenciam o job via `source_metadata`).
+- **`009_add_contact_segment_policy`**:
+  - Popula políticas padrão (`limits` e `opt_out` vazios) para segmentos existentes. Upgrade idempotente: se não houver segmentos, nada é criado.
+  - Requer revisão das automações que consultam segmentos para considerar o campo `policy`.
 
 ## Execução local
 
