@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +33,8 @@ class Settings(BaseSettings):
     OPT_IN_MAX_ATTEMPTS: int = 3
     OPT_IN_RETRY_MINUTES: int = 120
     OPT_IN_WEBHOOK_TOKEN: str = "change-me-optin"
+    CONTACTS_OPT_IN_ROLLOUT_ENABLED: bool = False
+    CONTACTS_OPT_IN_ROLLOUT_TENANTS: list[str] = Field(default_factory=list)
 
 
 settings = Settings()

@@ -11,6 +11,26 @@ Este runbook descreve como operar a importação de contatos, executar rollback 
   - **Operações**: monitorar execuções, aprovar rollbacks e orquestrar exclusões sob demanda.
   - **Privacidade & Compliance**: validar respostas LGPD e revisar políticas de retenção.
 
+## Plano de ativação gradual do novo opt-in
+
+1. **Lote piloto (Semana 1)**
+   - Ativar `CONTACTS_OPT_IN_ROLLOUT_ENABLED=true` apenas para tenants presentes em `CONTACTS_OPT_IN_ROLLOUT_TENANTS`.
+   - Monitorar métricas `contacts_import_failed_total`, `consent_event_processing_latency_seconds` e `consent_policy_violation_total` por `org_id`.
+   - Executar teste de fallback (ver abaixo) ao final da semana para validar prontidão.
+2. **Expansão controlada (Semana 2)**
+   - Incluir novos tenants em blocos de no máximo 5 por vez, respeitando janelas sem campanhas críticas.
+   - Confirmar que canais externos (CRM/WA) receberam atualização da flag de consentimento antes de seguir para o próximo bloco.
+3. **Rollout completo (Semana 3)**
+   - Definir `CONTACTS_OPT_IN_ROLLOUT_TENANTS` vazio para habilitar o recurso para todos os tenants.
+   - Comunicar squads e atualizar dashboards de cobertura.
+
+### Fallback
+
+- Reverter `CONTACTS_OPT_IN_ROLLOUT_ENABLED` para `false` em caso de degradação ou violação de política.
+- Limpar filas de consentimento pendentes e reprocessar eventos pelo fluxo legado.
+- Registrar incidente em `docs/operations/incidents/<ano>/` detalhando causa raiz e tempo de restauração.
+- Revisar métricas de importação para assegurar que não há inconsistências antes de retomar o rollout.
+
 ## Procedimento de importação controlada
 
 1. **Pré-checagens** (Dados & Ingestão)
