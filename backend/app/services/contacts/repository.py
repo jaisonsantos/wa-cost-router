@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable, List, Optional, Sequence, Union
 
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.models import (
@@ -137,15 +138,48 @@ class ContactRepository:
                     ContactChannelOptIn.channel_address == channel_address
                 )
 
-        query = query.distinct().order_by(Contact.created_at.desc())
+        ranking_query = query.with_entities(
+            Contact.id.label("contact_id"),
+            Contact.created_at.label("created_at"),
+            func.row_number()
+            .over(
+                partition_by=Contact.id,
+                order_by=(Contact.created_at.desc(), Contact.id.desc()),
+            )
+            .label("row_number"),
+        )
+
+        ranked_subquery = ranking_query.subquery()
+
+        windowed_query = (
+            self.db.query(ranked_subquery.c.contact_id, ranked_subquery.c.created_at)
+            .filter(ranked_subquery.c.row_number == 1)
+            .order_by(
+                ranked_subquery.c.created_at.desc(),
+                ranked_subquery.c.contact_id.desc(),
+            )
+        )
 
         if offset:
-            query = query.offset(offset)
+            windowed_query = windowed_query.offset(offset)
 
         if limit:
-            query = query.limit(limit)
+            windowed_query = windowed_query.limit(limit)
 
-        return query.all()
+        ordered_rows = windowed_query.all()
+
+        if not ordered_rows:
+            return []
+
+        ordered_ids = [row.contact_id for row in ordered_rows]
+        ordering = case({contact_id: index for index, contact_id in enumerate(ordered_ids)}, value=Contact.id)
+
+        return (
+            self.db.query(Contact)
+            .filter(Contact.id.in_(ordered_ids))
+            .order_by(ordering)
+            .all()
+        )
 
     def list_consent_history(
         self,
