@@ -16,36 +16,39 @@
               "listen": "prerequest",
               "script": {
                 "type": "text/javascript",
-              "exec": [
-                "const timestamp = Date.now();",
-                "const uniqueEmail = `postman+${timestamp}@demo.local`;",
-                "const generatedPassword = `Demo!${timestamp}`;",
-                "pm.environment.set('email', uniqueEmail);",
-                "pm.environment.set('password', generatedPassword);",
-                "pm.environment.unset('token');"
-              ]
+                "exec": [
+                  "const timestamp = Date.now();",
+                  "const uniqueEmail = `postman+${timestamp}@demo.local`;",
+                  "const generatedPassword = `Demo!${timestamp}`;",
+                  "pm.environment.set('email', uniqueEmail);",
+                  "pm.environment.set('password', generatedPassword);",
+                  "pm.environment.unset('token');"
+                ]
               }
             },
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-              "exec": [
-                "(() => {",
-                "  let body = null;",
-                "  try { body = pm.response.json(); } catch (err) { body = null; }",
-                "  if (body && body.access_token) {",
-                "    pm.environment.set('token', body.access_token);",
-                "  }",
-                "})();"
-              ]
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.access_token) {",
+                  "    pm.environment.set('token', body.access_token);",
+                  "  }",
+                  "})();"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -53,8 +56,13 @@
             },
             "url": {
               "raw": "{{base_url}}/auth/register",
-              "host": ["{{base_url}}"],
-              "path": ["auth", "register"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
             }
           }
         },
@@ -65,22 +73,25 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-              "exec": [
-                "(() => {",
-                "  let body = null;",
-                "  try { body = pm.response.json(); } catch (err) { body = null; }",
-                "  if (body && body.access_token) {",
-                "    pm.environment.set('token', body.access_token);",
-                "  }",
-                "})();"
-              ]
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.access_token) {",
+                  "    pm.environment.set('token', body.access_token);",
+                  "  }",
+                  "})();"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -88,8 +99,13 @@
             },
             "url": {
               "raw": "{{base_url}}/auth/login",
-              "host": ["{{base_url}}"],
-              "path": ["auth", "login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
             }
           }
         }
@@ -105,15 +121,15 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-              "exec": [
-                "(() => {",
-                "  let body = null;",
-                "  try { body = pm.response.json(); } catch (err) { body = null; }",
-                "  if (body && body.id) {",
-                "    pm.environment.set('org_id', body.id);",
-                "  }",
-                "})();"
-              ]
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.id) {",
+                  "    pm.environment.set('org_id', body.id);",
+                  "  }",
+                  "})();"
+                ]
               }
             }
           ],
@@ -121,8 +137,13 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/orgs/current",
-              "host": ["{{base_url}}"],
-              "path": ["orgs", "current"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "orgs",
+                "current"
+              ]
             }
           }
         }
@@ -137,8 +158,12 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/providers",
-              "host": ["{{base_url}}"],
-              "path": ["providers"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers"
+              ]
             }
           }
         },
@@ -149,22 +174,25 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-              "exec": [
-                "(() => {",
-                "  let body = null;",
-                "  try { body = pm.response.json(); } catch (err) { body = null; }",
-                "  if (body && body.id) {",
-                "    pm.environment.set('provider_id', body.id);",
-                "  }",
-                "})();"
-              ]
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.id) {",
+                  "    pm.environment.set('provider_id', body.id);",
+                  "  }",
+                  "})();"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -172,8 +200,12 @@
             },
             "url": {
               "raw": "{{base_url}}/providers",
-              "host": ["{{base_url}}"],
-              "path": ["providers"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers"
+              ]
             }
           }
         },
@@ -182,7 +214,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -190,8 +225,13 @@
             },
             "url": {
               "raw": "{{base_url}}/providers/credentials",
-              "host": ["{{base_url}}"],
-              "path": ["providers", "credentials"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers",
+                "credentials"
+              ]
             }
           }
         },
@@ -216,8 +256,14 @@
             "method": "POST",
             "url": {
               "raw": "{{base_url}}/providers/{{provider_id}}/health",
-              "host": ["{{base_url}}"],
-              "path": ["providers", "{{provider_id}}", "health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers",
+                "{{provider_id}}",
+                "health"
+              ]
             }
           }
         }
@@ -232,8 +278,12 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/rules",
-              "host": ["{{base_url}}"],
-              "path": ["rules"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "rules"
+              ]
             }
           }
         },
@@ -244,22 +294,25 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-              "exec": [
-                "(() => {",
-                "  let body = null;",
-                "  try { body = pm.response.json(); } catch (err) { body = null; }",
-                "  if (body && body.id) {",
-                "    pm.environment.set('rule_id', body.id);",
-                "  }",
-                "})();"
-              ]
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.id) {",
+                  "    pm.environment.set('rule_id', body.id);",
+                  "  }",
+                  "})();"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -267,8 +320,12 @@
             },
             "url": {
               "raw": "{{base_url}}/rules",
-              "host": ["{{base_url}}"],
-              "path": ["rules"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "rules"
+              ]
             }
           }
         },
@@ -277,7 +334,10 @@
           "request": {
             "method": "PATCH",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -285,8 +345,13 @@
             },
             "url": {
               "raw": "{{base_url}}/rules/{{rule_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["rules", "{{rule_id}}"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "rules",
+                "{{rule_id}}"
+              ]
             }
           }
         },
@@ -297,13 +362,13 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-              "exec": [
-                "(() => {",
-                "  let body = null;",
-                "  try { body = pm.response.json(); } catch (err) { body = null; }",
-                "  pm.expect(body && body.is_enabled, 'rule disabled flag').to.eql(false);",
-                "})();"
-              ]
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  pm.expect(body && body.is_enabled, 'rule disabled flag').to.eql(false);",
+                  "})();"
+                ]
               }
             }
           ],
@@ -311,8 +376,14 @@
             "method": "POST",
             "url": {
               "raw": "{{base_url}}/rules/{{rule_id}}/toggle",
-              "host": ["{{base_url}}"],
-              "path": ["rules", "{{rule_id}}", "toggle"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "rules",
+                "{{rule_id}}",
+                "toggle"
+              ]
             }
           }
         },
@@ -323,13 +394,13 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-              "exec": [
-                "(() => {",
-                "  let body = null;",
-                "  try { body = pm.response.json(); } catch (err) { body = null; }",
-                "  pm.expect(body && body.is_enabled, 'rule enabled flag').to.eql(true);",
-                "})();"
-              ]
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  pm.expect(body && body.is_enabled, 'rule enabled flag').to.eql(true);",
+                  "})();"
+                ]
               }
             }
           ],
@@ -337,8 +408,14 @@
             "method": "POST",
             "url": {
               "raw": "{{base_url}}/rules/{{rule_id}}/toggle",
-              "host": ["{{base_url}}"],
-              "path": ["rules", "{{rule_id}}", "toggle"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "rules",
+                "{{rule_id}}",
+                "toggle"
+              ]
             }
           }
         },
@@ -347,7 +424,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -355,8 +435,13 @@
             },
             "url": {
               "raw": "{{base_url}}/rules/simulate-advanced",
-              "host": ["{{base_url}}"],
-              "path": ["rules", "simulate-advanced"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "rules",
+                "simulate-advanced"
+              ]
             }
           }
         }
@@ -372,22 +457,25 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-              "exec": [
-                "(() => {",
-                "  let body = null;",
-                "  try { body = pm.response.json(); } catch (err) { body = null; }",
-                "  if (body && body.job_id) {",
-                "    pm.environment.set('job_id', body.job_id);",
-                "  }",
-                "})();"
-              ]
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.job_id) {",
+                  "    pm.environment.set('job_id', body.job_id);",
+                  "  }",
+                  "})();"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -395,8 +483,13 @@
             },
             "url": {
               "raw": "{{base_url}}/messages/send",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "send"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "send"
+              ]
             }
           }
         },
@@ -406,8 +499,13 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/messages/jobs",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "jobs"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "jobs"
+              ]
             }
           }
         },
@@ -417,8 +515,409 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/messages/jobs/{{job_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "jobs", "{{job_id}}"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "jobs",
+                "{{job_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contacts",
+      "item": [
+        {
+          "name": "Contacts - Import CSV",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.id) {",
+                  "    pm.environment.set('contact_import_job_id', body.id);",
+                  "  }",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "upload",
+                  "type": "file",
+                  "src": "{{contacts_csv_path}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/contacts/imports",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts",
+                "imports"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Contacts - List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/contacts?limit=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Contacts - Create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.id) {",
+                  "    pm.environment.set('contact_id', body.id);",
+                  "  }",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_id\": \"postman-contact-{{$timestamp}}\",\n  \"full_name\": \"Postman Contact {{$timestamp}}\",\n  \"email\": \"postman.contact.{{$timestamp}}@example.com\",\n  \"phone\": \"+55119{{$timestamp}}\",\n  \"attributes\": {\"tags\": [\"postman\"]},\n  \"source\": \"postman\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contacts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Contacts - Update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Postman Contact Updated {{$timestamp}}\",\n  \"attributes\": {\n    \"tags\": [\"postman\", \"updated\"],\n    \"lifecycle_stage\": \"pilot\"\n  },\n  \"source_metadata\": {\n    \"updated_by\": \"postman\",\n    \"updated_at\": \"{{$isoTimestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contacts/{{contact_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts",
+                "{{contact_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Contacts - Opt-Out",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"inactive\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contacts/{{contact_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts",
+                "{{contact_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Contacts - Opt-In",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contacts/{{contact_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts",
+                "{{contact_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Contacts - Consent History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/contacts/{{contact_id}}/consents/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contacts",
+                "{{contact_id}}",
+                "consents",
+                "history"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contact Segments",
+      "item": [
+        {
+          "name": "Segments - Create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.id) {",
+                  "    pm.environment.set('segment_id', body.id);",
+                  "  }",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slug\": \"postman-segment-{{$timestamp}}\",\n  \"name\": \"Postman Segment {{$timestamp}}\",\n  \"description\": \"Segment created via automated E2E flow.\",\n  \"criteria\": {\n    \"country\": [\"BR\"],\n    \"tags\": [\"postman\"]\n  },\n  \"source\": \"postman\",\n  \"source_metadata\": {\n    \"run_id\": \"{{$timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contact-segments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contact-segments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Segments - List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/contact-segments?limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contact-segments"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Segments - Update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Segment updated via automated E2E flow.\",\n  \"source_metadata\": {\n    \"updated_by\": \"postman\",\n    \"updated_at\": \"{{$isoTimestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contact-segments/{{segment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contact-segments",
+                "{{segment_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Segments - Add Contacts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_ids\": [\"{{contact_id}}\"],\n  \"membership_origin\": \"postman\",\n  \"source\": \"postman\",\n  \"source_metadata\": {\n    \"run_id\": \"{{$timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contact-segments/{{segment_id}}/contacts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contact-segments",
+                "{{segment_id}}",
+                "contacts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Segments - Remove Contact",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/contact-segments/{{segment_id}}/contacts/{{contact_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contact-segments",
+                "{{segment_id}}",
+                "contacts",
+                "{{contact_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Segments - Upsert Policy",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limits\": {\n    \"max_daily_messages\": 100,\n    \"max_weekly_messages\": 500,\n    \"max_monthly_messages\": 2000\n  },\n  \"opt_out\": {\n    \"enforce\": true,\n    \"channels\": [\"whatsapp\"],\n    \"grace_period_hours\": 24\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contact-segments/{{segment_id}}/policy",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contact-segments",
+                "{{segment_id}}",
+                "policy"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Segments - Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/contact-segments/{{segment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "contact-segments",
+                "{{segment_id}}"
+              ]
             }
           }
         }
@@ -433,8 +932,12 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/rates",
-              "host": ["{{base_url}}"],
-              "path": ["rates"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "rates"
+              ]
             }
           }
         },
@@ -443,7 +946,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "multipart/form-data"}
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data"
+              }
             ],
             "body": {
               "mode": "formdata",
@@ -457,8 +963,13 @@
             },
             "url": {
               "raw": "{{base_url}}/rates/import_csv",
-              "host": ["{{base_url}}"],
-              "path": ["rates", "import_csv"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "rates",
+                "import_csv"
+              ]
             }
           }
         }
@@ -473,11 +984,22 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/reports/summary?from=2024-01-01T00:00:00Z&to=2025-01-01T00:00:00Z",
-              "host": ["{{base_url}}"],
-              "path": ["reports", "summary"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "summary"
+              ],
               "query": [
-                {"key": "from", "value": "2024-01-01T00:00:00Z"},
-                {"key": "to", "value": "2025-01-01T00:00:00Z"}
+                {
+                  "key": "from",
+                  "value": "2024-01-01T00:00:00Z"
+                },
+                {
+                  "key": "to",
+                  "value": "2025-01-01T00:00:00Z"
+                }
               ]
             }
           }
@@ -488,10 +1010,18 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/reports/dashboard-metrics?days=7",
-              "host": ["{{base_url}}"],
-              "path": ["reports", "dashboard-metrics"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "dashboard-metrics"
+              ],
               "query": [
-                {"key": "days", "value": "7"}
+                {
+                  "key": "days",
+                  "value": "7"
+                }
               ]
             }
           }
@@ -502,10 +1032,18 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/reports/provider-metrics?days=7",
-              "host": ["{{base_url}}"],
-              "path": ["reports", "provider-metrics"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "provider-metrics"
+              ],
               "query": [
-                {"key": "days", "value": "7"}
+                {
+                  "key": "days",
+                  "value": "7"
+                }
               ]
             }
           }
@@ -520,7 +1058,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -528,8 +1069,14 @@
             },
             "url": {
               "raw": "{{base_url}}/integrations/wa/connections",
-              "host": ["{{base_url}}"],
-              "path": ["integrations", "wa", "connections"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "integrations",
+                "wa",
+                "connections"
+              ]
             }
           }
         },
@@ -539,12 +1086,27 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/integrations/wa/webhook?hub.mode=subscribe&hub.verify_token={{wa_verify_token}}&hub.challenge=12345",
-              "host": ["{{base_url}}"],
-              "path": ["integrations", "wa", "webhook"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "integrations",
+                "wa",
+                "webhook"
+              ],
               "query": [
-                {"key": "hub.mode", "value": "subscribe"},
-                {"key": "hub.verify_token", "value": "{{wa_verify_token}}"},
-                {"key": "hub.challenge", "value": "12345"}
+                {
+                  "key": "hub.mode",
+                  "value": "subscribe"
+                },
+                {
+                  "key": "hub.verify_token",
+                  "value": "{{wa_verify_token}}"
+                },
+                {
+                  "key": "hub.challenge",
+                  "value": "12345"
+                }
               ]
             }
           }
@@ -554,7 +1116,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -562,8 +1127,14 @@
             },
             "url": {
               "raw": "{{base_url}}/integrations/wa/webhook",
-              "host": ["{{base_url}}"],
-              "path": ["integrations", "wa", "webhook"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "integrations",
+                "wa",
+                "webhook"
+              ]
             }
           },
           "event": [
@@ -596,8 +1167,13 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/admin/health",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "health"
+              ]
             }
           }
         },
@@ -607,8 +1183,13 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/admin/metrics",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "metrics"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "metrics"
+              ]
             }
           }
         }
@@ -623,8 +1204,14 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/providers/{{provider_id}}/credentials",
-              "host": ["{{base_url}}"],
-              "path": ["providers", "{{provider_id}}", "credentials"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers",
+                "{{provider_id}}",
+                "credentials"
+              ]
             }
           }
         }
