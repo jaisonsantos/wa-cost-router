@@ -14,14 +14,15 @@
 - Webhook WhatsApp multi-tenant operando com roteamento por `phone_id → org_id` e validação de consentimento antes de respostas automatizadas.
 - Sanitização de payloads/logs contendo PII aplicada aos novos fluxos e documentada em playbooks operacionais.
 - Conectores CRM priorizados (HubSpot) sincronizando opt-ins em modo beta, destravando o planejamento dos épicos E3/E4.
+- Confirmação explícita no [índice do backlog por caso de uso](../backlog/INDEX_BY_USE_CASE.md) de que os cards marcados como **P0** em UC-01/UC-02 atingiram estado "Concluído" antes do encerramento do ciclo.
 
 ## 2. Escopo e entregas previstas
 | Frente | Entrega | Critério de aceite |
 | --- | --- | --- |
-| **Catálogo multi-tenant (P0)** | Nova tabela `contact_profile` com migração assistida, API CRUD e importação CSV validada. | `alembic upgrade` + `seed` executam sem intervenção manual; importação rejeita duplicados e gera relatório de inconsistências.
-| **Timeline e consentimento (P0)** | Endpoint `/contacts/{id}/consents` com versionamento, gravação da origem e exposição no frontend. | Histórico visível na SPA; cada atualização persiste evidência (`channel`, `proof_url`) e dispara evento de auditoria.
-| **Webhook WA (P0)** | Mapeamento dinâmico `phone_id` ↔ `org_id` com isolamento de payloads e enriquecimento de consentimento. | Requisições rejeitadas sem opt-in ativo; logs mascaram dados sensíveis conforme política.
-| **Sanitização e governança (P0)** | Middleware de sanitização, rotinas de limpeza e atualização dos playbooks de incidentes. | Checklist de conformidade assinado pelo time de segurança; operações informadas em `docs/security/SECURITY.md`.
+| **Catálogo multi-tenant (P0)** | Nova tabela `contact_profile` com migração assistida, API CRUD e importação CSV validada. | `alembic upgrade` + `seed` executam sem intervenção manual; importação rejeita duplicados e gera relatório de inconsistências. Atualizar status do card [`20251006-migration-base`](../backlog/20251006-migration-base.md) para refletir a entrega.
+| **Timeline e consentimento (P0)** | Endpoint `/contacts/{id}/consents` com versionamento, gravação da origem e exposição no frontend. | Histórico visível na SPA; cada atualização persiste evidência (`channel`, `proof_url`) e dispara evento de auditoria. Vincular aceite ao card [`20251006-optin-auditoria`](../backlog/20251006-optin-auditoria.md) classificado como P0.
+| **Webhook WA (P0)** | Mapeamento dinâmico `phone_id` ↔ `org_id` com isolamento de payloads e enriquecimento de consentimento. | Requisições rejeitadas sem opt-in ativo; logs mascaram dados sensíveis conforme política. Atualizar o card [`20251006-webhook-multi-tenant`](../backlog/20251006-webhook-multi-tenant.md) no índice.
+| **Sanitização e governança (P0)** | Middleware de sanitização, rotinas de limpeza e atualização dos playbooks de incidentes. | Checklist de conformidade assinado pelo time de segurança; operações informadas em `docs/security/SECURITY.md` e confirmação registrada para [`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md).
 | **CRM HubSpot (P1)** | Sync inicial de opt-ins/opt-outs com fila de retries e monitoramento básico. | Jobs visíveis no worker, com dashboard mínimo de status; dependência liberada para epics E3/E4.
 
 ## 3. Sequenciamento e marcos

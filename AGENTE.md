@@ -4,6 +4,7 @@
 - Concluir o ciclo de **contatos/opt-ins multi-tenant** habilitando o piloto externo com catálogo único de contatos, registro explícito de consentimento e governança operacional alinhada às exigências de compliance.
 - Endereçar os gaps críticos mapeados em [`docs/analysis/USE_CASE_GAP.md`](docs/analysis/USE_CASE_GAP.md) relacionados à ingestão e ao tratamento de dados pessoais, mantendo alinhamento com o plano vigente em [`docs/current-cycle/NEXT_IMPLEMENTATION_PLAN.md`](docs/current-cycle/NEXT_IMPLEMENTATION_PLAN.md).
 - Garantir que as squads mantenham foco no valor de negócio descrito no [roadmap do ciclo atual](docs/current-cycle/README.md), priorizando as frentes marcadas como P0.
+- Evidenciar no [índice do backlog por caso de uso](docs/backlog/INDEX_BY_USE_CASE.md) que os itens UC-01 e UC-02 vinculados ao catálogo de contatos e opt-ins permanecem como **prioridade P0** até o aceite formal do ciclo.
 
 ## Escopo
 - Implementar o catálogo multi-tenant de contatos com capacidades de importação segura, deduplicação e enriquecimento incremental.
@@ -11,6 +12,7 @@
 - Assegurar que rotas inbound (webhook WhatsApp) e outbound respeitem consentimento ativo, isolamento por organização e sanitização de PII.
 - Atualizar a documentação operacional e de compliance para refletir políticas de consentimento e os novos fluxos de governança do ciclo.
 - Manter o [índice do backlog por caso de uso](docs/backlog/INDEX_BY_USE_CASE.md) alinhado à matriz de rastreabilidade, promovendo as frentes de contatos/opt-ins a prioridade P0.
+- Consolidar critérios de aceite compartilhados (catálogo multi-tenant, auditoria de consentimento, importação idempotente) em [`docs/current-cycle/README.md`](docs/current-cycle/README.md) para referência executiva.
 
 ## Critérios de aceite do ciclo
 - Catálogo de contatos multi-tenant entregue com migração controlada, importação validada e deduplicação em produção.
@@ -18,6 +20,7 @@
 - Webhook WhatsApp roteando dinamicamente por `org_id` e validando consentimento ativo antes de enviar respostas automáticas.
 - Política de sanitização e retenção de PII aplicada aos novos fluxos, com playbooks operacionais atualizados.
 - Backlog e roadmap atualizados com status P0 cumprido e dependências destravadas para os épicos de CRM (E3) e governança (E4).
+- Confirmação registrada no [índice do backlog](docs/backlog/INDEX_BY_USE_CASE.md) de que todos os cards P0 vinculados ao ciclo atingiram estado "Concluído" antes do handover.
 
 ## Entregáveis
 - Incrementos funcionais descritos na seção “Próxima Milestone” do [plano de implementação](docs/current-cycle/NEXT_IMPLEMENTATION_PLAN.md).
