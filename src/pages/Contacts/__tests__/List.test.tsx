@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import ContactListPage from "../List";
-import type { ContactListResponse, ContactStatus, OptInStatus } from "@/types/api";
+import type { Contact, ContactListResponse } from "@/types/api";
 
 const { mockUseContactList } = vi.hoisted(() => ({
   mockUseContactList: vi.fn(),
@@ -45,24 +45,26 @@ const renderWithQueryClient = (ui: ReactElement) => {
   return { ...result, client };
 };
 
-type ContactFixture = {
-  id: string;
-  org_id: string;
-  full_name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  status: ContactStatus;
-  channel_opt_ins?: Array<{
-    channel: string;
-    channel_address: string;
-    status: OptInStatus;
-    version: number;
-  }>;
-  [key: string]: unknown;
-};
+type ContactFixture = Partial<Contact> & Pick<Contact, "id" | "org_id" | "status">;
+
+const buildContact = (overrides: ContactFixture): Contact => ({
+  id: "contact-id",
+  org_id: "org",
+  status: "active",
+  source: "manual",
+  created_at: "2024-01-01T00:00:00.000Z",
+  updated_at: "2024-01-01T00:00:00.000Z",
+  attributes: null,
+  source_metadata: null,
+  proof_hash: null,
+  channel_opt_ins: [],
+  segments: [],
+  notes: [],
+  ...overrides,
+});
 
 const buildResponse = (items: ContactFixture[]): ContactListResponse => ({
-  items: items as any,
+  items: items.map((item) => buildContact(item)),
   limit: 25,
   offset: 0,
   count: items.length,
