@@ -1,5 +1,6 @@
 import hashlib
 from datetime import datetime, timezone
+from uuid import UUID
 
 from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, HTTPException
@@ -152,6 +153,23 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+
+ROLE_DEFAULT_PERMISSIONS: dict[RoleEnum, list[str]] = {
+    RoleEnum.owner: ["contacts:read", "contacts:write"],
+    RoleEnum.member: ["contacts:read"],
+}
+
+
+def _build_token_claims(user_id: UUID, org_id: UUID, role: RoleEnum) -> dict[str, object]:
+    """Generate JWT claims embedding permission scopes for the given role."""
+
+    permissions = ROLE_DEFAULT_PERMISSIONS.get(role, [])
+    return {
+        "sub": str(user_id),
+        "org_id": str(org_id),
+        "permissions": permissions,
+    }
+
 @router.post("/register", response_model=TokenResponse)
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
     # Check if user exists
@@ -178,7 +196,8 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     
     # Create token
-    token = create_access_token({"sub": str(user.id), "org_id": str(org.id)})
+    token_claims = _build_token_claims(user.id, org.id, RoleEnum.owner)
+    token = create_access_token(token_claims)
     return TokenResponse(access_token=token)
 
 @router.post("/login", response_model=TokenResponse)
@@ -192,5 +211,6 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     if not org_user:
         raise HTTPException(status_code=400, detail="User not linked to any organization")
     
-    token = create_access_token({"sub": str(user.id), "org_id": str(org_user.org_id)})
+    token_claims = _build_token_claims(user.id, org_user.org_id, org_user.role)
+    token = create_access_token(token_claims)
     return TokenResponse(access_token=token)
