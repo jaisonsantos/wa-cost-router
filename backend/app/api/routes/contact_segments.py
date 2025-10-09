@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List
 from uuid import UUID
 
@@ -39,6 +39,17 @@ def _normalize_segment_source(value: Any) -> str:
     return "manual"
 
 
+def _coerce_datetime(value: Any) -> datetime:
+    """Return a timezone-aware datetime, defaulting to the current UTC instant."""
+
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    return datetime.now(timezone.utc)
+
+
 def _serialize_policy(policy: ContactSegmentPolicy | None) -> SegmentPolicyResponse | None:
     """Convert stored routing policies into the public response schema."""
 
@@ -67,8 +78,8 @@ def _serialize_segment(segment: ContactSegment) -> ContactSegmentResponse:
         "source": _normalize_segment_source(getattr(segment, "source", None)),
         "source_metadata": _as_optional_dict(getattr(segment, "source_metadata", None)),
         "proof_hash": getattr(segment, "proof_hash", None),
-        "created_at": segment.created_at,
-        "updated_at": segment.updated_at,
+        "created_at": _coerce_datetime(getattr(segment, "created_at", None)),
+        "updated_at": _coerce_datetime(getattr(segment, "updated_at", None)),
         "policy": policy_model.model_dump() if policy_model else None,
     }
 
@@ -86,8 +97,12 @@ def _serialize_membership(
         "contact_id": membership.contact_id,
         "segment_id": membership.segment_id,
         "membership_origin": membership.membership_origin,
-        "valid_from": membership.valid_from,
-        "valid_to": membership.valid_to,
+        "valid_from": _coerce_datetime(getattr(membership, "valid_from", None)),
+        "valid_to": (
+            _coerce_datetime(membership.valid_to)
+            if getattr(membership, "valid_to", None) is not None
+            else None
+        ),
         "source": _normalize_segment_source(getattr(membership, "source", None)),
         "source_metadata": _as_optional_dict(getattr(membership, "source_metadata", None)),
     }

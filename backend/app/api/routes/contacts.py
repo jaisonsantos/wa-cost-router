@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List
 from uuid import UUID
@@ -48,6 +48,17 @@ def _normalize_source(value: Any) -> str:
     return "manual"
 
 
+def _coerce_datetime(value: Any) -> datetime:
+    """Return a timezone-aware datetime, falling back to the current UTC time."""
+
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    return datetime.now(timezone.utc)
+
+
 def _serialize_contact(contact: Contact) -> ContactResponse:
     """Convert a SQLAlchemy contact model into the public response schema."""
 
@@ -65,8 +76,8 @@ def _serialize_contact(contact: Contact) -> ContactResponse:
         "source": _normalize_source(getattr(contact, "source", None)),
         "source_metadata": _as_optional_dict(getattr(contact, "source_metadata", None)),
         "proof_hash": getattr(contact, "proof_hash", None),
-        "created_at": contact.created_at,
-        "updated_at": contact.updated_at,
+        "created_at": _coerce_datetime(getattr(contact, "created_at", None)),
+        "updated_at": _coerce_datetime(getattr(contact, "updated_at", None)),
     }
 
     return ContactResponse.model_validate(raw_payload)
