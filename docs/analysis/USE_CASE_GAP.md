@@ -6,6 +6,7 @@ O discovery com as equipes de atendimento e growth apontou que o MVP atual atend
 As lacunas a seguir priorizam o que precisa ser ajustado antes de escalar o piloto externo.
 
 ## UC-01 — Gestão de contatos unificada
+- **Status (2025-10-08):** Coberto pelo catálogo multi-tenant, migrations `007-009` e APIs documentadas em [`docs/api/API_REFERENCE.md`](../api/API_REFERENCE.md). Consultar ADR [`20251008-contact-domain`](../current-cycle/adr/20251008-contact-domain.md) para detalhes do modelo e salvaguardas LGPD/GDPR.
 - **Sintomas**: Contatos existem apenas como números avulsos no `MessageJob`, não há deduplicação nem atributos (tags, opt-in, idioma). Importações CSV não vinculam telefone a perfis e não há API para consultas.
 - **Impacto**: Times de atendimento não conseguem reutilizar histórico ou segmentar disparos. Há risco de reenviar mensagens para contatos opt-out.
 - **Requisitos imediatos**:

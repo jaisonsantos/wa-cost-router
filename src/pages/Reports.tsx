@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,28 +52,25 @@ interface HourlyReportRow {
 const Reports = () => {
   const [timeRange, setTimeRange] = useState("7d");
   
-  // Calculate date range
-  const getDateRange = () => {
-    const to = new Date().toISOString();
-    const from = new Date();
+  const { from, to } = useMemo(() => {
+    const toDate = new Date();
+    const fromDate = new Date(toDate);
     switch (timeRange) {
       case "1d":
-        from.setDate(from.getDate() - 1);
+        fromDate.setDate(fromDate.getDate() - 1);
         break;
       case "7d":
-        from.setDate(from.getDate() - 7);
+        fromDate.setDate(fromDate.getDate() - 7);
         break;
       case "30d":
-        from.setDate(from.getDate() - 30);
+        fromDate.setDate(fromDate.getDate() - 30);
         break;
       case "90d":
-        from.setDate(from.getDate() - 90);
+        fromDate.setDate(fromDate.getDate() - 90);
         break;
     }
-    return { from: from.toISOString(), to };
-  };
-
-  const { from, to } = getDateRange();
+    return { from: fromDate.toISOString(), to: toDate.toISOString() };
+  }, [timeRange]);
   const { data: summary, isLoading: summaryLoading } = useSummary(from, to);
   const { data: eventsData, isLoading: eventsLoading } = useEvents({
     limit: 1000,

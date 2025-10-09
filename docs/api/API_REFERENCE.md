@@ -56,6 +56,93 @@ Retorna metadados da organização ativa do token.
 ```
 Erros: `404 Not Found` se a organização não existir (token inválido ou órfão).
 
+## Contatos
+
+### `GET /contacts`
+Lista contatos da organização autenticada com paginação (`limit`, `offset`) e filtros opcionais.
+
+| Query param | Tipo | Descrição |
+| --- | --- | --- |
+| `status` | enum `active\|inactive\|archived` | Filtra por status de ciclo de vida. |
+| `channel` | string | Restringe opt-ins carregados (`whatsapp`, `sms`, `email`, etc.). |
+| `opt_in_status` | array enum `granted\|pending\|revoked` | Retorna apenas contatos com opt-ins nos status indicados. |
+| `segment_id` | array UUID | Filtra por segmentos (IDs). |
+| `segment_slug` | array string | Filtra por segmentos (slugs). |
+| `channel_address` | string | Exige opt-in para o endereço informado (telefone/e-mail normalizado). |
+
+**Resposta 200**
+```json
+{
+  "items": [
+    {
+      "id": "<uuid>",
+      "org_id": "<uuid>",
+      "full_name": "Maria Example",
+      "email": "maria@example.com",
+      "phone": "+5511999999999",
+      "status": "active",
+      "source": "import",
+      "created_at": "2025-10-08T12:00:00+00:00",
+      "updated_at": "2025-10-08T12:10:00+00:00"
+    }
+  ],
+  "limit": 25,
+  "offset": 0,
+  "count": 1
+}
+```
+
+### `POST /contacts`
+Cria um contato. Campos aceitos: `external_id`, `full_name`, `first_name`, `last_name`, `email`, `phone`, `status`, `attributes`, `source`, `source_metadata`.
+
+**Resposta 201** – objeto `ContactResponse` completo. Erros: `400` (violação de unicidade ou payload inválido), `422` (erros de validação), `409` (duplicado pela combinação `org_id` + `external_id`).
+
+### `PATCH /contacts/{id}`
+Atualiza campos específicos do contato. Responde `404` para IDs inexistentes. Mesmos campos do `POST`, todos opcionais.
+
+### `DELETE /contacts/{id}`
+Remove o contato e associações (`204 No Content`). Responde `404` quando o recurso não pertence à organização.
+
+### `GET /contacts/{id}/consents/history`
+Retorna auditoria completa de opt-ins.
+
+**Resposta 200**
+```json
+{
+  "items": [
+    {
+      "id": "<uuid>",
+      "opt_in_id": "<uuid>",
+      "opt_in_version": 2,
+      "channel": "whatsapp",
+      "channel_address": "+5511999999999",
+      "status": "granted",
+      "agent": "privacy-ops",
+      "source": "manual",
+      "recorded_at": "2025-10-08T12:02:00+00:00",
+      "evidence_uri": "https://s3.internal/optins/123.pdf"
+    }
+  ],
+  "count": 1
+}
+```
+
+### `POST /contacts/imports`
+Importa CSV. Payload `multipart/form-data` com campo `upload` (arquivo). Responde `202 Accepted` com resumo do job:
+
+```json
+{
+  "id": "<job_id>",
+  "status": "pending",
+  "input_uri": "s3://wa-cost-router-imports/demo/2025-10-08.csv",
+  "total_rows": 0,
+  "processed_rows": 0,
+  "error_rows": 0
+}
+```
+
+Jobs finalizados expõem `processed_rows`, `error_rows` e `error_report_uri`. Consulte `/contacts/imports/{job_id}` para status. Erros: `400` (arquivo inválido) e `500` (falha ao agendar job).
+
 ## Provedores
 
 ### `GET /providers`

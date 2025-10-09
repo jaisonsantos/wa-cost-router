@@ -5,9 +5,10 @@ Este índice agrupa os cards do backlog ativo conforme os casos de uso rastreado
 > Os itens marcados como **P0** compõem o ciclo de contatos/opt-ins e devem ser tratados antes de qualquer entrega de P1/P2.
 
 ## UC-01 — Gestão de contatos unificada
-- [Sanitização de PII e logs sensíveis](./20251006-sanitizacao-pii.md) — **Pendente · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-01))
+- [Sanitização de PII e logs sensíveis](./20251006-sanitizacao-pii.md) — **Em andamento · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-01))
 - [Validação E.164 em cadastros](./20251006-validacao-e164.md) — **Pendente · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-01))
-- [Base de migração multi-tenant](./20251006-migration-base.md) — **Pendente · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-01))
+- [Base de migração multi-tenant](./20251006-migration-base.md) — **Concluído · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-01))
+- [Opt-in multicanal com auditoria](./20251008-contact-opt-in.md) — **Concluído · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-01))
 
 ## UC-02 — Atendimento multicanal orquestrado
 - [Sincronizar dashboard de analytics](./20250210-analytics-dashboard-sync.md) — **Pendente · P2** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))

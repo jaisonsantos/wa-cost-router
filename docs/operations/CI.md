@@ -30,7 +30,7 @@ Os alvos adicionados no [Makefile](../../Makefile) permitem reproduzir cada etap
 - `make ci-backend` recompila imagens Python e executa `alembic upgrade head` para detectar migrations quebradas.
 - `make ci-frontend` instala dependências com `npm ci`, roda lint (`npm run lint`) e build (`npm run build`).
 - `make ci-e2e` sobe a stack dockerizada, aguarda readiness (`/admin/health`) e executa a suíte Newman com export JUnit
-  (`newman-report.xml`).
+  (`newman-report.xml`). A suíte cobre o fluxo completo de contatos (criação, atualização, histórico de consentimento e importação CSV).
 
 ## Troubleshooting
 
@@ -39,7 +39,8 @@ Os alvos adicionados no [Makefile](../../Makefile) permitem reproduzir cada etap
 - **Falhas no `ci-frontend`**: cheque alterações em lint rules (`eslint.config.js`) ou se o build Vite quebrou. Execute `npm run lint`
   e `npm run build` fora do Docker para iterar mais rápido.
 - **Falhas no `ci-e2e`**: baixe o artefato `newman-report.xml` para identificar o request que falhou. Reproduza executando `make ci-e2e`
-  ou seguindo o [guia do Postman/Newman](../postman/README.md). Caso a API não suba, confira variáveis sensíveis (`APP_SECRET_KEY`,
-  `JWT_SECRET`) e o seed (`backend/scripts/seed.py`).
+  ou seguindo o [guia do Postman/Newman](../postman/README.md). Falhas na pasta **Contacts** normalmente indicam problemas nos endpoints `/contacts`
+  ou em permissões de upload (`POST /contacts/imports`); valide migrations `007-009` e o worker RQ. Caso a API não suba, confira variáveis sensíveis
+  (`APP_SECRET_KEY`, `JWT_SECRET`) e o seed (`backend/scripts/seed.py`).
 
 Reexecute apenas o job afetado pelo GitHub (`Re-run failed jobs`) sempre que possível para acelerar ciclos de feedback.

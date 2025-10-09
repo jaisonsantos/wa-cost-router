@@ -13,7 +13,7 @@ BACKEND_DIR = ROOT_DIR / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.api.routes.contacts import ContactResponse, _serialize_contact  # noqa: E402
+from app.api.routes.contacts import _serialize_contact  # noqa: E402
 from app.api.routes.contact_segments import (  # noqa: E402
     SegmentMembershipResponse,
     SegmentPolicyResponse,
@@ -21,6 +21,7 @@ from app.api.routes.contact_segments import (  # noqa: E402
     _serialize_policy,
     _serialize_segment,
 )
+from app.schemas.contacts import ContactResponse  # noqa: E402
 from pydantic import ValidationError
 from app.models.models import (  # noqa: E402
     Contact,
