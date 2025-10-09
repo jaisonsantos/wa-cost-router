@@ -12,11 +12,13 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 3. **Providers** – cria provedor WhatsApp (360dialog), salva credenciais fake e executa health check.
 4. **Rules** – lista, cria, atualiza e alterna regras, incluindo simulação avançada.
 5. **Messages** – envia mensagem, lista jobs e consulta detalhes do job usando `job_id` capturado.
-6. **Rates** – consulta tarifas e importa CSV de exemplo (`docs/postman/sample_rates.csv`) usando o `provider_name` do provedor criado na etapa Providers.
-7. **Reports** – consome métricas de dashboard, resumo e métricas por provedor.
-8. **Integrations** – cria conexão WA, valida webhook (`hub.verify_token`) e envia payload de webhook (repetir a criação com o mesmo `phone_id` apenas atualiza o registro).
-9. **Admin** – checa `/admin/health` e `/admin/metrics`.
-10. **Cleanup** – remove credenciais do provedor criado durante o fluxo.
+6. **Contacts** – dispara importação assíncrona (`POST /contacts/imports`), lista catálogos, cria contato, edita atributos, alterna status ativo/inativo e consulta histórico de consentimento.
+7. **Contact Segments** – cria segmento, atualiza metadados, associa/desassocia o contato criado e configura política de limites/opt-out.
+8. **Rates** – consulta tarifas e importa CSV de exemplo (`docs/postman/sample_rates.csv`) usando o `provider_name` do provedor criado na etapa Providers.
+9. **Reports** – consome métricas de dashboard, resumo e métricas por provedor.
+10. **Integrations** – cria conexão WA, valida webhook (`hub.verify_token`) e envia payload de webhook (repetir a criação com o mesmo `phone_id` apenas atualiza o registro).
+11. **Admin** – checa `/admin/health` e `/admin/metrics`.
+12. **Cleanup** – remove credenciais do provedor criado durante o fluxo.
 
 Scripts de coleção adicionam o header `Authorization` automaticamente sempre que `token` estiver definido e validam que todas as respostas retornem status 2xx.
 
@@ -29,8 +31,9 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 | `base_url` | URL base da API (default `http://localhost:8000`). |
 | `email` / `password` | Credenciais seed (`admin@demo.local` / `demo123`) usadas como fallback até o prerequest gerar valores fortes por execução. |
 | `token` | JWT salvo pelos testes (não preencha manualmente). |
-| `org_id`, `provider_id`, `rule_id`, `job_id` | IDs capturados automaticamente para uso em chamadas subsequentes. |
+| `org_id`, `provider_id`, `rule_id`, `job_id`, `contact_id`, `segment_id`, `contact_import_job_id` | IDs capturados automaticamente para uso em chamadas subsequentes. |
 | `rates_csv_path` | Caminho do CSV usado no import de tarifas (`docs/postman/sample_rates.csv`). |
+| `contacts_csv_path` | Caminho do CSV usado no import de contatos (`docs/postman/sample_contacts.csv`). |
 | `wa_phone_id`, `wa_business_id`, `wa_access_token`, `wa_verify_token`, `wa_webhook_secret` | Dados seed para testar integrações WhatsApp (incluindo secret usado no HMAC do webhook). |
 
 ### Assinatura do webhook
@@ -46,8 +49,10 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 3. Rodar sequência em **Providers** (Create → Save Credentials → Health Check).
 4. Executar pasta **Rules** inteira (toggle final reativa a regra).
 5. **Messages** (Send → Jobs → Job Detail).
-6. **Rates**, **Reports** e **Integrations**.
-7. Concluir com **Admin** e **Cleanup**.
+6. **Contacts** (Import CSV → List → Create → Update → Opt-Out → Opt-In → Consent History) utilizando os IDs armazenados automaticamente.
+7. **Contact Segments** (Create → List → Update → Add Contacts → Remove Contact → Upsert Policy → Delete) para validar o fluxo de segmentação.
+8. **Rates**, **Reports** e **Integrations**.
+9. Concluir com **Admin** e **Cleanup**.
 
 Todos os requests foram configurados para funcionar em sequência via Newman, usando dados `seed` fornecidos por `make dev`.
 

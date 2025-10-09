@@ -167,7 +167,7 @@ seed-providers: ## Seed default providers for the current org
 	$(DC) run --rm api python scripts/seed_providers.py
 
 test-backend: ## Run backend test suite (pytest)
-	pytest backend/tests -q
+	pytest backend/tests --cov=backend/app --cov=backend/scripts --cov-report=term --cov-report=xml:backend/coverage.xml
 
 postman-test: ## Run Newman collection tests against local stack
 	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --verbose
