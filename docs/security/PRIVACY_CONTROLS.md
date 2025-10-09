@@ -20,6 +20,8 @@ Este documento consolida controles preventivos e detectivos necessários para op
 - [ ] Feature flag `privacy_lock` aplicada para contatos em análise ou disputa legal.
 - [ ] Auditoria semanal da tabela `audit_log` garantindo que eventos de importação possuem `actor_org_id` e `trace_id` preenchidos.
 - [ ] Revisar semanalmente o histórico de consentimento (`contact_consent_audit`) via `GET /contacts/{id}/consents/history` garantindo presença de `agent`, `request_ip` e `evidence_uri`.
+- [ ] Validar que eventos inbound (`agent="wa_webhook"`) com consentimento ausente estão sendo mascarados (`message_event.attributes.* = "***redacted***"`) e registram `proof_hash=sha256("denied:<provider_event_id>")`.
+- [ ] Conciliar a fila `contact_opt_in_request` para contatos negados no webhook garantindo follow-up em até 24h.
 - [ ] Integradores CRM (HubSpot/Pipedrive) operando com escopos mínimos e tokens expiram automaticamente após 90 dias (`crm_sync` → `token_expires_at`).
 
 ## Checklist — Retenção e Exclusão

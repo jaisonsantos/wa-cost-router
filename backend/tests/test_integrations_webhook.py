@@ -3,7 +3,7 @@ import hmac
 import json
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -35,9 +35,12 @@ import app.api.opt_in as opt_in_module  # noqa: E402
 from app.models.models import (  # noqa: E402
     Contact,
     ContactChannelOptIn,
+    ContactConsentAudit,
     ContactOptInRequest,
+    ContactStatusEnum,
     MessageEvent,
     OptInRequestStatusEnum,
+    OptInStatusEnum,
     Organization,
     WAConnection,
 )
@@ -130,6 +133,39 @@ def _create_opt_in_request(db_session):
     return request, contact
 
 
+def _create_contact_with_opt_in(
+    db_session,
+    *,
+    org_id,
+    phone,
+    email="contact@example.com",
+    grant_opt_in=True,
+):
+    contact = Contact(
+        id=uuid.uuid4(),
+        org_id=org_id,
+        email=email,
+        phone=phone,
+        status=ContactStatusEnum.active,
+    )
+    db_session.add(contact)
+    db_session.flush()
+
+    if grant_opt_in:
+        opt_in = ContactChannelOptIn(
+            org_id=org_id,
+            contact_id=contact.id,
+            channel="whatsapp",
+            channel_address=phone,
+            status=OptInStatusEnum.granted,
+        )
+        db_session.add(opt_in)
+
+    db_session.commit()
+    db_session.refresh(contact)
+    return contact
+
+
 def test_webhook_verify_returns_challenge_for_valid_token(client, db_session):
     connection, _ = _create_connection(db_session)
 
@@ -163,6 +199,11 @@ def test_webhook_verify_returns_403_for_invalid_token(client, db_session):
 
 def test_webhook_receive_persists_events_with_valid_signature(client, db_session):
     connection, secret = _create_connection(db_session, phone_id="phone-meta", secret="super-secret")
+    contact = _create_contact_with_opt_in(
+        db_session,
+        org_id=connection.org_id,
+        phone="+5511999999999",
+    )
 
     payload = {
         "entry": [
@@ -176,6 +217,7 @@ def test_webhook_receive_persists_events_with_valid_signature(client, db_session
                                     "id": "wamid.sample",
                                     "from": "5511999999999",
                                     "timestamp": "1700000000",
+                                    "text": {"body": "Olá, quero saber mais"},
                                 }
                             ],
                         }
@@ -205,6 +247,13 @@ def test_webhook_receive_persists_events_with_valid_signature(client, db_session
     assert event.org_id == connection.org_id
     assert event.connection_id == connection.id
     assert event.provider_event_id == "wamid.sample"
+    assert event.contact_id == contact.id
+    assert event.attributes["from"] == "***redacted***"
+    assert event.attributes["text"]["body"] == "***redacted***"
+    stored_ts = event.timestamp_provider
+    if stored_ts.tzinfo is None:
+        stored_ts = stored_ts.replace(tzinfo=timezone.utc)
+    assert stored_ts == datetime.fromtimestamp(1700000000, tz=timezone.utc)
 
 
 def test_webhook_receive_ignores_events_with_invalid_signature(client, db_session):
@@ -244,6 +293,74 @@ def test_webhook_receive_ignores_events_with_invalid_signature(client, db_sessio
 
     assert response.status_code == 200
     assert response.json() == {"status": "ignored", "processed": 0}
+
+
+def test_webhook_receive_denies_without_active_consent(client, db_session, monkeypatch):
+    connection, secret = _create_connection(db_session, phone_id="phone-denied", secret="another-secret")
+    contact = _create_contact_with_opt_in(
+        db_session,
+        org_id=connection.org_id,
+        phone="5511888888888",
+        grant_opt_in=False,
+    )
+
+    captured_enqueues = []
+
+    def fake_enqueue(self, *args, **kwargs):
+        captured_enqueues.append(kwargs)
+        return None
+
+    monkeypatch.setattr(
+        "app.api.integrations.OptInRequestService.enqueue_request",
+        fake_enqueue,
+        raising=False,
+    )
+
+    payload = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {"phone_number_id": "phone-denied"},
+                            "messages": [
+                                {
+                                    "id": "wamid.denied",
+                                    "from": "5511888888888",
+                                    "timestamp": "1700000003",
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+    raw_body = json.dumps(payload).encode("utf-8")
+    signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+
+    response = client.post(
+        "/integrations/wa/webhook",
+        data=raw_body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": f"sha256={signature}",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "denied"}
+    assert db_session.query(MessageEvent).count() == 0
+
+    audits = db_session.query(ContactConsentAudit).all()
+    assert len(audits) == 1
+    audit = audits[0]
+    assert audit.contact_id == contact.id
+    assert audit.status == OptInStatusEnum.revoked
+    assert audit.channel_address == "5511888888888"
+
+    assert captured_enqueues
+    assert captured_enqueues[0]["contact_id"] == contact.id
 
 
 def test_opt_in_webhook_confirms_request(client, db_session, monkeypatch):
@@ -368,6 +485,106 @@ def test_webhook_receive_ignores_events_without_signature(client, db_session):
     assert response.status_code == 200
     assert response.json() == {"status": "ignored", "processed": 0}
     assert db_session.query(MessageEvent).count() == 0
+
+
+def test_webhook_receive_succeeds_for_multiple_tenants(client, db_session):
+    connection_a, secret_a = _create_connection(
+        db_session, phone_id="phone-tenant-a", secret="secret-a"
+    )
+    contact_a = _create_contact_with_opt_in(
+        db_session,
+        org_id=connection_a.org_id,
+        phone="+5511777777777",
+    )
+
+    connection_b, secret_b = _create_connection(
+        db_session, phone_id="phone-tenant-b", secret="secret-b"
+    )
+    contact_b = _create_contact_with_opt_in(
+        db_session,
+        org_id=connection_b.org_id,
+        phone="+5511666666666",
+    )
+
+    payload_a = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {"phone_number_id": "phone-tenant-a"},
+                            "messages": [
+                                {
+                                    "id": "wamid.tenant-a",
+                                    "from": "5511777777777",
+                                    "timestamp": "1700000004",
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+    raw_body_a = json.dumps(payload_a).encode("utf-8")
+    signature_a = hmac.new(secret_a.encode("utf-8"), raw_body_a, hashlib.sha256).hexdigest()
+
+    response_a = client.post(
+        "/integrations/wa/webhook",
+        data=raw_body_a,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": f"sha256={signature_a}",
+        },
+    )
+
+    assert response_a.status_code == 200
+    assert response_a.json() == {"status": "ok", "processed": 1}
+
+    payload_b = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {"phone_number_id": "phone-tenant-b"},
+                            "messages": [
+                                {
+                                    "id": "wamid.tenant-b",
+                                    "from": "5511666666666",
+                                    "timestamp": "1700000005",
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+    raw_body_b = json.dumps(payload_b).encode("utf-8")
+    signature_b = hmac.new(secret_b.encode("utf-8"), raw_body_b, hashlib.sha256).hexdigest()
+
+    response_b = client.post(
+        "/integrations/wa/webhook",
+        data=raw_body_b,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": f"sha256={signature_b}",
+        },
+    )
+
+    assert response_b.status_code == 200
+    assert response_b.json() == {"status": "ok", "processed": 1}
+
+    events = db_session.query(MessageEvent).order_by(MessageEvent.provider_event_id).all()
+    assert len(events) == 2
+    event_a = next(e for e in events if e.provider_event_id == "wamid.tenant-a")
+    event_b = next(e for e in events if e.provider_event_id == "wamid.tenant-b")
+
+    assert event_a.org_id == connection_a.org_id
+    assert event_a.contact_id == contact_a.id
+    assert event_b.org_id == connection_b.org_id
+    assert event_b.contact_id == contact_b.id
 
 
 def test_create_connection_upserts_existing_record(client, db_session):

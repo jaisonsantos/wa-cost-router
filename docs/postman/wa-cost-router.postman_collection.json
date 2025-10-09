@@ -1272,7 +1272,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"entry\": [\n    {\n      \"changes\": [\n        {\n          \"value\": {\n            \"metadata\": {\n              \"phone_number_id\": \"{{wa_phone_id}}\"\n            },\n            \"messages\": [\n              {\n                \"id\": \"msg-postman-{{$timestamp}}\",\n                \"from\": \"{{wa_phone_id}}\",\n                \"text\": \"hello\"\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+              "raw": "{\n  \"entry\": [\n    {\n      \"changes\": [\n        {\n          \"value\": {\n            \"metadata\": {\n              \"phone_number_id\": \"{{wa_phone_id}}\"\n            },\n            \"messages\": [\n              {\n                \"id\": \"msg-postman-{{$timestamp}}\",\n                \"from\": \"{{wa_contact_phone}}\",\n                \"timestamp\": \"{{$timestamp}}\",\n                \"text\": {\n                  \"body\": \"Mensagem de teste Postman\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/integrations/wa/webhook",
@@ -1306,10 +1306,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Webhook processed or ignored gracefully', () => {",
+                  "pm.test('Webhook processado ou negado com sucesso', () => {",
+                  "  pm.response.to.have.status(200);",
                   "  const body = pm.response.json();",
                   "  pm.expect(body).to.have.property('status');",
-                  "  pm.expect(body).to.have.property('processed');",
+                  "  if (body.status === 'ok' || body.status === 'ignored') {",
+                  "    pm.expect(body).to.have.property('processed');",
+                  "  } else if (body.status === 'denied') {",
+                  "    pm.expect(body.processed).to.be.undefined;",
+                  "  }",
                   "});"
                 ]
               }

@@ -399,7 +399,14 @@ Cria ou atualiza conexão WA.
 Valida webhook do Meta. Requer query `hub.mode=subscribe`, `hub.verify_token` e `hub.challenge`. Resposta `200` com o valor de `hub.challenge` quando o token existe; caso contrário `403`.
 
 ### `POST /integrations/wa/webhook`
-Processa eventos assinados (`X-Hub-Signature-256: sha256=<hex>`). Sem assinatura válida ou sem conexão ativa → `{ "status": "ignored", "processed": 0 }`. Eventos novos geram registros `MessageEvent` e respondem `{ "status": "ok", "processed": <n> }`. Erros de parse retornam `400` (`"Invalid payload"`).
+Processa eventos assinados (`X-Hub-Signature-256: sha256=<hex>`). Regras atuais:
+
+- Sem assinatura válida, sem conexão ativa ou `phone_number_id` desconhecido → `{ "status": "ignored", "processed": 0 }`.
+- Se o número remetente existir no catálogo mas **não possuir opt-in ativo em `contact_channel_opt_in`**, é registrada uma ocorrência em `contact_consent_audit` (`status=revoked`, `source="webhook"`) e a API responde `{ "status": "denied" }`. A solicitação de opt-in pode ser re-enfileirada via `OptInRequestService` para follow-up.
+- Eventos válidos geram registros `MessageEvent` com `contact_id` vinculado (quando o consentimento está ativo) e payload mascarado (`from`, `body`, `caption` etc. retornam `"***redacted***"`). A resposta inclui `{ "status": "ok", "processed": <n> }`.
+- Erros de parse retornam `400` (`"Invalid payload"`).
+
+O endpoint é idempotente por `provider_event_id`: eventos repetidos não criam duplicatas e reutilizam o mesmo hash de auditoria para negações.
 
 ### `POST /integrations/wa/test`
 Retorna `{ "status": "ok", "message": "Test endpoint - no actual send" }` para verificações locais.
