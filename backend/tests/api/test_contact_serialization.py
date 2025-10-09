@@ -13,16 +13,20 @@ BACKEND_DIR = ROOT_DIR / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.api.routes.contacts import _serialize_contact  # noqa: E402
+from app.api.routes.contacts import ContactResponse, _serialize_contact  # noqa: E402
 from app.api.routes.contact_segments import (  # noqa: E402
+    SegmentMembershipResponse,
+    SegmentPolicyResponse,
     _serialize_membership,
+    _serialize_policy,
     _serialize_segment,
 )
-from app.api.routes.contact_segments import SegmentMembershipResponse  # noqa: E402
+from pydantic import ValidationError
 from app.models.models import (  # noqa: E402
     Contact,
     ContactSegment,
     ContactSegmentMembership,
+    ContactSegmentPolicy,
     ContactStatusEnum,
 )
 
@@ -102,3 +106,47 @@ def test_serialize_membership_defaults_origin_label():
     assert isinstance(serialized, SegmentMembershipResponse)
     assert serialized.membership_origin == "legacy"
     assert serialized.valid_from.tzinfo is not None
+
+
+def test_serialize_contact_falls_back_on_validation_error(monkeypatch):
+    contact = Contact(
+        id=uuid.uuid4(),
+        org_id=uuid.uuid4(),
+        status=ContactStatusEnum.active,
+        created_at=datetime(2024, 4, 1, tzinfo=timezone.utc),
+        updated_at=datetime(2024, 4, 2, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(ValidationError) as captured:
+        ContactResponse.model_validate({})
+
+    def _raise_validation_error(cls, value, *args, **kwargs):
+        raise captured.value
+
+    monkeypatch.setattr(
+        ContactResponse,
+        "model_validate",
+        classmethod(_raise_validation_error),
+    )
+
+    serialized = _serialize_contact(contact)
+
+    assert isinstance(serialized, ContactResponse)
+    assert serialized.id == contact.id
+    assert serialized.status == ContactStatusEnum.active
+
+
+def test_serialize_policy_with_invalid_payload_returns_defaults():
+    policy = ContactSegmentPolicy(
+        id=uuid.uuid4(),
+        org_id=uuid.uuid4(),
+        segment_id=uuid.uuid4(),
+        limits={"max_daily_messages": "invalid"},
+        opt_out={"channels": "wrong-type", "enforce": "nope"},
+    )
+
+    serialized = _serialize_policy(policy)
+
+    assert isinstance(serialized, SegmentPolicyResponse)
+    assert serialized.limits.max_daily_messages is None
+    assert serialized.opt_out.channels == []

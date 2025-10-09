@@ -7,7 +7,7 @@ from typing import Any, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -92,7 +92,15 @@ def _serialize_policy(policy: ContactSegmentPolicy | None) -> SegmentPolicyRespo
         "opt_out": _as_optional_dict(getattr(policy, "opt_out", None)) or {},
     }
 
-    return SegmentPolicyResponse.model_validate(raw_payload)
+    try:
+        return SegmentPolicyResponse.model_validate(raw_payload)
+    except ValidationError:
+        # Default to an empty policy when the stored JSON contains unexpected
+        # shapes so the endpoint can continue serving responses.
+        return SegmentPolicyResponse.model_construct(
+            limits=SegmentLimits(),
+            opt_out=SegmentOptOutPolicy(),
+        )
 
 
 def _serialize_segment(segment: ContactSegment) -> ContactSegmentResponse:
@@ -118,7 +126,10 @@ def _serialize_segment(segment: ContactSegment) -> ContactSegmentResponse:
         "policy": policy_model.model_dump() if policy_model else None,
     }
 
-    return ContactSegmentResponse.model_validate(raw_payload)
+    try:
+        return ContactSegmentResponse.model_validate(raw_payload)
+    except ValidationError:
+        return ContactSegmentResponse.model_construct(**raw_payload)
 
 
 def _normalize_membership_origin(value: Any) -> str:
@@ -155,7 +166,10 @@ def _serialize_membership(
         "source_metadata": _as_optional_dict(getattr(membership, "source_metadata", None)),
     }
 
-    return SegmentMembershipResponse.model_validate(raw_payload)
+    try:
+        return SegmentMembershipResponse.model_validate(raw_payload)
+    except ValidationError:
+        return SegmentMembershipResponse.model_construct(**raw_payload)
 
 
 class SegmentLimits(BaseModel):
