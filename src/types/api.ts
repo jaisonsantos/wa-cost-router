@@ -227,6 +227,26 @@ export interface ContactListResponse {
   count: number;
 }
 
+export type ContactImportStatus = "pending" | "validating" | "processing" | "completed" | "failed";
+
+export interface ContactImportJob {
+  id: string;
+  org_id: string;
+  requested_by: string;
+  input_uri: string | null;
+  status: ContactImportStatus;
+  total_rows: number;
+  processed_rows: number;
+  error_rows: number;
+  error_report_uri: string | null;
+  source: string;
+  source_metadata: Record<string, unknown> | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ContactConsentAuditItem {
   id: string;
   opt_in_id?: string | null;
