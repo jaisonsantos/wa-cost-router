@@ -39,6 +39,7 @@ Gera um token para usuário existente vinculado a uma organização.
 - `200 OK` – `TokenResponse` idêntica a `/auth/register`.
 - `401 Unauthorized` – credenciais inválidas.
 - `400 Bad Request` – usuário sem vínculo organizacional.
+- `429 Too Many Requests` – limite por organização excedido; headers `Retry-After` (segundos para novo slot) e `X-RateLimit-Remaining` (sempre `0`).
 
 ## Organização
 
@@ -247,6 +248,7 @@ Agenda envio aplicando roteamento e fallback.
 - `200 OK` – `{ "job_id": "<uuid>", "status": "processing", "provider_used": "360dialog", "estimated_cost": 35, "message": "Message delivered successfully" }` (mensagem entregue ou em andamento).
 - `400 Bad Request` – nenhum provedor disponível ou erro de roteamento persistido.
 - `403 Forbidden` – contato com opt-out registrado (gera enfileiramento de reconfirmação).
+- `429 Too Many Requests` – limite de envios por `org_id` excedido; inclui headers `Retry-After` e `X-RateLimit-Remaining: 0` para orientar o retry.
 
 ### `GET /messages/jobs`
 Lista até 100 jobs mais recentes. Filtros:

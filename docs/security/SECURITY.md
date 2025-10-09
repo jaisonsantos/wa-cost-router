@@ -8,6 +8,7 @@
 - **Multi-tenancy**: filtros `org_id` ativos em providers, routing e mensagens; webhook mapeia `phone_number_id` → `WAConnection` e registra assinaturas HMAC ausentes/inválidas antes de descartar eventos.
 - **Logs**: erros do webhook expõem apenas `provider_event_id`/`message_event_id`; provider responses ainda persistem dados completos.
 - **Endpoints sensíveis**: `/admin/metrics` público; `GET /rates` agora requer auth.
+- **Rate limiting**: Redis limita `POST /messages/send` e `POST /auth/login` por `org_id` com logging estruturado e headers `Retry-After`/`X-RateLimit-Remaining`.
 
 ## Ações Recomendadas (Prioridade Alta)
 
@@ -21,8 +22,8 @@
 4. **Proteção de métricas/admin**
    - Autenticação (basic auth ou token) em `/admin/metrics`.
    - Mover endpoints admin para rede interna.
-5. **Rate limiting**
-   - Middleware com Redis limitando requests por org e por rota crítica.
+5. ~~**Rate limiting**~~ ✅
+   - Expandir monitoramento (Prometheus/alertas) usando as métricas registradas nos logs estruturados.
 6. **Secrets & Config**
    - Enforce override de `JWT_SECRET`/`APP_SECRET_KEY` em produção (ver backlog P1 "enforce secret strength").
    - TLS obrigatório; CORS configurável via env.

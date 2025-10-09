@@ -36,5 +36,8 @@ class Settings(BaseSettings):
     CONTACTS_OPT_IN_ROLLOUT_ENABLED: bool = False
     CONTACTS_OPT_IN_ROLLOUT_TENANTS: list[str] = Field(default_factory=list)
 
+    RATE_LIMIT_MESSAGES_PER_MIN: int = 120
+    RATE_LIMIT_LOGIN_PER_MIN: int = 20
+
 
 settings = Settings()

@@ -1,18 +1,26 @@
 import asyncio
 import logging
 import uuid
+from dataclasses import dataclass
 from typing import Dict, Any, Optional, Iterable
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import decrypt_credentials
+from app.core.rate_limiter import (
+    RateLimitExceeded,
+    RateLimitStatus,
+    RateLimiter,
+    get_rate_limiter,
+)
 from app.models.models import (
     MessageJob, DeliveryAttempt, CostRecord, Provider, ProviderCredential,
     JobStatusEnum, AttemptStatusEnum
@@ -29,6 +37,50 @@ from app.services.routing_engine import RoutingEngine
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SendMessageContext:
+    current_user: dict
+    rate_status: RateLimitStatus
+
+
+def _limit_messages_send(
+    response: Response,
+    current_user: dict = Depends(get_current_user),
+    limiter: RateLimiter = Depends(get_rate_limiter),
+) -> SendMessageContext:
+    scope = "messages_send"
+    identifier = str(current_user["org_id"])
+    try:
+        status = limiter.hit(
+            scope,
+            identifier,
+            limit=settings.RATE_LIMIT_MESSAGES_PER_MIN,
+            ttl_seconds=60,
+        )
+    except RateLimitExceeded as exc:
+        logger.warning(
+            "Rate limit exceeded for message send",
+            extra={
+                "event": "rate_limit_exceeded",
+                "scope": scope,
+                "org_id": identifier,
+                "retry_after": exc.retry_after,
+                "limit": exc.limit,
+            },
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded for message sending",
+            headers={
+                "Retry-After": str(exc.retry_after),
+                "X-RateLimit-Remaining": "0",
+            },
+        ) from exc
+
+    response.headers["X-RateLimit-Remaining"] = str(status.remaining)
+    return SendMessageContext(current_user=current_user, rate_status=status)
 
 class SendMessageRequest(BaseModel):
     idempotency_key: str
@@ -66,8 +118,8 @@ class SendMessageResponse(BaseModel):
 @router.post("/send", response_model=SendMessageResponse)
 async def send_message(
     data: SendMessageRequest,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    context: SendMessageContext = Depends(_limit_messages_send),
+    db: Session = Depends(get_db),
 ):
     """
     Envia mensagem via roteamento inteligente
@@ -78,6 +130,8 @@ async def send_message(
     """
     
     # 1. Verificar idempotência
+    current_user = context.current_user
+
     existing_job = db.query(MessageJob).filter(
         MessageJob.org_id == current_user["org_id"],
         MessageJob.idempotency_key == data.idempotency_key
