@@ -50,6 +50,28 @@ def _coerce_datetime(value: Any) -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _normalize_slug(value: Any, *, default: str) -> str:
+    """Return a slug-like string even if legacy records omit it."""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate:
+            return candidate
+
+    return default
+
+
+def _normalize_name(value: Any, *, fallback: str) -> str:
+    """Provide a human-friendly segment name when the stored value is missing."""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate:
+            return candidate
+
+    return fallback
+
+
 def _serialize_policy(policy: ContactSegmentPolicy | None) -> SegmentPolicyResponse | None:
     """Convert stored routing policies into the public response schema."""
 
@@ -68,11 +90,15 @@ def _serialize_segment(segment: ContactSegment) -> ContactSegmentResponse:
     """Normalize a segment ORM model into an API response."""
 
     policy_model = _serialize_policy(getattr(segment, "policy", None))
+    segment_id = getattr(segment, "id", None)
+    fallback_slug = f"segment-{segment_id}" if segment_id is not None else "segment-legacy"
+    normalized_slug = _normalize_slug(getattr(segment, "slug", None), default=fallback_slug)
+    normalized_name = _normalize_name(getattr(segment, "name", None), fallback=normalized_slug)
     raw_payload = {
         "id": segment.id,
         "org_id": segment.org_id,
-        "slug": segment.slug,
-        "name": segment.name,
+        "slug": normalized_slug,
+        "name": normalized_name,
         "description": segment.description,
         "criteria": _as_optional_dict(getattr(segment, "criteria", None)),
         "source": _normalize_segment_source(getattr(segment, "source", None)),
@@ -86,6 +112,17 @@ def _serialize_segment(segment: ContactSegment) -> ContactSegmentResponse:
     return ContactSegmentResponse.model_validate(raw_payload)
 
 
+def _normalize_membership_origin(value: Any) -> str:
+    """Ensure membership records expose a traceable origin label."""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate:
+            return candidate
+
+    return "legacy"
+
+
 def _serialize_membership(
     membership: ContactSegmentMembership,
 ) -> SegmentMembershipResponse:
@@ -96,7 +133,9 @@ def _serialize_membership(
         "org_id": membership.org_id,
         "contact_id": membership.contact_id,
         "segment_id": membership.segment_id,
-        "membership_origin": membership.membership_origin,
+        "membership_origin": _normalize_membership_origin(
+            getattr(membership, "membership_origin", None)
+        ),
         "valid_from": _coerce_datetime(getattr(membership, "valid_from", None)),
         "valid_to": (
             _coerce_datetime(membership.valid_to)

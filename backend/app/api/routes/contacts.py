@@ -59,6 +59,21 @@ def _coerce_datetime(value: Any) -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _coerce_contact_status(value: Any) -> ContactStatusEnum:
+    """Ensure contacts always expose a valid status value."""
+
+    if isinstance(value, ContactStatusEnum):
+        return value
+
+    if isinstance(value, str):
+        try:
+            return ContactStatusEnum(value)
+        except ValueError:
+            pass
+
+    return ContactStatusEnum.active
+
+
 def _serialize_contact(contact: Contact) -> ContactResponse:
     """Convert a SQLAlchemy contact model into the public response schema."""
 
@@ -71,7 +86,7 @@ def _serialize_contact(contact: Contact) -> ContactResponse:
         "last_name": contact.last_name,
         "email": contact.email,
         "phone": contact.phone,
-        "status": contact.status,
+        "status": _coerce_contact_status(getattr(contact, "status", None)),
         "attributes": _as_optional_dict(getattr(contact, "attributes", None)),
         "source": _normalize_source(getattr(contact, "source", None)),
         "source_metadata": _as_optional_dict(getattr(contact, "source_metadata", None)),
