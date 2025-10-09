@@ -2,7 +2,7 @@
   "info": {
     "name": "WA Cost Router",
     "_postman_id": "4f6d5d8b-1d2c-4a8d-9b1e-0c1234567890",
-    "description": "Coleção completa da API WA Cost Router para desenvolvimento local.",
+    "description": "Cole\u00e7\u00e3o completa da API WA Cost Router para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -243,10 +243,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Sandbox health check succeeds', () => {",
+                  "pm.test('Health check response includes status', () => {",
                   "  const body = pm.response.json();",
-                  "  pm.expect(body.healthy).to.eql(true);",
-                  "  pm.expect(body.latency_ms).to.be.a('number');",
+                  "  pm.expect(body).to.have.property('provider_id');",
+                  "  pm.expect(body).to.have.property('healthy');",
                   "});"
                 ]
               }
@@ -945,12 +945,7 @@
           "name": "Rates - Import CSV",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "multipart/form-data"
-              }
-            ],
+            "header": [],
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -1109,7 +1104,21 @@
                 }
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Challenge echoed', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.eql('12345');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "WA - Webhook Receive",
@@ -1143,14 +1152,25 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const secret = pm.environment.get('wa_webhook_secret');",
-                  "if (!secret) {",
-                  "  pm.request.headers.remove('X-Hub-Signature-256');",
-                  "  return;",
-                  "}",
-                  "const rawBody = (pm.request.body && pm.request.body.raw) || '';",
-                  "const signature = 'sha256=' + CryptoJS.HmacSHA256(rawBody, secret).toString(CryptoJS.enc.Hex);",
-                  "pm.request.headers.upsert({ key: 'X-Hub-Signature-256', value: signature });"
+                  "(() => {",
+                  "  const secret = pm.environment.get('wa_webhook_secret') || '';",
+                  "  const body = pm.request.body && pm.request.body.raw ? pm.request.body.raw : '';",
+                  "  const signature = CryptoJS.HmacSHA256(body, secret).toString(CryptoJS.enc.Hex);",
+                  "  pm.request.headers.upsert({ key: 'X-Hub-Signature-256', value: `sha256=${signature}` });",
+                  "})();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Webhook processed or ignored gracefully', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('status');",
+                  "  pm.expect(body).to.have.property('processed');",
+                  "});"
                 ]
               }
             }

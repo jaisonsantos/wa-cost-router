@@ -270,3 +270,79 @@ def test_list_consent_history_returns_audit_entries(session):
     )
     assert filtered == []
 
+
+def test_list_contacts_deduplicates_join_results_before_pagination(session):
+    org = _create_org(session)
+    repo = ContactRepository(session)
+
+    newer_contact = repo.create_contact(
+        id=uuid.uuid4(),
+        org_id=org.id,
+        phone="+5511999999999",
+        status=ContactStatusEnum.active,
+    )
+    older_contact = repo.create_contact(
+        id=uuid.uuid4(),
+        org_id=org.id,
+        phone="+5511888888888",
+        status=ContactStatusEnum.active,
+    )
+
+    newer_contact.created_at = datetime(2024, 5, 1, tzinfo=timezone.utc)
+    newer_contact.updated_at = datetime(2024, 5, 1, tzinfo=timezone.utc)
+    older_contact.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    older_contact.updated_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    session.commit()
+
+    opt_in_new_v1 = ContactChannelOptIn(
+        id=uuid.uuid4(),
+        org_id=org.id,
+        contact_id=newer_contact.id,
+        channel="whatsapp",
+        channel_address=newer_contact.phone,
+        status=OptInStatusEnum.granted,
+        version=1,
+        captured_at=datetime.now(timezone.utc) - timedelta(days=2),
+        source="import",
+    )
+    opt_in_new_v2 = ContactChannelOptIn(
+        id=uuid.uuid4(),
+        org_id=org.id,
+        contact_id=newer_contact.id,
+        channel="whatsapp",
+        channel_address=newer_contact.phone,
+        status=OptInStatusEnum.granted,
+        version=2,
+        captured_at=datetime.now(timezone.utc) - timedelta(days=1),
+        source="import",
+    )
+    opt_in_old = ContactChannelOptIn(
+        id=uuid.uuid4(),
+        org_id=org.id,
+        contact_id=older_contact.id,
+        channel="whatsapp",
+        channel_address=older_contact.phone,
+        status=OptInStatusEnum.revoked,
+        version=1,
+        captured_at=datetime.now(timezone.utc) - timedelta(days=3),
+        source="migration",
+    )
+
+    session.add_all([opt_in_new_v1, opt_in_new_v2, opt_in_old])
+    session.commit()
+
+    ordered_results = repo.list_contacts(org_id=org.id, channel="whatsapp")
+    assert [contact.id for contact in ordered_results] == [
+        newer_contact.id,
+        older_contact.id,
+    ]
+
+    paginated_results = repo.list_contacts(
+        org_id=org.id,
+        channel="whatsapp",
+        limit=1,
+        offset=1,
+    )
+
+    assert [contact.id for contact in paginated_results] == [older_contact.id]
+

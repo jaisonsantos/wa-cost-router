@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import Any, List
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -17,9 +18,243 @@ from app.api.deps import (
     require_contacts_write,
 )
 from app.core.database import get_db
+from app.models.models import ContactSegment, ContactSegmentMembership, ContactSegmentPolicy
 from app.services.contacts import ContactSegmentService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+def _as_optional_dict(value: Any) -> dict[str, Any] | None:
+    """Return dictionaries as-is and discard unexpected JSON payloads."""
+
+    if isinstance(value, dict):
+        return value
+    return None
+
+
+def _normalize_segment_source(value: Any) -> str:
+    """Guarantee a stable source label when legacy rows omit it."""
+
+    if isinstance(value, str) and value.strip():
+        return value
+    return "manual"
+
+
+def _safe_uuid(value: Any, fallback: UUID) -> UUID:
+    """Return a UUID parsed from ``value`` or a fallback placeholder."""
+
+    if isinstance(value, UUID):
+        return value
+
+    if value is None:
+        return fallback
+
+    try:
+        return UUID(str(value))
+    except Exception:  # pragma: no cover - defensive parsing
+        return fallback
+
+
+def _coerce_datetime(value: Any) -> datetime:
+    """Return a timezone-aware datetime, defaulting to the current UTC instant."""
+
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    return datetime.now(timezone.utc)
+
+
+def _normalize_slug(value: Any, *, default: str) -> str:
+    """Return a slug-like string even if legacy records omit it."""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate:
+            return candidate
+
+    return default
+
+
+def _normalize_name(value: Any, *, fallback: str) -> str:
+    """Provide a human-friendly segment name when the stored value is missing."""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate:
+            return candidate
+
+    return fallback
+
+
+def _coerce_optional_string(value: Any) -> str | None:
+    """Return a stripped string when possible, otherwise ``None``."""
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return None
+
+
+def _serialize_policy(policy: ContactSegmentPolicy | None) -> SegmentPolicyResponse | None:
+    """Convert stored routing policies into the public response schema."""
+
+    if policy is None:
+        return None
+
+    try:
+        raw_payload = {
+            "limits": _as_optional_dict(getattr(policy, "limits", None)) or {},
+            "opt_out": _as_optional_dict(getattr(policy, "opt_out", None)) or {},
+        }
+
+        try:
+            return SegmentPolicyResponse.model_validate(raw_payload)
+        except ValidationError:
+            # Default to an empty policy when the stored JSON contains unexpected
+            # shapes so the endpoint can continue serving responses.
+            return SegmentPolicyResponse.model_construct(
+                limits=SegmentLimits(),
+                opt_out=SegmentOptOutPolicy(),
+            )
+    except Exception:  # pragma: no cover - defensive guard
+        logger.exception(
+            "Failed to serialize segment policy", extra={"policy_id": getattr(policy, "id", None)}
+        )
+        return SegmentPolicyResponse.model_construct(
+            limits=SegmentLimits(),
+            opt_out=SegmentOptOutPolicy(),
+        )
+
+
+def _fallback_segment(segment: ContactSegment) -> ContactSegmentResponse:
+    """Return a minimal representation when serialization fails."""
+
+    now = datetime.now(timezone.utc)
+    segment_id = getattr(segment, "id", None)
+    safe_id = _safe_uuid(segment_id, uuid4()) if segment_id is not None else uuid4()
+    safe_org_id = _safe_uuid(getattr(segment, "org_id", None), UUID(int=0))
+    slug_fallback = f"segment-{safe_id}" if segment_id is not None else "segment-legacy"
+
+    return ContactSegmentResponse.model_construct(
+        id=safe_id,
+        org_id=safe_org_id,
+        slug=slug_fallback,
+        name=slug_fallback,
+        description=None,
+        criteria=None,
+        source="manual",
+        source_metadata=None,
+        proof_hash=None,
+        created_at=_coerce_datetime(getattr(segment, "created_at", now)),
+        updated_at=_coerce_datetime(getattr(segment, "updated_at", now)),
+        policy=None,
+    )
+
+
+def _serialize_segment(segment: ContactSegment) -> ContactSegmentResponse:
+    """Normalize a segment ORM model into an API response."""
+
+    try:
+        policy_model = _serialize_policy(getattr(segment, "policy", None))
+        segment_id = getattr(segment, "id", None)
+        fallback_slug = f"segment-{segment_id}" if segment_id is not None else "segment-legacy"
+        normalized_slug = _normalize_slug(getattr(segment, "slug", None), default=fallback_slug)
+        normalized_name = _normalize_name(getattr(segment, "name", None), fallback=normalized_slug)
+        raw_payload = {
+            "id": segment.id,
+            "org_id": segment.org_id,
+            "slug": normalized_slug,
+            "name": normalized_name,
+            "description": _coerce_optional_string(getattr(segment, "description", None)),
+            "criteria": _as_optional_dict(getattr(segment, "criteria", None)),
+            "source": _normalize_segment_source(getattr(segment, "source", None)),
+            "source_metadata": _as_optional_dict(getattr(segment, "source_metadata", None)),
+            "proof_hash": _coerce_optional_string(getattr(segment, "proof_hash", None)),
+            "created_at": _coerce_datetime(getattr(segment, "created_at", None)),
+            "updated_at": _coerce_datetime(getattr(segment, "updated_at", None)),
+            "policy": policy_model.model_dump() if policy_model else None,
+        }
+
+        try:
+            return ContactSegmentResponse.model_validate(raw_payload)
+        except ValidationError:
+            return ContactSegmentResponse.model_construct(**raw_payload)
+    except Exception:  # pragma: no cover - defensive guard
+        logger.exception(
+            "Failed to serialize contact segment", extra={"segment_id": getattr(segment, "id", None)}
+        )
+        return _fallback_segment(segment)
+
+
+def _normalize_membership_origin(value: Any) -> str:
+    """Ensure membership records expose a traceable origin label."""
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate:
+            return candidate
+
+    return "legacy"
+
+
+def _fallback_membership(membership: ContactSegmentMembership) -> SegmentMembershipResponse:
+    """Return a resilient representation when membership serialization fails."""
+
+    now = datetime.now(timezone.utc)
+    return SegmentMembershipResponse.model_construct(
+        id=_safe_uuid(getattr(membership, "id", None), uuid4()),
+        org_id=_safe_uuid(getattr(membership, "org_id", None), UUID(int=0)),
+        contact_id=_safe_uuid(getattr(membership, "contact_id", None), UUID(int=0)),
+        segment_id=_safe_uuid(getattr(membership, "segment_id", None), UUID(int=0)),
+        membership_origin="legacy",
+        valid_from=_coerce_datetime(getattr(membership, "valid_from", now)),
+        valid_to=(
+            _coerce_datetime(getattr(membership, "valid_to", now))
+            if getattr(membership, "valid_to", None) is not None
+            else None
+        ),
+        source="manual",
+        source_metadata=None,
+    )
+
+
+def _serialize_membership(
+    membership: ContactSegmentMembership,
+) -> SegmentMembershipResponse:
+    """Serialize membership rows ensuring optional metadata stays well-formed."""
+
+    try:
+        raw_payload = {
+            "id": membership.id,
+            "org_id": membership.org_id,
+            "contact_id": membership.contact_id,
+            "segment_id": membership.segment_id,
+            "membership_origin": _normalize_membership_origin(
+                getattr(membership, "membership_origin", None)
+            ),
+            "valid_from": _coerce_datetime(getattr(membership, "valid_from", None)),
+            "valid_to": (
+                _coerce_datetime(membership.valid_to)
+                if getattr(membership, "valid_to", None) is not None
+                else None
+            ),
+            "source": _normalize_segment_source(getattr(membership, "source", None)),
+            "source_metadata": _as_optional_dict(getattr(membership, "source_metadata", None)),
+        }
+
+        try:
+            return SegmentMembershipResponse.model_validate(raw_payload)
+        except ValidationError:
+            return SegmentMembershipResponse.model_construct(**raw_payload)
+    except Exception:  # pragma: no cover - defensive guard
+        logger.exception(
+            "Failed to serialize segment membership", extra={"membership_id": getattr(membership, "id", None)}
+        )
+        return _fallback_membership(membership)
 
 
 class SegmentLimits(BaseModel):
@@ -170,7 +405,7 @@ def list_contact_segments(
         limit=pagination.limit,
         offset=pagination.offset,
     )
-    items = [ContactSegmentResponse.model_validate(segment) for segment in segments]
+    items = [_serialize_segment(segment) for segment in segments]
 
     return ContactSegmentListResponse(
         items=items,
@@ -193,7 +428,7 @@ def create_contact_segment(
         org_id=current_user["org_id"],
         **payload.model_dump(exclude_unset=True),
     )
-    return ContactSegmentResponse.model_validate(segment)
+    return _serialize_segment(segment)
 
 
 @router.get("/{segment_id}", response_model=ContactSegmentResponse)
@@ -210,7 +445,7 @@ def get_contact_segment(
     if segment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
 
-    return ContactSegmentResponse.model_validate(segment)
+    return _serialize_segment(segment)
 
 
 @router.patch("/{segment_id}", response_model=ContactSegmentResponse)
@@ -233,7 +468,7 @@ def update_contact_segment(
     if segment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
 
-    return ContactSegmentResponse.model_validate(segment)
+    return _serialize_segment(segment)
 
 
 @router.delete("/{segment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -278,9 +513,7 @@ def add_contacts_to_segment(
 
     return SegmentContactsResponse(
         segment_id=segment_id,
-        created_memberships=[
-            SegmentMembershipResponse.model_validate(membership) for membership in created_memberships
-        ],
+        created_memberships=[_serialize_membership(membership) for membership in created_memberships],
         missing_contact_ids=missing_contacts,
         already_associated=already_associated,
     )
@@ -339,4 +572,7 @@ def upsert_segment_policy(
     if policy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
 
-    return SegmentPolicyResponse.model_validate(policy)
+    serialized = _serialize_policy(policy)
+    if serialized is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
+    return serialized
