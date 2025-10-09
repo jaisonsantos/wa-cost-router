@@ -7,3 +7,6 @@
 
 ### Ferramentas
 - Sincronizamos a coleção Postman com os contratos atuais: ajustes de testes (org/health check/webhook), remoção de headers inválidos e assinatura automática do webhook do WhatsApp.
+
+### Backend
+- Tornamos os endpoints de contatos e segmentos resilientes a registros legados, saneando campos JSON opcionais e evitando respostas 500 nos fluxos de listagem e criação exercitados pelo CI.

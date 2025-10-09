@@ -17,9 +17,82 @@ from app.api.deps import (
     require_contacts_write,
 )
 from app.core.database import get_db
+from app.models.models import ContactSegment, ContactSegmentMembership, ContactSegmentPolicy
 from app.services.contacts import ContactSegmentService
 
 router = APIRouter()
+
+
+def _as_optional_dict(value: Any) -> dict[str, Any] | None:
+    """Return dictionaries as-is and discard unexpected JSON payloads."""
+
+    if isinstance(value, dict):
+        return value
+    return None
+
+
+def _normalize_segment_source(value: Any) -> str:
+    """Guarantee a stable source label when legacy rows omit it."""
+
+    if isinstance(value, str) and value.strip():
+        return value
+    return "manual"
+
+
+def _serialize_policy(policy: ContactSegmentPolicy | None) -> SegmentPolicyResponse | None:
+    """Convert stored routing policies into the public response schema."""
+
+    if policy is None:
+        return None
+
+    raw_payload = {
+        "limits": _as_optional_dict(getattr(policy, "limits", None)) or {},
+        "opt_out": _as_optional_dict(getattr(policy, "opt_out", None)) or {},
+    }
+
+    return SegmentPolicyResponse.model_validate(raw_payload)
+
+
+def _serialize_segment(segment: ContactSegment) -> ContactSegmentResponse:
+    """Normalize a segment ORM model into an API response."""
+
+    policy_model = _serialize_policy(getattr(segment, "policy", None))
+    raw_payload = {
+        "id": segment.id,
+        "org_id": segment.org_id,
+        "slug": segment.slug,
+        "name": segment.name,
+        "description": segment.description,
+        "criteria": _as_optional_dict(getattr(segment, "criteria", None)),
+        "source": _normalize_segment_source(getattr(segment, "source", None)),
+        "source_metadata": _as_optional_dict(getattr(segment, "source_metadata", None)),
+        "proof_hash": getattr(segment, "proof_hash", None),
+        "created_at": segment.created_at,
+        "updated_at": segment.updated_at,
+        "policy": policy_model.model_dump() if policy_model else None,
+    }
+
+    return ContactSegmentResponse.model_validate(raw_payload)
+
+
+def _serialize_membership(
+    membership: ContactSegmentMembership,
+) -> SegmentMembershipResponse:
+    """Serialize membership rows ensuring optional metadata stays well-formed."""
+
+    raw_payload = {
+        "id": membership.id,
+        "org_id": membership.org_id,
+        "contact_id": membership.contact_id,
+        "segment_id": membership.segment_id,
+        "membership_origin": membership.membership_origin,
+        "valid_from": membership.valid_from,
+        "valid_to": membership.valid_to,
+        "source": _normalize_segment_source(getattr(membership, "source", None)),
+        "source_metadata": _as_optional_dict(getattr(membership, "source_metadata", None)),
+    }
+
+    return SegmentMembershipResponse.model_validate(raw_payload)
 
 
 class SegmentLimits(BaseModel):
@@ -170,7 +243,7 @@ def list_contact_segments(
         limit=pagination.limit,
         offset=pagination.offset,
     )
-    items = [ContactSegmentResponse.model_validate(segment) for segment in segments]
+    items = [_serialize_segment(segment) for segment in segments]
 
     return ContactSegmentListResponse(
         items=items,
@@ -193,7 +266,7 @@ def create_contact_segment(
         org_id=current_user["org_id"],
         **payload.model_dump(exclude_unset=True),
     )
-    return ContactSegmentResponse.model_validate(segment)
+    return _serialize_segment(segment)
 
 
 @router.get("/{segment_id}", response_model=ContactSegmentResponse)
@@ -210,7 +283,7 @@ def get_contact_segment(
     if segment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
 
-    return ContactSegmentResponse.model_validate(segment)
+    return _serialize_segment(segment)
 
 
 @router.patch("/{segment_id}", response_model=ContactSegmentResponse)
@@ -233,7 +306,7 @@ def update_contact_segment(
     if segment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
 
-    return ContactSegmentResponse.model_validate(segment)
+    return _serialize_segment(segment)
 
 
 @router.delete("/{segment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -278,9 +351,7 @@ def add_contacts_to_segment(
 
     return SegmentContactsResponse(
         segment_id=segment_id,
-        created_memberships=[
-            SegmentMembershipResponse.model_validate(membership) for membership in created_memberships
-        ],
+        created_memberships=[_serialize_membership(membership) for membership in created_memberships],
         missing_contact_ids=missing_contacts,
         already_associated=already_associated,
     )
@@ -339,4 +410,7 @@ def upsert_segment_policy(
     if policy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
 
-    return SegmentPolicyResponse.model_validate(policy)
+    serialized = _serialize_policy(policy)
+    if serialized is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
+    return serialized

@@ -19,6 +19,7 @@ from app.api.deps import (
 )
 from app.core.database import get_db
 from app.models.models import (
+    Contact,
     ContactImportJob,
     ContactImportStatusEnum,
     ContactStatusEnum,
@@ -29,6 +30,46 @@ from app.services.contacts import ContactRepository, enqueue_contact_import
 from app.services.storage import TemporaryObjectStorage
 
 router = APIRouter()
+
+
+def _as_optional_dict(value: Any) -> dict[str, Any] | None:
+    """Return the input if it behaves like a dictionary, otherwise ``None``."""
+
+    if isinstance(value, dict):
+        return value
+    return None
+
+
+def _normalize_source(value: Any) -> str:
+    """Guarantee a non-empty source label for legacy records."""
+
+    if isinstance(value, str) and value.strip():
+        return value
+    return "manual"
+
+
+def _serialize_contact(contact: Contact) -> ContactResponse:
+    """Convert a SQLAlchemy contact model into the public response schema."""
+
+    raw_payload = {
+        "id": contact.id,
+        "org_id": contact.org_id,
+        "external_id": contact.external_id,
+        "full_name": contact.full_name,
+        "first_name": contact.first_name,
+        "last_name": contact.last_name,
+        "email": contact.email,
+        "phone": contact.phone,
+        "status": contact.status,
+        "attributes": _as_optional_dict(getattr(contact, "attributes", None)),
+        "source": _normalize_source(getattr(contact, "source", None)),
+        "source_metadata": _as_optional_dict(getattr(contact, "source_metadata", None)),
+        "proof_hash": getattr(contact, "proof_hash", None),
+        "created_at": contact.created_at,
+        "updated_at": contact.updated_at,
+    }
+
+    return ContactResponse.model_validate(raw_payload)
 
 
 class ContactBase(BaseModel):
@@ -208,7 +249,7 @@ def list_contacts(
         offset=pagination.offset,
     )
 
-    items = [ContactResponse.model_validate(contact) for contact in contacts]
+    items = [_serialize_contact(contact) for contact in contacts]
 
     return ContactListResponse(
         items=items,
@@ -317,7 +358,7 @@ def create_contact(
         org_id=current_user["org_id"],
         **payload.model_dump(exclude_unset=True),
     )
-    return ContactResponse.model_validate(contact)
+    return _serialize_contact(contact)
 
 
 @router.patch("/{contact_id}", response_model=ContactResponse)
@@ -340,7 +381,7 @@ def update_contact(
     if contact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
 
-    return ContactResponse.model_validate(contact)
+    return _serialize_contact(contact)
 
 
 @router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
