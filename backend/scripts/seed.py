@@ -44,6 +44,10 @@ DEFAULT_CONTACT_EMAIL = "dana.customer@example.com"
 DEFAULT_CONTACT_PHONE = "+5511987654321"
 DEFAULT_CONTACT_SOURCE = "seed"
 
+DEFAULT_MARKETING_CONTACT_ID = uuid.UUID("55555555-5555-4555-8555-555555555555")
+DEFAULT_MARKETING_CONTACT_EMAIL = "john.customer@example.com"
+DEFAULT_MARKETING_CONTACT_PHONE = "+5511999999999"
+
 DEFAULT_SEGMENT_ID = uuid.UUID("33333333-3333-4333-8333-333333333333")
 DEFAULT_SEGMENT_SLUG = "pilot-customers"
 
@@ -214,6 +218,31 @@ def seed():
             db.add(demo_contact)
             db.flush()
 
+        marketing_contact = (
+            db.query(Contact)
+            .filter(Contact.org_id == org.id)
+            .filter(Contact.phone == DEFAULT_MARKETING_CONTACT_PHONE)
+            .first()
+        )
+        if not marketing_contact:
+            marketing_contact = Contact(
+                id=DEFAULT_MARKETING_CONTACT_ID,
+                org_id=org.id,
+                full_name="John Customer",
+                first_name="John",
+                last_name="Customer",
+                email=DEFAULT_MARKETING_CONTACT_EMAIL,
+                phone=DEFAULT_MARKETING_CONTACT_PHONE,
+                status=ContactStatusEnum.active,
+                source=DEFAULT_CONTACT_SOURCE,
+                source_metadata={"seed": True},
+                proof_hash=hashlib.sha256(b"contact:john-customer:seed:v1").hexdigest(),
+                created_at=seed_timestamp,
+                updated_at=seed_timestamp,
+            )
+            db.add(marketing_contact)
+            db.flush()
+
         opt_in = (
             db.query(ContactChannelOptIn)
             .filter(
@@ -242,6 +271,33 @@ def seed():
                 updated_at=seed_timestamp,
             )
             db.add(opt_in)
+
+        marketing_opt_in = (
+            db.query(ContactChannelOptIn)
+            .filter(ContactChannelOptIn.contact_id == marketing_contact.id)
+            .filter(ContactChannelOptIn.channel == "whatsapp")
+            .filter(ContactChannelOptIn.channel_address == DEFAULT_MARKETING_CONTACT_PHONE)
+            .filter(ContactChannelOptIn.version == 1)
+            .first()
+        )
+        if not marketing_opt_in:
+            marketing_opt_in = ContactChannelOptIn(
+                org_id=org.id,
+                contact_id=marketing_contact.id,
+                channel="whatsapp",
+                channel_address=DEFAULT_MARKETING_CONTACT_PHONE,
+                status=OptInStatusEnum.granted,
+                version=1,
+                legal_basis="opt_in",
+                captured_at=seed_timestamp,
+                source=DEFAULT_CONTACT_SOURCE,
+                source_metadata={"seed": True},
+                evidence_uri="https://example.com/proof/whatsapp-opt-in-john",
+                proof_hash=hashlib.sha256(b"optin:whatsapp:john-customer:v1").hexdigest(),
+                created_at=seed_timestamp,
+                updated_at=seed_timestamp,
+            )
+            db.add(marketing_opt_in)
 
         pilot_segment = (
             db.query(ContactSegment)
@@ -287,6 +343,27 @@ def seed():
                 updated_at=seed_timestamp,
             )
             db.add(membership)
+
+        marketing_membership = (
+            db.query(ContactSegmentMembership)
+            .filter(ContactSegmentMembership.contact_id == marketing_contact.id)
+            .filter(ContactSegmentMembership.segment_id == pilot_segment.id)
+            .first()
+        )
+        if not marketing_membership:
+            marketing_membership = ContactSegmentMembership(
+                org_id=org.id,
+                contact_id=marketing_contact.id,
+                segment_id=pilot_segment.id,
+                membership_origin="seed",
+                valid_from=seed_timestamp,
+                source=DEFAULT_CONTACT_SOURCE,
+                source_metadata={"seed": True},
+                proof_hash=hashlib.sha256(b"segment-membership:john-customer:pilot").hexdigest(),
+                created_at=seed_timestamp,
+                updated_at=seed_timestamp,
+            )
+            db.add(marketing_membership)
 
         import_job = (
             db.query(ContactImportJob)
