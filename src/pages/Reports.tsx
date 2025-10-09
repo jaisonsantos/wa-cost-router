@@ -72,11 +72,15 @@ const Reports = () => {
     return { from: fromDate.toISOString(), to: toDate.toISOString() };
   }, [timeRange]);
   const { data: summary, isLoading: summaryLoading } = useSummary(from, to);
-  const { data: eventsData, isLoading: eventsLoading } = useEvents({
-    limit: 1000,
-    from,
-    to,
-  });
+  const eventsParams = useMemo(
+    () => ({
+      limit: 1000,
+      from,
+      to,
+    }),
+    [from, to],
+  );
+  const { data: eventsData, isLoading: eventsLoading } = useEvents(eventsParams);
 
   const events: Event[] = eventsData ?? [];
   const summaryData: SummaryResponse | undefined = summary;

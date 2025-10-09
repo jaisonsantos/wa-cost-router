@@ -43,8 +43,16 @@ export const useSummary = (from?: string, to?: string) => {
 
 // Events
 export const useEvents = (params?: EventsQueryParams) => {
+  const queryKey = [
+    "events",
+    params?.limit ?? null,
+    params?.from ?? null,
+    params?.to ?? null,
+    params?.offset ?? null,
+  ];
+
   return useQuery<Event[], Error>({
-    queryKey: ["events", params],
+    queryKey,
     queryFn: () => api.getEvents(params),
   });
 };
