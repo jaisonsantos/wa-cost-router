@@ -15,6 +15,7 @@ from app.models.models import (
     ContactStatusEnum,
     OptInStatusEnum,
 )
+from app.services.contacts.sanitization import sanitize_contact_payload
 
 
 def _normalize_sequence(value: Optional[Union[Sequence, Iterable, str, int]]) -> List:
@@ -38,7 +39,8 @@ class ContactRepository:
 
     # CRUD -----------------------------------------------------------------
     def create_contact(self, **payload) -> Contact:
-        contact = Contact(**payload)
+        sanitized_payload = sanitize_contact_payload(payload)
+        contact = Contact(**sanitized_payload)
         self.db.add(contact)
         self.db.commit()
         self.db.refresh(contact)
@@ -57,7 +59,8 @@ class ContactRepository:
             return None
 
         protected_fields = {"id", "org_id", "created_at"}
-        for field, value in updates.items():
+        sanitized_updates = sanitize_contact_payload(updates)
+        for field, value in sanitized_updates.items():
             if field in protected_fields:
                 continue
             if hasattr(Contact, field):
