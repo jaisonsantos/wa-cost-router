@@ -43,6 +43,13 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 - Eventos assinados com o secret antigo passam a retornar `403`; monitore os logs estruturados (`message_event_ids`) para confirmar a adoção do novo valor.
 - Nunca compartilhe o secret em texto claro; utilize os comandos administrativos para importar/exportar apenas através de variáveis de ambiente temporárias.
 
+## Consentimento inbound e auditoria
+
+- Cada mensagem inbound com campo `from` passa por verificação de opt-in (`contact_channel_opt_in`). Quando o consentimento está ausente, o webhook responde `{"status": "denied"}` e registra uma ocorrência em `contact_consent_audit` (`status=revoked`, `source="webhook"`, `proof_hash=sha256("denied:<provider_event_id>")`).
+- As negações não criam `message_event` nem alteram métricas de tráfego. Consulte a tabela `contact_consent_audit` para auditar tentativas (filtre por `agent="wa_webhook"`).
+- O serviço `OptInRequestService` é acionado para re-enfileirar solicitações de opt-in por e-mail. Verifique `contact_opt_in_request` para acompanhar follow-ups e reenvios.
+- Para reprocessar um evento depois de concedido o consentimento, reenvie a notificação do Meta (o endpoint é idempotente por `provider_event_id`; remova o hash correspondente em `contact_consent_audit` se precisar liberar uma nova tentativa).
+
 ## Pipeline CI
 
 - **Workflow**: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) executado em `push` e `pull_request` para `main`, além de gatilho manual via `workflow_dispatch`.

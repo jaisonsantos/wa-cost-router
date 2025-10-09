@@ -36,12 +36,13 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 | `contacts_csv_path` | Caminho do CSV usado no import de contatos (`docs/postman/sample_contacts.csv`). |
 | `rate_limit_demo_enabled` | Quando `true`, o request **Messages - Rate Limit Demo** dispara chamadas adicionais para demonstrar `429` (requer ajustar os limites da API para valores baixos). |
 | `wa_phone_id`, `wa_business_id`, `wa_access_token`, `wa_verify_token`, `wa_webhook_secret` | Dados seed para testar integrações WhatsApp (incluindo secret usado no HMAC do webhook). |
+| `wa_contact_phone` | Número E.164 usado como remetente no payload do webhook; ajuste conforme o contato criado no catálogo. |
 
 ### Assinatura do webhook
 
 - `WA - Webhook Receive` calcula automaticamente o header `X-Hub-Signature-256` em um script *pre-request* usando HMAC SHA-256 do corpo bruto com a variável `wa_webhook_secret` (`sha256=<hex>`).
 - Certifique-se de executar **WA - Create Connection** antes das requisições de webhook para que a API armazene o mesmo secret; quando o header de assinatura não for enviado, os eventos serão ignorados com `status: ignored`.
-- O payload de exemplo inclui `metadata.phone_number_id` e deve combinar com `wa_phone_id` para que o evento seja aceito.
+- O payload de exemplo inclui `metadata.phone_number_id` e deve combinar com `wa_phone_id` para que o evento seja aceito. Use `wa_contact_phone` para simular o número do contato: se o catálogo não possuir opt-in ativo para esse número, a resposta será `{"status": "denied"}` e o payload do evento é mascarado automaticamente nos registros.
 
 ## Fluxo recomendado
 

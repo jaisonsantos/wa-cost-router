@@ -88,6 +88,9 @@ class MessageEvent(Base):
     )
     message_job_id = Column(UUID(as_uuid=True), ForeignKey("message_job.id"))
     connection_id = Column(UUID(as_uuid=True), ForeignKey("wa_connection.id"))
+    contact_id = Column(
+        UUID(as_uuid=True), ForeignKey("contact.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     provider_event_id = Column(String, unique=True, nullable=False, index=True)
     direction = Column(String, nullable=False)
     template_name = Column(String)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Iterable, List, Optional, Sequence, Union
 
 from sqlalchemy import case, func
@@ -54,6 +55,28 @@ class ContactRepository:
             .first()
         )
 
+    def find_by_phone(self, *, org_id, phone_number: Optional[str]) -> Optional[Contact]:
+        """Return the first contact that matches the phone number for the org."""
+
+        normalized_number = self._normalize_phone(phone_number)
+        if not normalized_number:
+            return None
+
+        phone_expr = Contact.phone
+        phone_expr = func.replace(phone_expr, "+", "")
+        phone_expr = func.replace(phone_expr, "-", "")
+        phone_expr = func.replace(phone_expr, " ", "")
+        phone_expr = func.replace(phone_expr, "(", "")
+        phone_expr = func.replace(phone_expr, ")", "")
+
+        return (
+            self.db.query(Contact)
+            .filter(Contact.org_id == org_id)
+            .filter(Contact.phone.isnot(None))
+            .filter(func.lower(phone_expr) == normalized_number.lower())
+            .first()
+        )
+
     def update_contact(self, org_id, contact_id, **updates) -> Optional[Contact]:
         contact = self.get_contact(org_id=org_id, contact_id=contact_id)
         if not contact:
@@ -79,6 +102,20 @@ class ContactRepository:
         self.db.delete(contact)
         self.db.commit()
         return True
+
+    @staticmethod
+    def _normalize_phone(phone_number: Optional[str]) -> Optional[str]:
+        if phone_number is None:
+            return None
+
+        if isinstance(phone_number, (int, float)):
+            phone_number = str(phone_number)
+
+        if not isinstance(phone_number, str):
+            return None
+
+        digits = re.sub(r"[^0-9]", "", phone_number)
+        return digits or None
 
     # Queries --------------------------------------------------------------
     def list_contacts(
