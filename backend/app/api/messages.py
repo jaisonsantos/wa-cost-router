@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, Iterable
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -16,6 +16,11 @@ from app.core.security import decrypt_credentials
 from app.models.models import (
     MessageJob, DeliveryAttempt, CostRecord, Provider, ProviderCredential,
     JobStatusEnum, AttemptStatusEnum
+)
+from app.core.normalization import (
+    normalize_country_code,
+    normalize_international_phone,
+    strip_to_none,
 )
 from app.services.contacts import OptInRequestService
 from app.services.provider_connectors import get_connector
@@ -32,6 +37,24 @@ class SendMessageRequest(BaseModel):
     template_category: str = "marketing"
     variables: Dict[str, Any] = {}
     country_iso: Optional[str] = None
+
+    @field_validator("idempotency_key", "template_id", "template_category", mode="before")
+    @classmethod
+    def _trim_required_strings(cls, value: Any) -> Any:
+        return strip_to_none(value)
+
+    @field_validator("to_number", mode="before")
+    @classmethod
+    def _validate_to_number(cls, value: Any) -> str:
+        normalized = normalize_international_phone(value)
+        if normalized is None:
+            raise ValueError("to_number is required")
+        return normalized
+
+    @field_validator("country_iso", mode="before")
+    @classmethod
+    def _normalize_country(cls, value: Any) -> Any:
+        return normalize_country_code(value)
 
 class SendMessageResponse(BaseModel):
     job_id: str

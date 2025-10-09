@@ -174,6 +174,39 @@ def _bootstrap_routing_stack(db_session, org_id, *, to_number: str = DEFAULT_NUM
     return provider, contact
 
 
+def test_send_message_rejects_invalid_to_number(client):
+    test_client, _ = client
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "invalid-number",
+            "to_number": "5511999999999",  # missing international prefix
+            "template_id": "welcome",
+        },
+    )
+
+    assert response.status_code == 422
+    assert any("to_number" in error["loc"] for error in response.json()["detail"])
+
+
+def test_send_message_rejects_invalid_country_code(client):
+    test_client, _ = client
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "invalid-country",
+            "to_number": DEFAULT_NUMBER,
+            "template_id": "welcome",
+            "country_iso": "brazil",
+        },
+    )
+
+    assert response.status_code == 422
+    assert any("country_iso" in error["loc"] for error in response.json()["detail"])
+
+
 def test_send_message_returns_success(client, db_session):
     test_client, org_id = client
     _bootstrap_routing_stack(db_session, org_id)

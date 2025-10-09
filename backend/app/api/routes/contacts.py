@@ -8,7 +8,7 @@ from typing import Any, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -24,6 +24,7 @@ from app.models.models import (
     ContactStatusEnum,
     OptInStatusEnum,
 )
+from app.core.normalization import normalize_international_phone, strip_to_none
 from app.services.contacts import ContactRepository, enqueue_contact_import
 from app.services.storage import TemporaryObjectStorage
 
@@ -46,6 +47,30 @@ class ContactBase(BaseModel):
     source: str | None = None
     source_metadata: dict[str, Any] | None = None
     proof_hash: str | None = None
+
+    @field_validator(
+        "external_id",
+        "full_name",
+        "first_name",
+        "last_name",
+        "source",
+        "proof_hash",
+        mode="before",
+    )
+    @classmethod
+    def _trim_optional_strings(cls, value: Any) -> Any:
+        return strip_to_none(value)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _normalize_email(cls, value: Any) -> Any:
+        normalized = strip_to_none(value)
+        return normalized
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def _normalize_phone(cls, value: Any) -> Any:
+        return normalize_international_phone(value)
 
 
 class ContactCreate(ContactBase):
