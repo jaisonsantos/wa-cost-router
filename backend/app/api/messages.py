@@ -17,6 +17,7 @@ from app.models.models import (
     MessageJob, DeliveryAttempt, CostRecord, Provider, ProviderCredential,
     JobStatusEnum, AttemptStatusEnum
 )
+from app.services.contacts import OptInRequestService
 from app.services.provider_connectors import get_connector
 from app.services.routing import ContactOptOutError
 from app.services.routing_engine import RoutingEngine
@@ -139,6 +140,29 @@ async def send_message(
                 job.id,
                 current_user["org_id"],
             )
+        else:
+            try:
+                if exc.contact_id:
+                    opt_in_service = OptInRequestService(db)
+                    opt_in_service.enqueue_request(
+                        org_id=current_user["org_id"],
+                        contact_id=exc.contact_id,
+                        requested_channel=exc.channel or "whatsapp",
+                        requested_address=exc.channel_address or data.to_number,
+                        trigger_metadata={
+                            "message_job_id": str(job.id),
+                            "template_id": data.template_id,
+                            "template_category": data.template_category,
+                        },
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to enqueue opt-in solicitation after consent violation",
+                    extra={
+                        "org_id": str(current_user["org_id"]),
+                        "contact_id": str(exc.contact_id) if exc.contact_id else None,
+                    },
+                )
         raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(

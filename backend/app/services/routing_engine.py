@@ -44,6 +44,7 @@ class RoutingEngine:
             preferences = resolver.load(channel_address=contact_address)
 
         denied_by_consent = False
+        denied_channel: Optional[str] = None
 
         # 2. Avaliar condições de cada regra
         for rule in rules:
@@ -74,6 +75,7 @@ class RoutingEngine:
 
                     if preferences and not preferences.is_channel_allowed(provider.type, contact_address):
                         denied_by_consent = True
+                        denied_channel = provider.type
                         continue
 
                     candidates.append(provider)
@@ -94,7 +96,7 @@ class RoutingEngine:
                 }
 
         # 3. Fallback: escolher provedor mais barato
-        cheapest, cheapest_denied = self._find_cheapest_provider(
+        cheapest, cheapest_denied, cheapest_denied_channel = self._find_cheapest_provider(
             country_iso,
             category,
             preferences=preferences,
@@ -102,6 +104,8 @@ class RoutingEngine:
         )
         if cheapest_denied:
             denied_by_consent = True
+            if not denied_channel:
+                denied_channel = cheapest_denied_channel
         if cheapest:
             return {
                 "provider_id": cheapest["provider_id"],
@@ -119,7 +123,11 @@ class RoutingEngine:
                 or not preferences.has_allowed_channels_for(contact_address)
             )
         ):
-            raise ContactOptOutError()
+            raise ContactOptOutError(
+                contact_id=preferences.contact_id,
+                channel=denied_channel,
+                channel_address=contact_address,
+            )
 
         logger.warning(f"No provider found for country={country_iso}, category={category}")
         return None
@@ -197,7 +205,7 @@ class RoutingEngine:
         *,
         preferences: Optional[ContactRoutingPreferences] = None,
         contact_address: Optional[str] = None,
-    ) -> Tuple[Optional[Dict[str, Any]], bool]:
+    ) -> Tuple[Optional[Dict[str, Any]], bool, Optional[str]]:
         """Encontra o provedor mais barato para país/categoria"""
         rates = (
             self.db.query(RateCard, Provider)
@@ -213,18 +221,20 @@ class RoutingEngine:
         )
 
         denied_by_consent = False
+        denied_channel: Optional[str] = None
 
         for rate, provider in rates:
             if preferences and not preferences.is_channel_allowed(provider.type, contact_address):
                 denied_by_consent = True
+                denied_channel = provider.type
                 continue
 
             return {
                 "provider_id": str(provider.id),
                 "cost": rate.unit_cost_minor
-            }, denied_by_consent
+            }, denied_by_consent, denied_channel
 
-        return None, denied_by_consent
+        return None, denied_by_consent, denied_channel
     
     def calculate_baseline_cost(self, country_iso: str, category: str) -> int:
         """Calcula custo baseline (mais caro) para economia"""

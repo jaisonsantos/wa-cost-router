@@ -178,6 +178,15 @@ class OptInStatusEnum(str, enum.Enum):
     pending = "pending"
 
 
+class OptInRequestStatusEnum(str, enum.Enum):
+    pending = "pending"
+    sending = "sending"
+    sent = "sent"
+    confirmed = "confirmed"
+    failed = "failed"
+    cancelled = "cancelled"
+
+
 class ContactImportStatusEnum(str, enum.Enum):
     pending = "pending"
     validating = "validating"
@@ -374,6 +383,64 @@ class ContactConsentAudit(Base):
 
     contact = relationship("Contact", back_populates="consent_audits")
     opt_in = relationship("ContactChannelOptIn", back_populates="audit_entries")
+
+
+class ContactOptInRequest(Base):
+    __tablename__ = "contact_opt_in_request"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    contact_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("contact.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    opt_in_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("contact_channel_opt_in.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    requested_channel = Column(String, nullable=False)
+    requested_address = Column(String, nullable=False)
+    delivery_channel = Column(String, nullable=False)
+    delivery_address = Column(String, nullable=False)
+    template_id = Column(String, nullable=False)
+    template_variables = Column(JSON, nullable=False, default=dict)
+    status = Column(Enum(OptInRequestStatusEnum), nullable=False, default=OptInRequestStatusEnum.pending)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=3)
+    last_attempt_at = Column(DateTime(timezone=True))
+    next_attempt_at = Column(DateTime(timezone=True))
+    confirmed_at = Column(DateTime(timezone=True))
+    last_error = Column(String)
+    external_message_id = Column(String)
+    delivery_metadata = Column(JSON)
+    confirmation_payload = Column(JSON)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_contact_opt_in_request_contact_channel",
+            "contact_id",
+            "requested_channel",
+        ),
+        Index(
+            "ix_contact_opt_in_request_next_attempt",
+            "status",
+            "next_attempt_at",
+        ),
+    )
+
+    contact = relationship("Contact")
+    opt_in = relationship("ContactChannelOptIn")
 
 
 class ContactSegment(Base):

@@ -33,10 +33,12 @@ from app.models.models import (  # noqa: E402
     Contact,
     ContactChannelOptIn,
     ContactStatusEnum,
+    ContactOptInRequest,
     OptInStatusEnum,
     Organization,
     Provider,
     ProviderCredential,
+    OptInRequestStatusEnum,
     RateCard,
     RoutingRule,
     CostRecord,
@@ -385,6 +387,38 @@ def test_send_message_rejects_when_contact_opted_out(client, db_session):
     assert len(jobs) == 1
     assert jobs[0].status.value == "failed_final"
     assert db_session.query(CostRecord).count() == 0
+
+
+def test_contact_without_consent_triggers_opt_in_request(client, db_session):
+    test_client, org_id = client
+    _, contact = _bootstrap_routing_stack(db_session, org_id)
+
+    contact.email = "no-consent@example.com"
+    db_session.query(ContactChannelOptIn).delete()
+    db_session.commit()
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "no-opt-in",
+            "to_number": DEFAULT_NUMBER,
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Kai"]},
+        },
+    )
+
+    assert response.status_code == 403
+
+    requests = (
+        db_session.query(ContactOptInRequest)
+        .filter(ContactOptInRequest.contact_id == contact.id)
+        .all()
+    )
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.status == OptInRequestStatusEnum.sent
+    assert request.delivery_address == "no-consent@example.com"
 
 
 def test_send_message_rolls_back_on_commit_error(client, db_session, monkeypatch):

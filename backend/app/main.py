@@ -6,6 +6,7 @@ from app.api import (
     events,
     integrations,
     messages,
+    opt_in,
     orgs,
     providers,
     rates,
@@ -42,6 +43,7 @@ app.include_router(
     prefix="/contact-segments",
     tags=["contact_segments"],
 )
+app.include_router(opt_in.router, prefix="/opt-in", tags=["opt_in"])
 
 @app.get("/")
 def read_root():

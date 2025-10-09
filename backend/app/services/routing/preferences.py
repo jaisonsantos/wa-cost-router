@@ -15,8 +15,18 @@ from app.models.models import Contact, ContactChannelOptIn, OptInStatusEnum
 class ContactOptOutError(Exception):
     """Raised when a routing decision would violate contact consent."""
 
-    def __init__(self, message: str = "Contact has no active opt-in for the requested channel.") -> None:
+    def __init__(
+        self,
+        message: str = "Contact has no active opt-in for the requested channel.",
+        *,
+        contact_id: Optional[UUID] = None,
+        channel: Optional[str] = None,
+        channel_address: Optional[str] = None,
+    ) -> None:
         super().__init__(message)
+        self.contact_id = contact_id
+        self.channel = channel
+        self.channel_address = channel_address
 
 
 def _normalize_channel(channel: Optional[str]) -> Optional[str]:
