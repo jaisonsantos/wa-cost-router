@@ -120,6 +120,75 @@ export interface ContactSegmentSummary {
   description?: string | null;
 }
 
+export interface SegmentAttributeRule {
+  key: string;
+  operator: "equals" | "not_equals" | "contains" | "in";
+  values: string[];
+}
+
+export interface SegmentBehaviorRule {
+  requireConsent: boolean;
+  includeOptedOut: boolean;
+  holdoutPercentage?: number | null;
+}
+
+export interface SegmentCriteria {
+  attributes?: SegmentAttributeRule[];
+  tags?: string[];
+  behavior?: SegmentBehaviorRule;
+  [key: string]: unknown;
+}
+
+export interface SegmentLimits {
+  max_daily_messages?: number | null;
+  max_weekly_messages?: number | null;
+  max_monthly_messages?: number | null;
+}
+
+export interface SegmentOptOutPolicy {
+  enforce: boolean;
+  global_opt_out: boolean;
+  channels: string[];
+  grace_period_hours?: number | null;
+}
+
+export interface SegmentPolicy {
+  limits: SegmentLimits;
+  opt_out: SegmentOptOutPolicy;
+}
+
+export interface ContactSegment extends ContactSegmentSummary {
+  slug: string;
+  name: string;
+  org_id: string;
+  criteria?: SegmentCriteria | null;
+  source: string;
+  source_metadata?: Record<string, unknown> | null;
+  proof_hash?: string | null;
+  created_at: string;
+  updated_at: string;
+  policy?: SegmentPolicy | null;
+}
+
+export interface ContactSegmentListResponse {
+  items: ContactSegment[];
+  limit: number;
+  offset: number;
+  count: number;
+}
+
+export interface ContactSegmentCreatePayload {
+  slug: string;
+  name: string;
+  description?: string | null;
+  criteria?: SegmentCriteria | null;
+  source?: string;
+  source_metadata?: Record<string, unknown> | null;
+  proof_hash?: string | null;
+}
+
+export type ContactSegmentUpdatePayload = Partial<ContactSegmentCreatePayload>;
+
 export interface ContactNote {
   id: string;
   author: string;

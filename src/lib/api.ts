@@ -18,6 +18,10 @@ import {
   ContactListResponse,
   ContactConsentHistoryResponse,
   Contact,
+  ContactSegment,
+  ContactSegmentCreatePayload,
+  ContactSegmentListResponse,
+  ContactSegmentUpdatePayload,
   OptInStatus,
   ContactStatus,
   Rule,
@@ -72,6 +76,20 @@ class ApiClient {
       }
       const error = await response.json().catch(() => ({ detail: "Request failed" }));
       throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const contentLength = response.headers.get("content-length");
+    if (contentLength === "0") {
+      return undefined as T;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      return undefined as T;
     }
 
     const data = (await response.json()) as T;
@@ -266,6 +284,43 @@ class ApiClient {
 
   async getContactConsentHistory(contactId: string): Promise<ContactConsentHistoryResponse> {
     return this.request<ContactConsentHistoryResponse>(`/contacts/${contactId}/consents/history`);
+  }
+
+  // Contact Segments
+  async getContactSegments(params: { limit?: number; offset?: number } = {}): Promise<ContactSegmentListResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params.limit !== undefined) {
+      searchParams.append("limit", params.limit.toString());
+    }
+
+    if (params.offset !== undefined) {
+      searchParams.append("offset", params.offset.toString());
+    }
+
+    const query = searchParams.toString();
+    const querySuffix = query ? `?${query}` : "";
+    return this.request<ContactSegmentListResponse>(`/contact-segments${querySuffix}`);
+  }
+
+  async createContactSegment(payload: ContactSegmentCreatePayload): Promise<ContactSegment> {
+    return this.request<ContactSegment>("/contact-segments/", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateContactSegment(segmentId: string, payload: ContactSegmentUpdatePayload): Promise<ContactSegment> {
+    return this.request<ContactSegment>(`/contact-segments/${segmentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteContactSegment(segmentId: string): Promise<void> {
+    await this.request<void>(`/contact-segments/${segmentId}`, {
+      method: "DELETE",
+    });
   }
 
   // Messages

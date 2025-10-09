@@ -21,6 +21,10 @@ import {
   Rule,
   RuleCreatePayload,
   RuleUpdatePayload,
+  ContactSegment,
+  ContactSegmentListResponse,
+  ContactSegmentCreatePayload,
+  ContactSegmentUpdatePayload,
   SendMessageRequest,
   SendMessageResponse,
   SetProviderCredentialsResponse,
@@ -128,6 +132,56 @@ export const useImportRatesCSV = () => {
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao importar CSV", description: error.message, variant: "destructive" });
+    },
+  });
+};
+
+// Contact Segments
+export const useContactSegments = (params?: { limit?: number; offset?: number }) => {
+  return useQuery<ContactSegmentListResponse, Error>({
+    queryKey: ["contactSegments", params],
+    queryFn: () => api.getContactSegments(params ?? {}),
+  });
+};
+
+export const useCreateContactSegment = () => {
+  const queryClient = useQueryClient();
+  return useMutation<ContactSegment, Error, ContactSegmentCreatePayload>({
+    mutationFn: (payload) => api.createContactSegment(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contactSegments"] });
+      toast({ title: "Segmento criado" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro ao criar segmento", description: error.message, variant: "destructive" });
+    },
+  });
+};
+
+export const useUpdateContactSegment = () => {
+  const queryClient = useQueryClient();
+  return useMutation<ContactSegment, Error, { segmentId: string; updates: ContactSegmentUpdatePayload }>({
+    mutationFn: ({ segmentId, updates }) => api.updateContactSegment(segmentId, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contactSegments"] });
+      toast({ title: "Segmento atualizado" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro ao atualizar segmento", description: error.message, variant: "destructive" });
+    },
+  });
+};
+
+export const useDeleteContactSegment = () => {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: (segmentId) => api.deleteContactSegment(segmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contactSegments"] });
+      toast({ title: "Segmento removido" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro ao remover segmento", description: error.message, variant: "destructive" });
     },
   });
 };
