@@ -1,11 +1,24 @@
+import hashlib
+from datetime import datetime, timezone
+
 from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator
 
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token
-from app.models.models import User, Organization, OrganizationUser, RoleEnum
+from app.models.models import (
+    Contact,
+    ContactChannelOptIn,
+    ContactStatusEnum,
+    OptInStatusEnum,
+    Organization,
+    OrganizationUser,
+    RoleEnum,
+    User,
+)
 
 LOCAL_EMAIL_SUFFIX = ".local"
 
@@ -47,6 +60,73 @@ def _normalize_email(value: str) -> str:
         raise ValueError(str(exc)) from exc
 
 router = APIRouter()
+
+
+def _bootstrap_demo_contact(db: Session, org_id) -> None:
+    """Ensure a demo contact with an active WhatsApp opt-in exists for the org."""
+
+    normalized_phone = "+5511999999999"
+    now = datetime.now(timezone.utc)
+    source_metadata = {"bootstrap": "register"}
+
+    contact = (
+        db.query(Contact)
+        .filter(Contact.org_id == org_id)
+        .filter(Contact.phone.isnot(None))
+        .filter(func.lower(Contact.phone) == normalized_phone.lower())
+        .first()
+    )
+
+    if not contact:
+        contact = Contact(
+            org_id=org_id,
+            full_name="John Customer",
+            first_name="John",
+            last_name="Customer",
+            email="john.customer@example.com",
+            phone=normalized_phone,
+            status=ContactStatusEnum.active,
+            source="bootstrap",
+            source_metadata=source_metadata,
+            proof_hash=hashlib.sha256(
+                f"contact:{org_id}:{normalized_phone}:bootstrap".encode()
+            ).hexdigest(),
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(contact)
+        db.flush()
+
+    opt_in = (
+        db.query(ContactChannelOptIn)
+        .filter(ContactChannelOptIn.org_id == org_id)
+        .filter(ContactChannelOptIn.contact_id == contact.id)
+        .filter(ContactChannelOptIn.channel == "whatsapp")
+        .filter(func.lower(ContactChannelOptIn.channel_address) == normalized_phone.lower())
+        .filter(ContactChannelOptIn.version == 1)
+        .first()
+    )
+
+    if not opt_in:
+        opt_in = ContactChannelOptIn(
+            org_id=org_id,
+            contact_id=contact.id,
+            channel="whatsapp",
+            channel_address=normalized_phone,
+            status=OptInStatusEnum.granted,
+            version=1,
+            legal_basis="opt_in",
+            captured_at=now,
+            source="bootstrap",
+            source_metadata=source_metadata,
+            evidence_uri="https://example.com/proof/whatsapp-opt-in-john",
+            proof_hash=hashlib.sha256(
+                f"optin:{org_id}:{normalized_phone}:bootstrap".encode()
+            ).hexdigest(),
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(opt_in)
 
 class RegisterRequest(BaseModel):
     email: str
@@ -92,6 +172,9 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     # Link user to org as owner
     org_user = OrganizationUser(org_id=org.id, user_id=user.id, role=RoleEnum.owner)
     db.add(org_user)
+
+    _bootstrap_demo_contact(db, org.id)
+
     db.commit()
     
     # Create token
