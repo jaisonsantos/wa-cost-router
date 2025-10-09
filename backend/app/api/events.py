@@ -20,7 +20,8 @@ class EventResponse(BaseModel):
     unit_cost_minor: Optional[int]
     currency: Optional[str]
 
-@router.get("/", response_model=list[EventResponse])
+@router.get("", response_model=list[EventResponse])
+@router.get("/", response_model=list[EventResponse], include_in_schema=False)
 def list_events(
     limit: int = Query(50, le=1000),
     offset: int = Query(0),
