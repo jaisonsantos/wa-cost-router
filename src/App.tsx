@@ -16,6 +16,7 @@ import Messages from "./pages/Messages";
 import NotFound from "./pages/NotFound";
 import ContactListPage from "./pages/Contacts/List";
 import ContactDetailPage from "./pages/Contacts/Detail";
+import ContactImportWizardPage from "./pages/Contacts/ImportWizard";
 import Segments from "./pages/Segments";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/providers" element={<PrivateRoute><Providers /></PrivateRoute>} />
             <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
             <Route path="/contacts" element={<PrivateRoute><ContactListPage /></PrivateRoute>} />
+            <Route path="/contacts/import" element={<PrivateRoute><ContactImportWizardPage /></PrivateRoute>} />
             <Route path="/contacts/:contactId" element={<PrivateRoute><ContactDetailPage /></PrivateRoute>} />
             <Route path="/segments" element={<PrivateRoute><Segments /></PrivateRoute>} />
             <Route path="/rules" element={<PrivateRoute><Rules /></PrivateRoute>} />

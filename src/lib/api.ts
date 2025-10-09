@@ -34,9 +34,10 @@ import {
   SummaryResponse,
   TokenResponse,
   WAConnectionResponse,
+  ContactImportJob,
 } from "@/types/api";
 
-const API_BASE_URL = "http://localhost:8000";
+export const API_BASE_URL = "http://localhost:8000";
 
 interface ApiOptions extends RequestInit {
   requiresAuth?: boolean;
@@ -284,6 +285,34 @@ class ApiClient {
 
   async getContactConsentHistory(contactId: string): Promise<ContactConsentHistoryResponse> {
     return this.request<ContactConsentHistoryResponse>(`/contacts/${contactId}/consents/history`);
+  }
+
+  async createContactImport(file: File): Promise<ContactImportJob> {
+    const formData = new FormData();
+    formData.append("upload", file);
+
+    const token = localStorage.getItem("token");
+    const response = await fetch(`${API_BASE_URL}/contacts/imports`, {
+      method: "POST",
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : undefined,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: "Contact import failed" }));
+      throw new Error(error.detail ?? "Contact import failed");
+    }
+
+    const data = (await response.json()) as ContactImportJob;
+    return data;
+  }
+
+  async getContactImportJob(jobId: string): Promise<ContactImportJob> {
+    return this.request<ContactImportJob>(`/contacts/imports/${jobId}`);
   }
 
   // Contact Segments

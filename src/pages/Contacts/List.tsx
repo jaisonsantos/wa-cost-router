@@ -119,11 +119,14 @@ export default function ContactListPage() {
   return (
     <SimpleLayout>
       <div className="space-y-6">
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold">Contatos</h1>
             <p className="text-muted-foreground">Catálogo multi-tenant com status de opt-in por canal</p>
           </div>
+          <Button asChild>
+            <Link to="/contacts/import">Importar contatos</Link>
+          </Button>
         </div>
 
         <Card>
