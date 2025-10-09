@@ -22,6 +22,14 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 - `SANDBOX_FAILURE_RATE` aceita valores entre `0` e `1` para testar cenários de falha determinística; `0` garante que Newman termine sempre com sucesso.
 - Ao desativar o sandbox (`false`), forneça credenciais reais de provedores e valide limites de taxa/billing antes de expor em produção.
 
+## Circuit breaker de provedores
+
+- Estados são persistidos em Redis (`circuit:{provider_id}`) e controlados por `CIRCUIT_BREAKER_THRESHOLD` (falhas consecutivas antes de abrir) e `CIRCUIT_BREAKER_COOLDOWN_SECONDS` (tempo mínimo até a transição para `half-open`).
+- Quando um circuito está `open` ou `half-open`, o `RoutingEngine` ignora o provedor e utiliza a cadeia de fallback; logs incluem `event=circuit_breaker_skip` e métricas `messages_delivery_attempts_total{outcome="skipped_circuit"}`.
+- Para simular em sandbox, aumente `SANDBOX_FAILURE_RATE` ou force respostas de erro no conector desejado. Após atingir o limiar, verifique `admin_circuit_breakers_open_total` e `messages_circuit_breaker_state{provider_id}` em `/admin/metrics`.
+- Reset manual: `docker compose exec redis redis-cli DEL circuit:<provider_uuid>` (ou `FLUSHDB` para limpar todos). Fechamentos bem-sucedidos também ocorrem automaticamente quando o provedor processa uma mensagem com sucesso.
+- Monitore gauges `admin_circuit_breakers_open_total` / `admin_circuit_breakers_half_open_total` e logs para planejar reativações ou ajustes de threshold.
+
 ## Rate limiting transacional
 
 - Variáveis `RATE_LIMIT_MESSAGES_PER_MIN` e `RATE_LIMIT_LOGIN_PER_MIN` definem o número de chamadas permitidas por minuto e são exportadas automaticamente pelos targets do `Makefile` (valores padrão: 120 e 20 respectivamente).
@@ -57,7 +65,7 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 
 - **Readiness**: `GET /admin/health` (proteção necessária antes de produção).
 - **Workers**: monitorar filas Redis (`rq info`) e eventos de falha via logs.
-- **Métricas Prometheus**: endpoint `/admin/metrics`. Mantenha protegido por rede privada ou auth (ver backlog P1 "proteger-admin-metrics").
+- **Métricas Prometheus**: endpoint `/admin/metrics` publica contadores (`messages_send_total`, `messages_delivery_attempts_total`, `admin_metrics_scrapes_total`) e gauges (`messages_circuit_breaker_state`, `admin_circuit_breakers_open_total`, `admin_circuit_breakers_half_open_total`). Mantenha protegido por rede privada ou auth (ver backlog P1 "proteger-admin-metrics").
 - **Logs**: `make logs` segue a API com `--tail=200`. Para outros serviços use `docker-compose logs -f <service>`.
 
 ## Backup & restore

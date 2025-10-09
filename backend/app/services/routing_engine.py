@@ -9,14 +9,23 @@ from app.services.routing import (
 )
 import logging
 
+from app.core.circuit_breaker import CircuitBreakerStore, get_circuit_breaker_store
+
 logger = logging.getLogger(__name__)
 
 class RoutingEngine:
     """Motor de decisão para roteamento de mensagens"""
-    
-    def __init__(self, db: Session, org_id: str):
+
+    def __init__(
+        self,
+        db: Session,
+        org_id: str,
+        *,
+        circuit_breaker: Optional[CircuitBreakerStore] = None,
+    ):
         self.db = db
         self.org_id = org_id
+        self._circuit_breaker = circuit_breaker or get_circuit_breaker_store()
     
     def select_provider(
         self,
@@ -76,6 +85,9 @@ class RoutingEngine:
                     if preferences and not preferences.is_channel_allowed(provider.type, contact_address):
                         denied_by_consent = True
                         denied_channel = provider.type
+                        continue
+
+                    if self._is_provider_blocked(provider):
                         continue
 
                     candidates.append(provider)
@@ -224,6 +236,9 @@ class RoutingEngine:
         denied_channel: Optional[str] = None
 
         for rate, provider in rates:
+            if self._is_provider_blocked(provider):
+                continue
+
             if preferences and not preferences.is_channel_allowed(provider.type, contact_address):
                 denied_by_consent = True
                 denied_channel = provider.type
@@ -252,3 +267,19 @@ class RoutingEngine:
         )
 
         return rate.unit_cost_minor if rate else 0
+
+    def _is_provider_blocked(self, provider: Provider) -> bool:
+        if not self._circuit_breaker:
+            return False
+
+        state = self._circuit_breaker.get_state(str(provider.id))
+        if state.is_blocked():
+            logger.info(
+                "Skipping provider %s for org %s due to circuit state %s",
+                provider.id,
+                self.org_id,
+                state.state,
+            )
+            return True
+
+        return False
