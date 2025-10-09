@@ -30,12 +30,17 @@ from app.core.database import Base, get_db  # noqa: E402
 from app.core.security import encrypt_credentials  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.models import (  # noqa: E402
+    Contact,
+    ContactChannelOptIn,
+    ContactStatusEnum,
+    OptInStatusEnum,
     Organization,
     Provider,
     ProviderCredential,
     RateCard,
     RoutingRule,
     CostRecord,
+    MessageJob,
 )
 from app.services.routing_engine import RoutingEngine  # noqa: E402
 import app.api.messages as messages_module  # noqa: E402
@@ -96,7 +101,10 @@ def client(db_session, monkeypatch):
     app.dependency_overrides.pop(get_current_user, None)
 
 
-def _bootstrap_routing_stack(db_session, org_id):
+DEFAULT_NUMBER = "+5511999999999"
+
+
+def _bootstrap_routing_stack(db_session, org_id, *, to_number: str = DEFAULT_NUMBER):
     organization = Organization(id=org_id, name="Test Org")
     db_session.add(organization)
 
@@ -140,9 +148,28 @@ def _bootstrap_routing_stack(db_session, org_id):
     )
     db_session.add(rule)
 
+    contact = Contact(
+        org_id=org_id,
+        phone=to_number,
+        status=ContactStatusEnum.active,
+    )
+    db_session.add(contact)
+    db_session.flush()
+
+    opt_in = ContactChannelOptIn(
+        org_id=org_id,
+        contact_id=contact.id,
+        channel="whatsapp",
+        channel_address=to_number,
+        status=OptInStatusEnum.granted,
+        version=1,
+        source="import",
+    )
+    db_session.add(opt_in)
+
     db_session.commit()
 
-    return provider
+    return provider, contact
 
 
 def test_send_message_returns_success(client, db_session):
@@ -153,7 +180,7 @@ def test_send_message_returns_success(client, db_session):
         "/messages/send",
         json={
             "idempotency_key": "test-key",
-            "to_number": "+5511999999999",
+            "to_number": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["John"]},
@@ -181,7 +208,7 @@ def test_send_message_handles_routing_engine_error(client, db_session, monkeypat
         "/messages/send",
         json={
             "idempotency_key": "boom-key",
-            "to_number": "+5511999999999",
+            "to_number": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Jane"]},
@@ -208,7 +235,7 @@ def test_send_message_handles_delivery_exception(client, db_session, monkeypatch
         "/messages/send",
         json={
             "idempotency_key": "delivery-key",
-            "to_number": "+5511999999999",
+            "to_number": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Ravi"]},
@@ -241,7 +268,7 @@ def test_send_message_handles_job_commit_failure(client, db_session, monkeypatch
         "/messages/send",
         json={
             "idempotency_key": "job-commit-failure",
-            "to_number": "+5511999999999",
+            "to_number": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Nia"]},
@@ -257,7 +284,7 @@ def test_send_message_handles_job_commit_failure(client, db_session, monkeypatch
 
 def test_send_message_handles_non_iterable_fallback_chain(client, db_session, monkeypatch):
     test_client, org_id = client
-    provider = _bootstrap_routing_stack(db_session, org_id)
+    provider, _ = _bootstrap_routing_stack(db_session, org_id)
 
     def select_with_invalid_fallback(*args, **kwargs):
         return {
@@ -274,7 +301,7 @@ def test_send_message_handles_non_iterable_fallback_chain(client, db_session, mo
         "/messages/send",
         json={
             "idempotency_key": "bad-fallback",
-            "to_number": "+5511999999999",
+            "to_number": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Lia"]},
@@ -289,7 +316,7 @@ def test_send_message_handles_non_iterable_fallback_chain(client, db_session, mo
 
 def test_send_message_defaults_invalid_estimated_cost(client, db_session, monkeypatch):
     test_client, org_id = client
-    provider = _bootstrap_routing_stack(db_session, org_id)
+    provider, _ = _bootstrap_routing_stack(db_session, org_id)
 
     def select_with_invalid_cost(*args, **kwargs):
         return {
@@ -306,7 +333,7 @@ def test_send_message_defaults_invalid_estimated_cost(client, db_session, monkey
         "/messages/send",
         json={
             "idempotency_key": "bad-cost",
-            "to_number": "+5511999999999",
+            "to_number": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Noah"]},
@@ -321,6 +348,43 @@ def test_send_message_defaults_invalid_estimated_cost(client, db_session, monkey
     stored_costs = db_session.query(CostRecord).filter(CostRecord.message_job_id == job_uuid).all()
     assert len(stored_costs) == 1
     assert stored_costs[0].price_eur == 0
+
+
+def test_send_message_rejects_when_contact_opted_out(client, db_session):
+    test_client, org_id = client
+    _, contact = _bootstrap_routing_stack(db_session, org_id)
+
+    revoked = ContactChannelOptIn(
+        org_id=org_id,
+        contact_id=contact.id,
+        channel="whatsapp",
+        channel_address=DEFAULT_NUMBER,
+        status=OptInStatusEnum.revoked,
+        version=2,
+        source="manual",
+    )
+    db_session.add(revoked)
+    db_session.commit()
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "revoked-key",
+            "to_number": DEFAULT_NUMBER,
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Kai"]},
+        },
+    )
+
+    assert response.status_code == 403
+    payload = response.json()
+    assert payload["detail"] == "Contact has no active opt-in for the requested channel."
+
+    jobs = db_session.query(MessageJob).all()
+    assert len(jobs) == 1
+    assert jobs[0].status.value == "failed_final"
+    assert db_session.query(CostRecord).count() == 0
 
 
 def test_send_message_rolls_back_on_commit_error(client, db_session, monkeypatch):
@@ -347,7 +411,7 @@ def test_send_message_rolls_back_on_commit_error(client, db_session, monkeypatch
         "/messages/send",
         json={
             "idempotency_key": "flaky-commit",
-            "to_number": "+5511999999999",
+            "to_number": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Zoe"]},

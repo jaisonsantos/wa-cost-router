@@ -1,7 +1,12 @@
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union, Iterable, Tuple
 from uuid import UUID
 from sqlalchemy.orm import Session
 from app.models.models import RoutingRule, Provider, RateCard
+from app.services.routing import (
+    ContactPreferenceResolver,
+    ContactOptOutError,
+    ContactRoutingPreferences,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,7 +22,9 @@ class RoutingEngine:
         self,
         country_iso: str,
         category: str,
-        template_id: Optional[str] = None
+        template_id: Optional[str] = None,
+        *,
+        contact_address: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Seleciona o provedor baseado nas regras ativas e custos
@@ -30,42 +37,71 @@ class RoutingEngine:
             RoutingRule.org_id == self.org_id,
             RoutingRule.is_enabled.is_(True)
         ).order_by(RoutingRule.priority.asc()).all()
-        
+
+        preferences = None
+        if contact_address is not None:
+            resolver = ContactPreferenceResolver(self.db, self.org_id)
+            preferences = resolver.load(channel_address=contact_address)
+
+        denied_by_consent = False
+
         # 2. Avaliar condições de cada regra
         for rule in rules:
             if self._evaluate_conditions(rule.conditions_json, country_iso, category, template_id):
                 # Regra aplicável, extrair ação
-                provider_id = rule.actions_json.get("primary_provider")
+                primary_candidate = rule.actions_json.get("primary_provider")
                 fallback_chain = rule.actions_json.get("fallback_chain", [])
 
-                if provider_id:
-                    provider = self._get_provider(provider_id)
+                candidates: List[Provider] = []
+
+                raw_identifiers: List[Any] = []
+                if primary_candidate:
+                    raw_identifiers.append(primary_candidate)
+
+                if isinstance(fallback_chain, Iterable) and not isinstance(fallback_chain, (str, bytes)):
+                    raw_identifiers.extend(list(fallback_chain))
+                elif fallback_chain not in (None, ""):
+                    logger.warning(
+                        "Invalid fallback chain %r for rule %s; ignoring",
+                        fallback_chain,
+                        rule.id,
+                    )
+
+                for raw_identifier in raw_identifiers:
+                    provider = self._get_provider(raw_identifier)
                     if not provider:
-                        logger.warning(
-                            "Routing rule %s references provider %s not available for org %s",
-                            rule.id,
-                            provider_id,
-                            self.org_id,
-                        )
                         continue
 
-                    estimated_cost = self._get_estimated_cost(provider.id, country_iso, category)
-                    valid_fallbacks = [
-                        fb
-                        for fb in fallback_chain
-                        if self._get_provider(fb) is not None
-                    ]
+                    if preferences and not preferences.is_channel_allowed(provider.type, contact_address):
+                        denied_by_consent = True
+                        continue
 
-                    return {
-                        "provider_id": str(provider.id),
-                        "fallback_chain": valid_fallbacks,
-                        "estimated_cost": estimated_cost,
-                        "rule_id": str(rule.id),
-                        "rule_name": rule.name,
-                    }
-        
+                    candidates.append(provider)
+
+                if not candidates:
+                    continue
+
+                selected_provider = candidates[0]
+                estimated_cost = self._get_estimated_cost(selected_provider.id, country_iso, category)
+                fallback_ids = [str(provider.id) for provider in candidates[1:]]
+
+                return {
+                    "provider_id": str(selected_provider.id),
+                    "fallback_chain": fallback_ids,
+                    "estimated_cost": estimated_cost,
+                    "rule_id": str(rule.id),
+                    "rule_name": rule.name,
+                }
+
         # 3. Fallback: escolher provedor mais barato
-        cheapest = self._find_cheapest_provider(country_iso, category)
+        cheapest, cheapest_denied = self._find_cheapest_provider(
+            country_iso,
+            category,
+            preferences=preferences,
+            contact_address=contact_address,
+        )
+        if cheapest_denied:
+            denied_by_consent = True
         if cheapest:
             return {
                 "provider_id": cheapest["provider_id"],
@@ -74,7 +110,17 @@ class RoutingEngine:
                 "rule_id": None,
                 "rule_name": "auto_cheapest"
             }
-        
+
+        if (
+            preferences
+            and contact_address is not None
+            and (
+                denied_by_consent
+                or not preferences.has_allowed_channels_for(contact_address)
+            )
+        ):
+            raise ContactOptOutError()
+
         logger.warning(f"No provider found for country={country_iso}, category={category}")
         return None
     
@@ -144,7 +190,14 @@ class RoutingEngine:
 
         return rate.unit_cost_minor if rate else 0
     
-    def _find_cheapest_provider(self, country_iso: str, category: str) -> Optional[Dict[str, Any]]:
+    def _find_cheapest_provider(
+        self,
+        country_iso: str,
+        category: str,
+        *,
+        preferences: Optional[ContactRoutingPreferences] = None,
+        contact_address: Optional[str] = None,
+    ) -> Tuple[Optional[Dict[str, Any]], bool]:
         """Encontra o provedor mais barato para país/categoria"""
         rates = (
             self.db.query(RateCard, Provider)
@@ -156,17 +209,22 @@ class RoutingEngine:
                 Provider.status == "active",
             )
             .order_by(RateCard.unit_cost_minor.asc())
-            .first()
+            .all()
         )
-        
-        if rates:
-            rate, provider = rates
+
+        denied_by_consent = False
+
+        for rate, provider in rates:
+            if preferences and not preferences.is_channel_allowed(provider.type, contact_address):
+                denied_by_consent = True
+                continue
+
             return {
                 "provider_id": str(provider.id),
                 "cost": rate.unit_cost_minor
-            }
-        
-        return None
+            }, denied_by_consent
+
+        return None, denied_by_consent
     
     def calculate_baseline_cost(self, country_iso: str, category: str) -> int:
         """Calcula custo baseline (mais caro) para economia"""

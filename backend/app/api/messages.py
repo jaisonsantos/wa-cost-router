@@ -18,6 +18,7 @@ from app.models.models import (
     JobStatusEnum, AttemptStatusEnum
 )
 from app.services.provider_connectors import get_connector
+from app.services.routing import ContactOptOutError
 from app.services.routing_engine import RoutingEngine
 
 router = APIRouter()
@@ -126,7 +127,19 @@ async def send_message(
             country_iso=country_iso,
             category=data.template_category,
             template_id=data.template_id,
+            contact_address=data.to_number,
         )
+    except ContactOptOutError as exc:
+        job.status = JobStatusEnum.failed_final
+        try:
+            _commit_or_raise(db)
+        except Exception:
+            logger.exception(
+                "Failed to persist consent violation for job %s in org %s",
+                job.id,
+                current_user["org_id"],
+            )
+        raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(
             "Routing engine failure for job %s in org %s: %s",
