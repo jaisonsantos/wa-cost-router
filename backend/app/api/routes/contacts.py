@@ -334,6 +334,32 @@ async def upload_contacts_import(
     return ContactImportJobResponse.model_validate(job)
 
 
+@router.get("/imports/{job_id}", response_model=ContactImportJobResponse)
+def retrieve_contacts_import(
+    job_id: UUID,
+    current_user: dict = Depends(require_contacts_read),
+    db: Session = Depends(get_db),
+):
+    """Return the status of an import job scoped to the requester organization."""
+
+    job = (
+        db.query(ContactImportJob)
+        .filter(
+            ContactImportJob.org_id == current_user["org_id"],
+            ContactImportJob.id == job_id,
+        )
+        .first()
+    )
+
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Import job not found",
+        )
+
+    return ContactImportJobResponse.model_validate(job)
+
+
 @router.post("/", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)
 def create_contact(
     payload: ContactCreate,
