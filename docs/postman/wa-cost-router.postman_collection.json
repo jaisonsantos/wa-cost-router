@@ -1458,11 +1458,16 @@
                   "(() => {",
                   "  const secret = pm.environment.get('email_webhook_secret') || '';",
                   "  const body = pm.request.body && pm.request.body.raw ? pm.request.body.raw : '';",
+                  "  const resolvedBody = pm.variables.replaceIn(body);",
                   "  if (!secret) {",
                   "    pm.request.headers.upsert({ key: 'X-Email-Signature', value: '' });",
+                  "    pm.request.body && pm.request.body.update && pm.request.body.update(resolvedBody);",
                   "    return;",
                   "  }",
-                  "  const signature = CryptoJS.enc.Base64.stringify(CryptoJS.HmacSHA256(body, secret));",
+                  "  if (pm.request.body && pm.request.body.update) {",
+                  "    pm.request.body.update(resolvedBody);",
+                  "  }",
+                  "  const signature = CryptoJS.enc.Base64.stringify(CryptoJS.HmacSHA256(resolvedBody, secret));",
                   "  pm.request.headers.upsert({ key: 'X-Email-Signature', value: signature });",
                   "})();"
                 ]
