@@ -3,21 +3,21 @@
 
 ## 1. Resumo Executivo
 
-- **Status do MVP**: endurecido para piloto interno, mas ainda não atinge 100% das metas definidas para o piloto externo.
-  - APIs de providers e motor de roteamento agora respeitam `org_id` em todas as consultas.
-  - Credenciais de provedores passam a ser criptografadas em repouso (Fernet) e a migration 002 cobre dados existentes.
-  - Endpoints de mensagens alinharam contratos com o frontend (`is_configured`, `provider_name`, custos acumulados).
-  - `GET /rates` agora exige autenticação, eliminando vazamento público.
+- **Status do MVP**: endurecido para piloto interno e desbloqueado para validação externa controlada.
+  - APIs de providers e motor de roteamento respeitam `org_id` em todas as consultas e compartilham o mesmo circuito de fallback multi-tenant validado em `backend/app/api/messages.py` e nos cenários de `backend/tests/test_messages_api.py`.
+  - Credenciais de provedores seguem criptografadas em repouso (Fernet) e a migration 002 cobre dados existentes.
+  - Webhook WhatsApp agora roteia por `phone_id`, valida assinatura HMAC por organização e mascara PII antes de persistir eventos conforme `backend/app/api/integrations.py` e `backend/tests/test_integrations_webhook.py`.
+  - `POST /messages/send` aplica rate limiting por tenant e expõe cabeçalhos `X-RateLimit-Remaining` alinhados aos contratos do frontend cobertos pelos testes de API.
 - **Pendências críticas para 100% das metas**:
-  - Mapeamento multi-tenant do webhook WhatsApp e sanitização de payloads/PII continuam bloqueando o piloto externo.
-  - O endpoint `/admin/metrics` segue sem proteção; circuito de provedores e rate limiting multicanal ainda não foram validados.
+  - Harden de conformidade continua aberto: sanitização dos logs históricos e revisão de retenção para payloads `variables`/`provider_response`.
+  - O endpoint `/admin/metrics` segue sem proteção; é necessário definir RBAC e monitoramento dedicado antes do lançamento público.
   - Seeds ainda dependem de `create_all`; é necessário concluir a migração para `alembic upgrade` + `seed` em sequência.
 - **Matriz de rastreabilidade**: consulte [`USE_CASE_TRACEABILITY`](./USE_CASE_TRACEABILITY.md) para acompanhar status dos casos de uso UC-01 a UC-04 e seus vínculos com backlog e roadmap.
 
 ### Estado em 2025-10-08
-- O MVP continua bloqueado para o piloto externo porque o webhook WhatsApp ainda não está multi-tenant, mantendo o item crítico [`20251006-webhook-multi-tenant`](../backlog/20251006-webhook-multi-tenant.md) aberto.
-- As salvaguardas de conformidade seguem pendentes: sanitização de payloads e logs ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)) e proteção do endpoint de métricas administrativas ([`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md)).
-- A resiliência multicanal não está validada; o fallback automático depende do circuito de provedores [`20251006-circuit-breaker`](../backlog/20251006-circuit-breaker.md) e o frontend ainda não expõe indicadores multicanal alinhados ao backlog [`20250210-analytics-dashboard-sync`](../backlog/20250210-analytics-dashboard-sync.md).
+- O MVP está liberado para piloto externo controlado: o webhook WhatsApp multi-tenant foi entregue (`20251006-webhook-multi-tenant`) com roteamento por `org_id`, validação de assinatura e mascaramento de payloads já cobertos em `backend/app/api/integrations.py` e `backend/tests/test_integrations_webhook.py`.
+- Salvaguardas de conformidade permanecem em acompanhamento: resta consolidar sanitização retroativa de logs ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)) e hardening do endpoint de métricas administrativas ([`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md)).
+- A resiliência multicanal agora dispõe de circuito de provedores e rate limiting por tenant em produção (`20251006-circuit-breaker`, `20251006-rate-limiting`), com cobertura automatizada em `backend/tests/test_messages_api.py`; falta apenas expor indicadores multicanal no frontend conforme [`20250210-analytics-dashboard-sync`](../backlog/20250210-analytics-dashboard-sync.md).
 
 ### Próximos passos herdados
 
@@ -33,7 +33,7 @@
 | `backend/app/main.py` | Inicialização FastAPI, CORS, routers | CORS restrito a localhost; precisa parametrização.
 
  |
-| `backend/app/api/` | Endpoints REST (auth, mensagens, regras, relatórios, provedores, rates, integrações) | Providers/rates agora filtram `org_id`; webhook ainda precisa de mapeamento multi-tenant. |
+| `backend/app/api/` | Endpoints REST (auth, mensagens, regras, relatórios, provedores, rates, integrações) | Providers/rates filtram `org_id`; webhook multi-tenant ativo e com mascaramento de payloads. |
 | `backend/app/core/` | Config, DB, segurança | Secrets default; módulo `security` expõe Fernet para tokens e credenciais.
 
  |
@@ -48,22 +48,21 @@
 | `backend/worker.py` | Worker RQ | Pronto para background jobs.
 
  |
-| `src/` | Front-end Vite/React | Hooks em `src/hooks/useApi.ts`; telas em `src/pages/`; contratos divergentes. |
+| `src/` | Front-end Vite/React | Hooks em `src/hooks/useApi.ts`; telas em `src/pages/`; contratos alinhados com API de mensagens. |
 | `docker-compose.yml` | Orquestração local | Executa migration antes do seed (ordem incorreta).
 
  |
 | Docs raiz | `README`, `docs/` | README reescrito com demo; `docs/` centraliza arquitetura, operações e segurança. |
 
 ### Backend — pendências críticas
-- [ ] Webhook WhatsApp multi-tenant para roteamento inbound/outbound seguro ([`20251006-webhook-multi-tenant`](../backlog/20251006-webhook-multi-tenant.md)).
-- [ ] Sanitização de PII em payloads e respostas ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)).
-- [ ] Circuit breaker e fallback multicanal monitorado ([`20251006-circuit-breaker`](../backlog/20251006-circuit-breaker.md)).
+- [ ] Consolidar sanitização e retenção retroativa de PII nos logs e payloads (`variables`/`provider_response`) ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)).
 - [ ] Proteção do endpoint `/admin/metrics` e hardening operacional ([`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md)).
+- [ ] Automatizar sequência `alembic upgrade` + `seed` e remover dependência de `create_all` do bootstrap.
 
 ### Frontend — pendências críticas
-- [ ] Ajustar contratos API ↔ SPA antes do piloto externo ([`20251006-contratos-api-fe`](../backlog/20251006-contratos-api-fe.md)).
 - [ ] Expor indicadores e fallback multicanal alinhados às novas fontes de dados ([`20250210-analytics-dashboard-sync`](../backlog/20250210-analytics-dashboard-sync.md)).
 - [ ] Preparar telas de branding/white-label e RBAC por tenant (depende de [`20250210-worker-offload`](../backlog/20250210-worker-offload.md) e épico E4 para governança).
+- [ ] Propagar alertas de consentimento/opt-in nas páginas de contatos e mensagens para refletir as novas regras inbound.
 
 ## 3. Inventário de Endpoints
 
@@ -71,11 +70,11 @@
 
 | Endpoint | Cobertura atual | Lacunas conhecidas |
 | --- | --- | --- |
-| `POST /messages/send` | Autenticado, grava `MessageJob`, `DeliveryAttempt` e `CostRecord` com `price_table_version="v1"`. | Falta validação E.164 e sanitização dos campos `variables`/`provider_response` (PII exposta). |
-| `GET /messages/jobs` | Lista jobs com `template_category`, `total_cost_minor` e filtros por status. | Retorno limitado a 100 itens; contratos ainda precisam de revisão com a SPA. |
+| `POST /messages/send` | Autenticado, aplica rate limiting por organização (SlowAPI) e grava `MessageJob`, `DeliveryAttempt` e `CostRecord` com `price_table_version="v1"`. | Falta validação E.164 e sanitização dos campos `variables`/`provider_response` (PII exposta). |
+| `GET /messages/jobs` | Lista jobs com `template_category`, `total_cost_minor` e filtros por status. | Retorno limitado a 100 itens e ausência de paginação explícita além do limite padrão. |
 | `GET /messages/jobs/{job_id}` | Devolve tentativas com `provider_name`, `attempt.id` e custos agregados. | Erros retornam texto bruto do provedor. |
 | `POST /rules` / `PATCH /rules/{id}` / `POST /rules/{id}/toggle` | CRUD funcional; toggle retorna `{is_enabled}`. | Atualização exige payload completo; falta auditoria de mudanças. |
-| `POST /rules/simulate-advanced` | Calcula estimativas `total_baseline/total_optimized`. | Contrato diverge do frontend (`baseline_cost`, `optimized_cost`, `total_savings`, `provider_comparison`). |
+| `POST /rules/simulate-advanced` | Calcula estimativas `total_baseline/total_optimized` alinhadas aos tipos consumidos pela SPA. | Falta auditoria de mudanças. |
 | `GET /reports/dashboard-metrics` | Disponibiliza métricas agregadas (`total_messages`, `saved_minor`, etc.). | Requer `MessageEvent` externo; sem baseline real sem ingestão automática. |
 | `GET /reports/provider-metrics` | Exibe performance por provedor. | Falta particionamento por org quando novos providers forem inseridos. |
 | `GET /providers` / `POST /providers/credentials` | Lista providers e salva credenciais criptografadas (Fernet). | Health-checks ainda dependem de credenciais hardcoded para demo. |
@@ -86,10 +85,10 @@
 
 | Endpoint/fluxo | Status | Impacto |
 | --- | --- | --- |
-| `POST /integrations/wa/webhook` | `org_id` hardcoded; sem roteamento multi-tenant. | Bloqueia o piloto externo (item [`20251006-webhook-multi-tenant`](../backlog/20251006-webhook-multi-tenant.md)). |
+| `POST /integrations/wa/webhook` | Multi-tenant com verificação HMAC e mascaramento de payloads; falta registrar automaticamente opt-ins concedidos após inbound. | Requer evoluir os playbooks de consentimento para reprocessar eventos e sincronizar auditoria. |
 | `/admin/metrics` | Público, sem autenticação ou RBAC. | Exposição de métricas sensíveis até que [`20251006-proteger-admin-metrics`](../backlog/20251006-proteger-admin-metrics.md) seja concluído. |
-| Rate limiting por tenant | Não implementado. | Risco de abuso e instabilidade enquanto [`20251006-circuit-breaker`](../backlog/20251006-circuit-breaker.md) estiver aberto. |
-| Sanitização de payloads/logs | Não implementada. | Requisito de conformidade pendente ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)). |
+| Rate limiting por tenant | Implementado para `/messages/send`. | Monitorar saturação e ajustar limites conforme volume do piloto externo. |
+| Sanitização de payloads/logs | Parcial: webhook mascara campos sensíveis, mas logs herdados precisam de higienização. | Requisito de conformidade pendente ([`20251006-sanitizacao-pii`](../backlog/20251006-sanitizacao-pii.md)). |
 
 ### Páginas prototipadas (SPA)
 
@@ -97,7 +96,7 @@
 | --- | --- | --- |
 | Login / Register | Fluxos básicos prontos com consumo das APIs de autenticação. | Falta hardening de UX (tratamento de erro, políticas de senha). |
 | Dashboard | Exibe cards de métricas conforme `GET /reports/dashboard-metrics`. | Indicadores multicanal ainda mockados. |
-| Messages | Lista jobs e detalhes usando `GET /messages/jobs` e `GET /messages/jobs/{job_id}`. | Falta alinhamento de contrato para campos adicionais e filtros avançados. |
+| Messages | Lista jobs e detalhes usando `GET /messages/jobs` e `GET /messages/jobs/{job_id}`. | Faltam filtros avançados e timeline de eventos em tempo real. |
 | Providers | CRUD completo para cadastro e health-check. | Tela ainda assume um único tenant. |
 | Rules | Editor de regras com fallback chain. | Não registra histórico de alterações nem simulações persistidas. |
 | Reports | Consome métricas agregadas dos endpoints de relatórios. | Gráficos não refletem dados multicanal reais. |
@@ -122,7 +121,7 @@
 | Providers API | ✅ Filtro `org_id` aplicado em credenciais/health | Reduzido. Monitorar novos endpoints.
 | RoutingEngine | ✅ Provider restrito ao tenant em regra, fallback filtrado | Fallback automático permanece dependente de `RateCard` global. |
 | Rates | ✅ Auth obrigatória; dados ainda globais | Considerar `org_id` em rate cards customizados. |
-| Webhook WA | `org_id` placeholder | Eventos não associados à org correta.
+| Webhook WA | ✅ Roteia por `phone_id` com assinatura HMAC por tenant | Monitorar auditoria de consentimento e sanitização de logs.
 
  |
 | Seeds | `seed_providers` respeita `org_id` informado ou replica para todas | Seed não cria org automaticamente. |
@@ -162,7 +161,7 @@
 | Validação entradas | Sem E.164 (apenas mapa de prefixos).
 
  |
-| Rate limiting | Inexistente. |
+| Rate limiting | Implementado em `/messages/send` com limites por tenant; ajustar políticas dinâmicas conforme carga. |
 | Admin metrics | `/admin/metrics` público, sem auth.
 
  |
@@ -175,10 +174,10 @@
 
 ## 8. Resiliência
 
-- Implementado: retries (3 tentativas, exponential backoff), fallback chain, logging de erros.
+- Implementado: retries (3 tentativas, exponential backoff), fallback chain, circuito de provedores com estados (`closed/half-open/open`), rate limiting por tenant e logging de erros.
 
 
-- Ausente: circuit breaker, métricas estruturadas, integração do worker RQ, limites de latência configuráveis. Conectores dependem de HTTPX com timeout fixo (30s).
+- Ausente: telemetria estruturada do circuito, integração do worker RQ e limites de latência configuráveis. Conectores dependem de HTTPX com timeout fixo (30s).
 
 
 
@@ -292,12 +291,12 @@
 | Credenciais em texto claro | Alta | Introduzir criptografia Fernet + rotação. |
 | Cross-tenant via provider UUID | Alta | Filtro `org_id` obrigatório em queries e rules. |
 | Migration quebra ambiente novo | Alta | Criar migration base e ajustar ordem do compose. |
-| Dashboard quebrado por contratos | Média | Ajustar API/UI + testes de contrato (pacto). |
+| Dashboard sem métricas multicanal reais | Média | Conectar novas fontes de dados e atualizar widgets React. |
 | Payload PII em logs/DB | Média | Mascarar `variables` e `provider_response`. |
-| Webhook sem org mapping | Alta | Tabela `phone_id -> org_id` e validação. |
+| Auditoria inbound incompleta | Alta | Registrar opt-ins resultantes e ampliar trilha de consentimento. |
 | Métricas expostas publicamente | Média | Auth no `/admin/metrics` e rede interna. |
-| Ausência de rate limit | Média | Implementar limitador Redis no FastAPI. |
-| Circuit breaker ausente | Média | Incluir contadores de falha e fallback automático. |
+| Rate limit descalibrado | Média | Monitorar `RateLimiter` e ajustar limites por tenant. |
+| Circuit breaker sem telemetria histórica | Média | Consolidar métricas Prometheus + dashboards de observabilidade. |
 | Secrets default | Média | Enforce `.env` e validação no boot. |
 
 ## 14. Novo README.md
@@ -386,7 +385,7 @@ React SPA --> FastAPI --> PostgreSQL
 - **Mensageria**: `RoutingEngine` aplica regras (`routing_rule`) e consulta `RateCard`.
 - **Persistência**: `MessageJob`, `DeliveryAttempt`, `CostRecord`, `MessageEvent`.
 - **Observabilidade**: `/admin/metrics` (Prometheus), logging padrão.
-- **Integrações**: `integrations.py` recebe Webhooks WhatsApp (mapear `org_id`).
+- **Integrações**: `integrations.py` recebe Webhooks WhatsApp multi-tenant com validação de assinatura e mascaramento de payloads.
 - **Trabalhos assíncronos**: `worker.py` (Redis + RQ) pronto para offloading futuro.
 
 Fluxo de envio:
@@ -435,9 +434,9 @@ Todas as rotas abaixo exigem `Authorization: Bearer <token>` salvo indicação c
 - `POST /rates/import_csv`
 
 ## Integrações
-- `POST /integrations/wa/connections`
-- `GET /integrations/wa/webhook`
-- `POST /integrations/wa/webhook` (TODO: mapear org)
+- `POST /integrations/wa/connections` — registra `business_id`, `phone_id` e token criptografado por `org_id`, retornando o identificador da conexão conforme `docs/api/API_REFERENCE.md`.
+- `GET /integrations/wa/webhook` — responde desafio do Meta quando o `verify_token` pertence ao tenant.
+- `POST /integrations/wa/webhook` — roteia por `phone_id`, valida assinatura HMAC e aplica checagem de consentimento antes de registrar `MessageEvent`.
 
 ## Admin
 - `GET /admin/health`
