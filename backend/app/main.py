@@ -5,6 +5,7 @@ from app.api import (
     auth,
     events,
     integrations,
+    integrations_sms,
     messages,
     opt_in,
     orgs,
@@ -30,6 +31,11 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(orgs.router, prefix="/orgs", tags=["orgs"])
 app.include_router(integrations.router, prefix="/integrations", tags=["integrations"])
+app.include_router(
+    integrations_sms.router,
+    prefix="/integrations/sms",
+    tags=["integrations"],
+)
 app.include_router(rates.router, prefix="/rates", tags=["rates"])
 app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
