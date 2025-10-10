@@ -44,6 +44,50 @@ export interface ProviderMetric {
   total_cost_minor: number;
 }
 
+export interface ChannelBacklogMetrics {
+  open: number;
+  pending: number;
+  closed: number;
+}
+
+export interface QueueBacklogMetrics {
+  open: number;
+  responded: number;
+  closed: number;
+  total: number;
+}
+
+export interface FirstResponseMetrics {
+  average_seconds: number | null;
+  sample_size: number;
+}
+
+export interface SlaMetrics {
+  target_seconds: number | null;
+  within_target: number;
+  total_tracked: number;
+  compliance_rate: number | null;
+}
+
+export interface ChannelMetric {
+  channel: string;
+  conversations_opened: number;
+  conversations_closed: number;
+  backlog: ChannelBacklogMetrics;
+  first_response: FirstResponseMetrics;
+  sla: SlaMetrics;
+}
+
+export interface QueueMetric {
+  channel: string;
+  backlog: QueueBacklogMetrics;
+  first_response: FirstResponseMetrics;
+  sla: SlaMetrics;
+}
+
+export type ChannelMetricsResponse = ChannelMetric[];
+export type QueueMetricsResponse = QueueMetric[];
+
 export interface MessageJobAttempt {
   id: string;
   attempt_number: number;

@@ -343,6 +343,70 @@ Erros: valores fora do range retornam `422`.
 ### `GET /reports/provider-metrics`
 Estatísticas por provedor: `provider_id`, `provider_name`, `total_sent`, `success_rate`, `avg_latency_ms`, `total_cost_minor`. Parâmetro `days` segue a mesma regra da rota anterior.
 
+### `GET /reports/channel-metrics`
+Consolida dados de SLA por canal a partir de `sla_snapshot`. Aceita `from` e `to` em ISO 8601 (default: últimos 7 dias). Cada item retorna:
+- `conversations_opened`/`conversations_closed` agregados no período.
+- `backlog` com os valores mais recentes de `open`, `pending` e `closed`.
+- `first_response.average_seconds` ponderado pelo volume de conversas respondidas.
+- `sla` com `target_seconds`, total de conversas rastreadas e `compliance_rate` (% dentro do alvo de FRT).
+
+**Resposta 200**
+```json
+[
+  {
+    "channel": "whatsapp",
+    "conversations_opened": 128,
+    "conversations_closed": 110,
+    "backlog": {
+      "open": 9,
+      "pending": 4,
+      "closed": 110
+    },
+    "first_response": {
+      "average_seconds": 38.6,
+      "sample_size": 110
+    },
+    "sla": {
+      "target_seconds": 60.0,
+      "within_target": 98,
+      "total_tracked": 110,
+      "compliance_rate": 89.09
+    }
+  }
+]
+```
+
+### `GET /reports/queues`
+Mostra a saúde das filas de atendimento calculada a partir de `queue_entry`. Aceita `from` e `to` (ISO 8601, default: últimos 7 dias). Para cada canal são retornados:
+- `backlog` com contagem de itens `open`, `responded`, `closed` e `total` no recorte.
+- `first_response.average_seconds` baseado na média de `first_response_latency_seconds` das entradas respondidas.
+- `sla` herdando o alvo e a taxa de cumprimento agregada em `sla_snapshot`.
+
+**Resposta 200**
+```json
+[
+  {
+    "channel": "whatsapp",
+    "backlog": {
+      "open": 6,
+      "responded": 3,
+      "closed": 94,
+      "total": 103
+    },
+    "first_response": {
+      "average_seconds": 41.3,
+      "sample_size": 97
+    },
+    "sla": {
+      "target_seconds": 60.0,
+      "within_target": 90,
+      "total_tracked": 103,
+      "compliance_rate": 87.38
+    }
+  }
+]
+```
+
 ## Contatos
 
 ### `GET /contacts`
