@@ -279,7 +279,7 @@ async def webhook_receive(request: Request, db: Session = Depends(get_db)):
                 contact_id = None
 
                 if channel_address:
-                    contact = contact_repository.find_by_phone(
+                    contact = contact_repository.find_by_sms(
                         org_id=connection.org_id, phone_number=channel_address
                     )
                     contact_id = contact.id if contact else None
@@ -288,7 +288,8 @@ async def webhook_receive(request: Request, db: Session = Depends(get_db)):
                 has_consent = True
                 if channel_address:
                     preferences = preference_resolver.load(
-                        channel_address=channel_address
+                        channel="whatsapp",
+                        channel_address=channel_address,
                     )
                     if contact_id is None and preferences.contact_id is not None:
                         contact_id = preferences.contact_id

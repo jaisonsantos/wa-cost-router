@@ -326,7 +326,10 @@ class ContactChannelOptIn(Base):
             "version",
             name="uq_contact_opt_in_version",
         ),
-        Index("ix_contact_channel_opt_in_channel_address", "channel_address"),
+        Index(
+            "ix_contact_channel_opt_in_channel_address",
+            func.lower(channel_address),
+        ),
     )
 
     organization = relationship("Organization")

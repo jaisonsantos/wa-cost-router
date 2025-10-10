@@ -57,6 +57,37 @@ def _create_org(session):
     return org
 
 
+def test_find_by_sms_and_email(session):
+    org = _create_org(session)
+    repo = ContactRepository(session)
+
+    phone_contact = repo.create_contact(
+        id=uuid.uuid4(),
+        org_id=org.id,
+        phone="+5511999999999",
+        status=ContactStatusEnum.active,
+    )
+
+    email_contact = repo.create_contact(
+        id=uuid.uuid4(),
+        org_id=org.id,
+        email="Person@Example.com",
+        status=ContactStatusEnum.active,
+    )
+
+    assert (
+        repo.find_by_sms(org_id=org.id, phone_number="+55 11 99999-9999").id
+        == phone_contact.id
+    )
+    assert (
+        repo.find_by_sms(org_id=org.id, phone_number="5511999999999").id
+        == phone_contact.id
+    )
+    assert (
+        repo.find_by_email(org_id=org.id, email="PERSON@example.com").id
+        == email_contact.id
+    )
+
 def test_create_get_update_and_delete_contact(session):
     org = _create_org(session)
     repo = ContactRepository(session)
