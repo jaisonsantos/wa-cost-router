@@ -221,7 +221,8 @@ def test_send_message_enforces_rate_limit(client, db_session, monkeypatch):
                 "/messages/send",
                 json={
                     "idempotency_key": f"rate-limit-{attempt}",
-                    "to_number": DEFAULT_NUMBER,
+                    "channel": "whatsapp",
+                    "channel_address": DEFAULT_NUMBER,
                     "template_id": "welcome",
                     "template_category": "MARKETING",
                     "variables": {"body_params": ["John"]},
@@ -234,7 +235,8 @@ def test_send_message_enforces_rate_limit(client, db_session, monkeypatch):
             "/messages/send",
             json={
                 "idempotency_key": "rate-limit-final",
-                "to_number": DEFAULT_NUMBER,
+                "channel": "whatsapp",
+                "channel_address": DEFAULT_NUMBER,
                 "template_id": "welcome",
                 "template_category": "MARKETING",
                 "variables": {"body_params": ["John"]},
@@ -249,20 +251,24 @@ def test_send_message_enforces_rate_limit(client, db_session, monkeypatch):
         app.dependency_overrides.pop(get_rate_limiter, None)
 
 
-def test_send_message_rejects_invalid_to_number(client):
+def test_send_message_rejects_invalid_channel_address(client):
     test_client, _ = client
 
     response = test_client.post(
         "/messages/send",
         json={
             "idempotency_key": "invalid-number",
-            "to_number": "5511999999999",  # missing international prefix
+            "channel": "whatsapp",
+            "channel_address": "5511999999999",  # missing international prefix
             "template_id": "welcome",
         },
     )
 
     assert response.status_code == 422
-    assert any("to_number" in error["loc"] for error in response.json()["detail"])
+    assert any(
+        "phone numbers must include country code" in error.get("msg", "")
+        for error in response.json()["detail"]
+    )
 
 
 def test_send_message_rejects_invalid_country_code(client):
@@ -272,7 +278,8 @@ def test_send_message_rejects_invalid_country_code(client):
         "/messages/send",
         json={
             "idempotency_key": "invalid-country",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "channel_address": DEFAULT_NUMBER,
             "template_id": "welcome",
             "country_iso": "brazil",
         },
@@ -284,13 +291,14 @@ def test_send_message_rejects_invalid_country_code(client):
 
 def test_send_message_returns_success(client, db_session):
     test_client, org_id = client
-    _bootstrap_routing_stack(db_session, org_id)
+    _, contact = _bootstrap_routing_stack(db_session, org_id)
 
     response = test_client.post(
         "/messages/send",
         json={
             "idempotency_key": "test-key",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "contact_id": str(contact.id),
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["John"]},
@@ -305,6 +313,15 @@ def test_send_message_returns_success(client, db_session):
     assert payload["job_id"]
 
     job_uuid = uuid.UUID(payload["job_id"])
+    job = (
+        db_session.query(MessageJob)
+        .filter(MessageJob.id == job_uuid)
+        .one()
+    )
+    assert job.channel == "whatsapp"
+    assert job.channel_address == DEFAULT_NUMBER
+    assert job.contact_id == contact.id
+
     event = (
         db_session.query(MessageEvent)
         .filter(MessageEvent.message_job_id == job_uuid)
@@ -317,6 +334,9 @@ def test_send_message_returns_success(client, db_session):
     assert event.template_name == "welcome"
     assert event.country_iso == "BR"
     assert event.provider_event_id
+    assert event.channel == "whatsapp"
+    assert event.channel_address == DEFAULT_NUMBER
+    assert event.contact_id == contact.id
 
     stored_cost = (
         db_session.query(CostRecord)
@@ -339,7 +359,8 @@ def test_send_message_handles_routing_engine_error(client, db_session, monkeypat
         "/messages/send",
         json={
             "idempotency_key": "boom-key",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "channel_address": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Jane"]},
@@ -367,7 +388,8 @@ def test_send_message_handles_delivery_exception(client, db_session, monkeypatch
         "/messages/send",
         json={
             "idempotency_key": "delivery-key",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "channel_address": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Ravi"]},
@@ -401,7 +423,8 @@ def test_send_message_handles_job_commit_failure(client, db_session, monkeypatch
         "/messages/send",
         json={
             "idempotency_key": "job-commit-failure",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "channel_address": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Nia"]},
@@ -435,7 +458,8 @@ def test_send_message_handles_non_iterable_fallback_chain(client, db_session, mo
         "/messages/send",
         json={
             "idempotency_key": "bad-fallback",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "channel_address": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Lia"]},
@@ -475,7 +499,8 @@ def test_send_message_defaults_invalid_estimated_cost(client, db_session, monkey
         "/messages/send",
         json={
             "idempotency_key": "bad-cost",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "channel_address": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Noah"]},
@@ -520,7 +545,8 @@ def test_send_message_rejects_when_contact_opted_out(client, db_session):
         "/messages/send",
         json={
             "idempotency_key": "revoked-key",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "contact_id": str(contact.id),
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Kai"]},
@@ -549,7 +575,8 @@ def test_contact_without_consent_triggers_opt_in_request(client, db_session):
         "/messages/send",
         json={
             "idempotency_key": "no-opt-in",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "contact_id": str(contact.id),
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Kai"]},
@@ -593,7 +620,8 @@ def test_send_message_rolls_back_on_commit_error(client, db_session, monkeypatch
         "/messages/send",
         json={
             "idempotency_key": "flaky-commit",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "channel_address": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Zoe"]},
@@ -682,7 +710,8 @@ def test_circuit_breaker_opens_and_triggers_fallback(client, db_session, monkeyp
         "/messages/send",
         json={
             "idempotency_key": "circuit-fallback",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "channel_address": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Jane"]},
@@ -723,7 +752,8 @@ def test_circuit_breaker_resets_on_success(client, db_session, monkeypatch):
         "/messages/send",
         json={
             "idempotency_key": "circuit-success",
-            "to_number": DEFAULT_NUMBER,
+            "channel": "whatsapp",
+            "channel_address": DEFAULT_NUMBER,
             "template_id": "welcome",
             "template_category": "MARKETING",
             "variables": {"body_params": ["Jo"]},
