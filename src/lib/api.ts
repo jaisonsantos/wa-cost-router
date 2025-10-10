@@ -30,6 +30,7 @@ import {
   SendMessageRequest,
   SendMessageResponse,
   SetProviderCredentialsResponse,
+  SimulateRulesRequest,
   SimulateRulesResult,
   SummaryResponse,
   TokenResponse,
@@ -163,9 +164,10 @@ class ApiClient {
     });
   }
 
-  async simulateRules(): Promise<SimulateRulesResult> {
+  async simulateRules(data: SimulateRulesRequest): Promise<SimulateRulesResult> {
     return this.request<SimulateRulesResult>("/rules/simulate", {
       method: "POST",
+      body: JSON.stringify(data),
     });
   }
 

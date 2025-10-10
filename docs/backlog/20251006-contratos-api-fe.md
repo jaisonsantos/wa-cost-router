@@ -7,17 +7,17 @@ owner: "unassigned"
 depends_on: []
 ---
 
-> - **Status:** Pendente
+> - **Status:** Em andamento — dashboards e simulações alinhados ao backend
 > - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
 
 ## Contexto
 
-Alguns endpoints (`/messages/jobs`, `/rules/simulate-advanced`) retornam campos que divergem do esperado pela SPA (ver nota em [AGENTE](../current-cycle/AGENTE.md)). Precisamos consolidar contratos e documentar breaking changes.
+Alguns endpoints (`/messages/jobs`, `/rules/simulate-advanced`) retornam campos que divergem do esperado pela SPA (ver nota em [AGENTE](../current-cycle/AGENTE.md)). Precisamos consolidar contratos e documentar breaking changes. O dashboard e as telas de simulação já foram atualizados para consumir `GET /reports/dashboard-metrics`, `GET /reports/provider-metrics`, `POST /rules/simulate` e `POST /rules/simulate-advanced`, removendo agregações locais.
 
 ## Escopo
 
-- Mapear payloads consumidos pelo frontend (`src/hooks/useApi.ts`) e compará-los com respostas reais.
-- Ajustar serializers ou normalizações no frontend para garantir compatibilidade.
+- Mapear payloads consumidos pelo frontend (`src/hooks/useApi.ts`) e compará-los com respostas reais. ✅ Dashboard/Simulações
+- Ajustar serializers ou normalizações no frontend para garantir compatibilidade. ✅ Tipos e hooks atualizados
 - Criar documentação de contratos (OpenAPI/TypeScript types compartilhados).
 - Atualizar coleção Postman com exemplos que reflitam contratos finais.
 
@@ -31,7 +31,7 @@ Alguns endpoints (`/messages/jobs`, `/rules/simulate-advanced`) retornam campos 
 
 - [ ] Levantar endpoints críticos e campos usados no frontend (`src/hooks/useApi.ts`).
 - [ ] Ajustar responses ou adaptadores no backend para refletir o contrato combinado.
-- [ ] Atualizar tipos TypeScript no frontend (interfaces/models).
+- [x] Atualizar tipos TypeScript no frontend (interfaces/models).
 - [ ] Revisar Postman e docs para garantir consistência.
 
 ## Referências

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   useCreateRule,
   useUpdateRule,
   useProviders,
+  useDashboardMetrics,
 } from "@/hooks/useApi";
 import {
   Plus,
@@ -26,7 +27,7 @@ import {
   MessageSquare,
   Zap,
 } from "lucide-react";
-import { Provider, Rule, RuleActions, RuleCondition } from "@/types/api";
+import { Provider, Rule, RuleActions, RuleCondition, SimulateRulesRequest } from "@/types/api";
 
 type RuleLike = Rule & {
   rule_id?: string;
@@ -87,6 +88,7 @@ const getCategoryColor = (category: string) => {
 const Rules = () => {
   const { data: rulesData, isLoading } = useRules();
   const { data: providersData } = useProviders();
+  const { data: dashboardMetrics } = useDashboardMetrics();
   const toggleRule = useToggleRule();
   const simulate = useSimulateRules();
   const createRule = useCreateRule();
@@ -123,12 +125,62 @@ const Rules = () => {
       .sort((a, b) => a.priority - b.priority);
   }, [rulesData]);
 
+  const defaultCategory = useMemo(
+    () => dashboardMetrics?.top_templates?.[0]?.category?.toLowerCase() ?? "marketing",
+    [dashboardMetrics],
+  );
+
+  const defaultSimulationPayload = useMemo<SimulateRulesRequest | null>(() => {
+    const topCountries = dashboardMetrics?.top_countries ?? [];
+
+    if (topCountries.length === 0) {
+      return null;
+    }
+
+    const volumes = topCountries.reduce<Record<string, number>>((acc, country) => {
+      if (country.country) {
+        acc[country.country] = country.count;
+      }
+      return acc;
+    }, {});
+
+    const countries = Object.keys(volumes);
+
+    if (countries.length === 0) {
+      return null;
+    }
+
+    return {
+      countries,
+      volumes,
+      category: defaultCategory,
+    };
+  }, [dashboardMetrics, defaultCategory]);
+
+  const lastSimulationKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!defaultSimulationPayload) {
+      return;
+    }
+
+    const payloadKey = JSON.stringify(defaultSimulationPayload);
+    if (lastSimulationKey.current !== payloadKey) {
+      simulate.mutate(defaultSimulationPayload);
+      lastSimulationKey.current = payloadKey;
+    }
+  }, [defaultSimulationPayload, simulate]);
+
   const handleToggle = async (ruleId: string) => {
     await toggleRule.mutateAsync(ruleId);
   };
 
   const handleSimulate = async () => {
-    await simulate.mutateAsync();
+    if (!defaultSimulationPayload) {
+      return;
+    }
+
+    await simulate.mutateAsync(defaultSimulationPayload);
   };
 
   const handleOpenCreate = () => {
@@ -172,7 +224,14 @@ const Rules = () => {
   }
 
   const activeRules = rules.filter((rule) => rule.is_enabled).length;
-  const totalSavings = 0; // TODO: Integrar com simulações para exibir economia real
+  const quickSimulation = simulate.data;
+  const totalSavings = (quickSimulation?.saved ?? 0) / 100;
+  const baselineCost = (quickSimulation?.baseline ?? 0) / 100;
+  const optimizedCost = (quickSimulation?.optimized ?? 0) / 100;
+  const totalMessages = dashboardMetrics?.total_messages ?? 0;
+  const quickSavingsPct = quickSimulation?.baseline
+    ? ((quickSimulation.saved / quickSimulation.baseline) * 100).toFixed(1)
+    : "0.0";
   const isSubmitting = createRule.isPending || updateRule.isPending;
 
   return (
@@ -185,7 +244,16 @@ const Rules = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Economia Potencial</p>
-                  <p className="text-2xl font-bold text-success">€{totalSavings.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-success">
+                    €{totalSavings.toFixed(2)}
+                  </p>
+                  {quickSimulation?.baseline ? (
+                    <p className="text-xs text-muted-foreground">
+                      {quickSavingsPct}% vs baseline de €{baselineCost.toFixed(2)}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Aguardando simulação rápida</p>
+                  )}
                 </div>
                 <TrendingDown className="h-8 w-8 text-success" />
               </div>
@@ -197,7 +265,7 @@ const Rules = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Mensagens Roteadas</p>
-                  <p className="text-2xl font-bold">0</p>
+                  <p className="text-2xl font-bold">{totalMessages.toLocaleString()}</p>
                 </div>
                 <MessageSquare className="h-8 w-8 text-primary" />
               </div>
@@ -354,19 +422,8 @@ const Rules = () => {
                     </div>
 
                     {/* Estatísticas */}
-                    <div className="grid grid-cols-3 gap-4 border-t pt-4">
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-foreground">0</p>
-                        <p className="text-xs text-muted-foreground">Aplicações</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-success">€0.00</p>
-                        <p className="text-xs text-muted-foreground">Economizado</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-foreground">-</p>
-                        <p className="text-xs text-muted-foreground">Última aplicação</p>
-                      </div>
+                    <div className="border-t pt-4 text-sm text-muted-foreground">
+                      Telemetria por regra ainda não está disponível. Utilize o simulador abaixo para projetar impacto de custo.
                     </div>
                   </CardContent>
                 </Card>
@@ -376,7 +433,13 @@ const Rules = () => {
         </div>
 
         {/* Simulador Avançado */}
-        <AdvancedSimulator />
+        <AdvancedSimulator
+          defaultCountries={defaultSimulationPayload?.countries.map((country) => ({
+            country,
+            volume: defaultSimulationPayload.volumes[country],
+          }))}
+          defaultCategory={defaultCategory}
+        />
 
         {/* Simulação Rápida */}
         {rules.length > 0 && (
@@ -389,14 +452,39 @@ const Rules = () => {
                     Simulação Rápida
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Teste rapidamente o impacto das regras atuais.
+                    Teste rapidamente o impacto das regras atuais usando volumes reais dos principais países.
                   </p>
+                  {quickSimulation && (
+                    <div className="mt-4 grid gap-4 md:grid-cols-3 text-sm">
+                      <div className="rounded-lg border bg-background p-3">
+                        <p className="text-muted-foreground">Baseline</p>
+                        <p className="text-lg font-semibold">€{baselineCost.toFixed(2)}</p>
+                      </div>
+                      <div className="rounded-lg border bg-background p-3">
+                        <p className="text-muted-foreground">Otimizado</p>
+                        <p className="text-lg font-semibold text-success">€{optimizedCost.toFixed(2)}</p>
+                      </div>
+                      <div className="rounded-lg border bg-background p-3">
+                        <p className="text-muted-foreground">Economia</p>
+                        <p className="text-lg font-semibold text-success">€{totalSavings.toFixed(2)}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <Button onClick={handleSimulate} disabled={simulate.isPending} variant="outline">
+                <Button
+                  onClick={handleSimulate}
+                  disabled={simulate.isPending || !defaultSimulationPayload}
+                  variant="outline"
+                >
                   <PlayCircle className="mr-2 h-4 w-4" />
                   {simulate.isPending ? "Simulando..." : "Executar"}
                 </Button>
               </div>
+              {simulate.isError && (
+                <p className="mt-3 text-sm text-destructive">
+                  {(simulate.error as Error | undefined)?.message ?? "Não foi possível executar a simulação."}
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
@@ -411,9 +499,12 @@ const Rules = () => {
               <div className="flex-1">
                 <h3 className="mb-2 text-lg font-semibold">Sugestão de Otimização</h3>
                 <p className="mb-4 text-muted-foreground">
-                  Identificamos potencial de economia adicional com novas regras baseadas no seu histórico.
+                  Com as regras atuais economizando cerca de {quickSavingsPct}% nos países com maior volume, avalie simulações
+                  avançadas para mapear provedores alternativos e ampliar a economia.
                 </p>
-                <Button variant="outline">Ver sugestões detalhadas</Button>
+                <Button variant="outline" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+                  Configurar simulação avançada
+                </Button>
               </div>
             </div>
           </CardContent>
