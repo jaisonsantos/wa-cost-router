@@ -9,3 +9,6 @@ exclude = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "asyncio: mark async tests that require an event loop",
+]
