@@ -192,6 +192,7 @@ async def check_provider_health(
             provider.name,
             decrypt_credentials(credential.credentials_encrypted),
             provider.base_url,
+            provider_type=provider.type,
         )
         
         health = await connector.health_check()

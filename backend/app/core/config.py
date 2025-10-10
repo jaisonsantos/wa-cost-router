@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     SMTP_HOST: str = "mailhog"
     SMTP_PORT: int = 1025
 
+    SENDGRID_API_KEY: str = ""
+    SENDGRID_DEFAULT_SENDER_EMAIL: str = ""
+    SENDGRID_BASE_URL: str = "https://api.sendgrid.com/v3"
+
     SANDBOX_PROVIDERS: bool = False
     SANDBOX_LATENCY_MS: int = 100
     SANDBOX_FAILURE_RATE: float = 0.0

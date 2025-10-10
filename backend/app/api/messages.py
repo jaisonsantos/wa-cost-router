@@ -545,7 +545,8 @@ async def _attempt_delivery_with_fallback(
             connector = get_connector(
                 provider.name,
                 credentials_payload,
-                provider.base_url
+                provider.base_url,
+                provider_type=provider.type,
             )
 
             try:

@@ -704,7 +704,12 @@ def test_circuit_breaker_opens_and_triggers_fallback(client, db_session, monkeyp
                 "response": {},
             }
 
-    def fake_connector(provider_name: str, credentials: dict, base_url: str | None = None):
+    def fake_connector(
+        provider_name: str,
+        credentials: dict,
+        base_url: str | None = None,
+        **_: object,
+    ):
         if provider_name == primary.name:
             return FailingConnector(provider_name, credentials, base_url)
         return SuccessfulConnector(provider_name, credentials, base_url)
