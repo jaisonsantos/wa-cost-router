@@ -2,7 +2,7 @@
   "info": {
     "name": "WA Cost Router",
     "_postman_id": "4f6d5d8b-1d2c-4a8d-9b1e-0c1234567890",
-    "description": "Cole\u00e7\u00e3o completa da API WA Cost Router para desenvolvimento local.",
+    "description": "Coleção completa da API WA Cost Router para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1237,6 +1237,128 @@
               ]
             }
           }
+        },
+        {
+          "name": "Reports - Channel Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reports/channel-metrics?from=2024-10-01T00:00:00Z&to=2024-10-31T23:59:59Z",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "channel-metrics"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2024-10-01T00:00:00Z"
+                },
+                {
+                  "key": "to",
+                  "value": "2024-10-31T23:59:59Z"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "body": "[\n  {\n    \"channel\": \"whatsapp\",\n    \"conversations_opened\": 128,\n    \"conversations_closed\": 110,\n    \"backlog\": {\n      \"open\": 9,\n      \"pending\": 4,\n      \"closed\": 110\n    },\n    \"first_response\": {\n      \"average_seconds\": 38.6,\n      \"sample_size\": 110\n    },\n    \"sla\": {\n      \"target_seconds\": 60.0,\n      \"within_target\": 98,\n      \"total_tracked\": 110,\n      \"compliance_rate\": 89.09\n    }\n  }\n]",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/reports/channel-metrics?from=2024-10-01T00:00:00Z&to=2024-10-31T23:59:59Z",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "reports",
+                    "channel-metrics"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2024-10-01T00:00:00Z"
+                    },
+                    {
+                      "key": "to",
+                      "value": "2024-10-31T23:59:59Z"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reports - Queue Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reports/queues?from=2024-10-01T00:00:00Z&to=2024-10-31T23:59:59Z",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "queues"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2024-10-01T00:00:00Z"
+                },
+                {
+                  "key": "to",
+                  "value": "2024-10-31T23:59:59Z"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "body": "[\n  {\n    \"channel\": \"whatsapp\",\n    \"backlog\": {\n      \"open\": 6,\n      \"responded\": 3,\n      \"closed\": 94,\n      \"total\": 103\n    },\n    \"first_response\": {\n      \"average_seconds\": 41.3,\n      \"sample_size\": 97\n    },\n    \"sla\": {\n      \"target_seconds\": 60.0,\n      \"within_target\": 90,\n      \"total_tracked\": 103,\n      \"compliance_rate\": 87.38\n    }\n  }\n]",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/reports/queues?from=2024-10-01T00:00:00Z&to=2024-10-31T23:59:59Z",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "reports",
+                    "queues"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2024-10-01T00:00:00Z"
+                    },
+                    {
+                      "key": "to",
+                      "value": "2024-10-31T23:59:59Z"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
         }
       ]
     },

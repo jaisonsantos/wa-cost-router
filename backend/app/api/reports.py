@@ -1,39 +1,177 @@
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, case
-from pydantic import BaseModel
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
-from app.core.database import get_db
+from typing import Dict, List, Optional, Tuple
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, case, func
+from sqlalchemy.orm import Session
+
 from app.api.dependencies import get_current_user
-from app.models.models import MessageEvent, DeliveryAttempt, MessageJob, Provider
+from app.core.database import get_db
+from app.models.models import (
+    DeliveryAttempt,
+    MessageEvent,
+    MessageJob,
+    Provider,
+    QueueEntry,
+    QueueStatusEnum,
+    SlaSnapshot,
+)
+from app.schemas.reports import (
+    ChannelMetric,
+    DashboardMetrics,
+    FirstResponseMetrics,
+    ProviderMetric,
+    QueueMetrics,
+    SlaMetrics,
+    SummaryResponse,
+)
 
 router = APIRouter()
 
-class SummaryResponse(BaseModel):
-    cost_7d_minor: int
-    saved_7d_minor: int
-    pct_saved: float
 
-class ProviderMetric(BaseModel):
-    provider_id: str
-    provider_name: str
-    total_sent: int
-    success_rate: float
-    avg_latency_ms: float
-    total_cost_minor: int
+def _resolve_interval(
+    from_str: Optional[str],
+    to_str: Optional[str],
+    *,
+    default_days: int = 7,
+) -> Tuple[datetime, datetime]:
+    if to_str:
+        to_dt = datetime.fromisoformat(to_str)
+    else:
+        to_dt = datetime.utcnow()
 
-class DashboardMetrics(BaseModel):
-    total_messages: int
-    total_cost_minor: int
-    baseline_cost_minor: int
-    saved_minor: int
-    success_rate: float
-    avg_latency_ms: float
-    top_countries: List[Dict[str, Any]]
-    top_templates: List[Dict[str, Any]]
-    alerts: List[Dict[str, Any]]
-    recommendations: List[str]
+    if from_str:
+        from_dt = datetime.fromisoformat(from_str)
+    else:
+        from_dt = to_dt - timedelta(days=default_days)
+
+    if from_dt > to_dt:
+        raise ValueError("from must be earlier than to")
+
+    return from_dt, to_dt
+
+
+def _load_sla_metrics(
+    db: Session,
+    org_id: str,
+    from_dt: datetime,
+    to_dt: datetime,
+) -> Tuple[Dict[str, Dict[str, float]], Dict[str, Dict[str, int]]]:
+    filters = [
+        SlaSnapshot.org_id == org_id,
+        SlaSnapshot.period_start >= from_dt,
+        SlaSnapshot.period_end <= to_dt,
+    ]
+
+    aggregated_subquery = (
+        db.query(
+            SlaSnapshot.channel.label("channel"),
+            func.sum(SlaSnapshot.conversations_opened).label("conversations_opened"),
+            func.sum(SlaSnapshot.conversations_closed).label("conversations_closed"),
+            func.sum(SlaSnapshot.first_response_within_target).label(
+                "first_response_within_target"
+            ),
+            func.sum(
+                case(
+                    (
+                        SlaSnapshot.first_response_avg_seconds.isnot(None),
+                        SlaSnapshot.first_response_avg_seconds
+                        * SlaSnapshot.conversations_closed,
+                    ),
+                    else_=0,
+                )
+            ).label("first_response_total_seconds"),
+            func.sum(
+                case(
+                    (
+                        SlaSnapshot.first_response_avg_seconds.isnot(None),
+                        SlaSnapshot.conversations_closed,
+                    ),
+                    else_=0,
+                )
+            ).label("first_response_sample_size"),
+            func.sum(
+                SlaSnapshot.sla_target_seconds * SlaSnapshot.conversations_closed
+            ).label("sla_target_weighted"),
+        )
+        .filter(*filters)
+        .group_by(SlaSnapshot.channel)
+        .subquery()
+    )
+
+    aggregated_rows = db.query(aggregated_subquery).all()
+
+    latest_snapshot_subquery = (
+        db.query(
+            SlaSnapshot.channel.label("channel"),
+            func.max(SlaSnapshot.period_end).label("max_period_end"),
+        )
+        .filter(*filters)
+        .group_by(SlaSnapshot.channel)
+        .subquery()
+    )
+
+    backlog_rows = (
+        db.query(
+            SlaSnapshot.channel,
+            SlaSnapshot.backlog_open,
+            SlaSnapshot.backlog_pending,
+            SlaSnapshot.backlog_closed,
+        )
+        .join(
+            latest_snapshot_subquery,
+            and_(
+                SlaSnapshot.channel == latest_snapshot_subquery.c.channel,
+                SlaSnapshot.period_end == latest_snapshot_subquery.c.max_period_end,
+            ),
+        )
+        .all()
+    )
+
+    backlog_map: Dict[str, Dict[str, int]] = {
+        row.channel: {
+            "open": int(row.backlog_open or 0),
+            "pending": int(row.backlog_pending or 0),
+            "closed": int(row.backlog_closed or 0),
+        }
+        for row in backlog_rows
+    }
+
+    sla_map: Dict[str, Dict[str, float]] = {}
+    for row in aggregated_rows:
+        channel = row.channel
+        conversations_opened = int(row.conversations_opened or 0)
+        conversations_closed = int(row.conversations_closed or 0)
+        within_target = int(row.first_response_within_target or 0)
+        sample_size = int(row.first_response_sample_size or 0)
+        total_seconds = float(row.first_response_total_seconds or 0)
+        target_weighted = float(row.sla_target_weighted or 0)
+
+        avg_seconds = (
+            total_seconds / sample_size if sample_size > 0 else None
+        )
+        target_seconds = (
+            target_weighted / conversations_closed
+            if conversations_closed > 0
+            else None
+        )
+        compliance_rate = (
+            (within_target / conversations_closed) * 100
+            if conversations_closed > 0
+            else None
+        )
+
+        sla_map[channel] = {
+            "conversations_opened": conversations_opened,
+            "conversations_closed": conversations_closed,
+            "first_response_within_target": within_target,
+            "first_response_avg_seconds": avg_seconds,
+            "first_response_sample_size": sample_size,
+            "sla_target_seconds": target_seconds,
+            "sla_compliance_rate": compliance_rate,
+        }
+
+    return sla_map, backlog_map
 
 @router.get("/summary", response_model=SummaryResponse)
 def get_summary(
@@ -42,27 +180,23 @@ def get_summary(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Default to last 7 days
-    if not from_date:
-        from_dt = datetime.utcnow() - timedelta(days=7)
-    else:
-        from_dt = datetime.fromisoformat(from_date)
-    
-    if not to_date:
-        to_dt = datetime.utcnow()
-    else:
-        to_dt = datetime.fromisoformat(to_date)
-    
+    try:
+        from_dt, to_dt = _resolve_interval(from_date, to_date)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    org_id = current_user["org_id"]
+
     total_cost = db.query(func.sum(MessageEvent.unit_cost_minor)).filter(
-        MessageEvent.org_id == current_user["org_id"],
+        MessageEvent.org_id == org_id,
         MessageEvent.timestamp_provider >= from_dt,
         MessageEvent.timestamp_provider <= to_dt,
         MessageEvent.unit_cost_minor.isnot(None)
     ).scalar() or 0
-    
+
     # Calculate baseline (most expensive provider for each message)
     baseline_cost = db.query(func.sum(MessageEvent.baseline_cost_minor)).filter(
-        MessageEvent.org_id == current_user["org_id"],
+        MessageEvent.org_id == org_id,
         MessageEvent.timestamp_provider >= from_dt,
         MessageEvent.timestamp_provider <= to_dt,
         MessageEvent.baseline_cost_minor.isnot(None)
@@ -295,5 +429,184 @@ def get_provider_metrics(
             avg_latency_ms=float(stat.avg_latency or 0),
             total_cost_minor=stat.total_cost or 0
         ))
-    
+
     return metrics
+
+
+@router.get("/channel-metrics", response_model=List[ChannelMetric])
+def get_channel_metrics(
+    from_date: str = Query(None, alias="from"),
+    to_date: str = Query(None, alias="to"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        from_dt, to_dt = _resolve_interval(from_date, to_date)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    org_id = current_user["org_id"]
+    sla_map, backlog_map = _load_sla_metrics(db, org_id, from_dt, to_dt)
+
+    metrics: List[ChannelMetric] = []
+    for channel, sla_data in sla_map.items():
+        backlog_data = backlog_map.get(
+            channel,
+            {"open": 0, "pending": 0, "closed": 0},
+        )
+
+        metrics.append(
+            ChannelMetric(
+                channel=channel,
+                conversations_opened=int(sla_data["conversations_opened"]),
+                conversations_closed=int(sla_data["conversations_closed"]),
+                backlog=backlog_data,
+                first_response=FirstResponseMetrics(
+                    average_seconds=sla_data["first_response_avg_seconds"],
+                    sample_size=int(sla_data["first_response_sample_size"]),
+                ),
+                sla=SlaMetrics(
+                    target_seconds=sla_data["sla_target_seconds"],
+                    within_target=int(sla_data["first_response_within_target"]),
+                    total_tracked=int(sla_data["conversations_closed"]),
+                    compliance_rate=sla_data["sla_compliance_rate"],
+                ),
+            )
+        )
+
+    metrics.sort(key=lambda metric: metric.channel)
+    return metrics
+
+
+@router.get("/queues", response_model=List[QueueMetrics])
+def get_queue_metrics(
+    from_date: str = Query(None, alias="from"),
+    to_date: str = Query(None, alias="to"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        from_dt, to_dt = _resolve_interval(from_date, to_date)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    org_id = current_user["org_id"]
+    sla_map, backlog_map = _load_sla_metrics(db, org_id, from_dt, to_dt)
+
+    queue_rows = (
+        db.query(
+            QueueEntry.channel.label("channel"),
+            func.sum(
+                case((QueueEntry.status == QueueStatusEnum.open, 1), else_=0)
+            ).label("open"),
+            func.sum(
+                case((QueueEntry.status == QueueStatusEnum.responded, 1), else_=0)
+            ).label("responded"),
+            func.sum(
+                case((QueueEntry.status == QueueStatusEnum.closed, 1), else_=0)
+            ).label("closed"),
+            func.sum(
+                case(
+                    (
+                        QueueEntry.first_response_latency_seconds.isnot(None),
+                        QueueEntry.first_response_latency_seconds,
+                    ),
+                    else_=0,
+                )
+            ).label("first_response_total"),
+            func.sum(
+                case(
+                    (
+                        QueueEntry.first_response_latency_seconds.isnot(None),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("first_response_count"),
+        )
+        .filter(
+            QueueEntry.org_id == org_id,
+            QueueEntry.opened_at >= from_dt,
+            QueueEntry.opened_at <= to_dt,
+        )
+        .group_by(QueueEntry.channel)
+        .all()
+    )
+
+    metrics_map: Dict[str, QueueMetrics] = {}
+
+    for row in queue_rows:
+        channel = row.channel
+        open_count = int(row.open or 0)
+        responded_count = int(row.responded or 0)
+        closed_count = int(row.closed or 0)
+        total_count = open_count + responded_count + closed_count
+        first_response_count = int(row.first_response_count or 0)
+        first_response_total = float(row.first_response_total or 0)
+        avg_first_response = (
+            first_response_total / first_response_count
+            if first_response_count > 0
+            else None
+        )
+
+        sla_data = sla_map.get(channel, {})
+
+        metrics_map[channel] = QueueMetrics(
+            channel=channel,
+            backlog={
+                "open": open_count,
+                "responded": responded_count,
+                "closed": closed_count,
+                "total": total_count,
+            },
+            first_response=FirstResponseMetrics(
+                average_seconds=avg_first_response,
+                sample_size=first_response_count,
+            ),
+            sla=SlaMetrics(
+                target_seconds=sla_data.get("sla_target_seconds"),
+                within_target=int(sla_data.get("first_response_within_target", 0)),
+                total_tracked=int(sla_data.get("conversations_closed", 0)),
+                compliance_rate=sla_data.get("sla_compliance_rate"),
+            ),
+        )
+
+    for channel, sla_data in sla_map.items():
+        if channel in metrics_map:
+            continue
+
+        backlog_data = backlog_map.get(
+            channel,
+            {"open": 0, "pending": 0, "closed": 0},
+        )
+
+        responded_fallback = backlog_data.get("pending", 0)
+        total_fallback = (
+            backlog_data.get("open", 0)
+            + responded_fallback
+            + backlog_data.get("closed", 0)
+        )
+
+        metrics_map[channel] = QueueMetrics(
+            channel=channel,
+            backlog={
+                "open": backlog_data.get("open", 0),
+                "responded": responded_fallback,
+                "closed": backlog_data.get("closed", 0),
+                "total": total_fallback,
+            },
+            first_response=FirstResponseMetrics(
+                average_seconds=sla_data["first_response_avg_seconds"],
+                sample_size=int(sla_data["first_response_sample_size"]),
+            ),
+            sla=SlaMetrics(
+                target_seconds=sla_data["sla_target_seconds"],
+                within_target=int(sla_data["first_response_within_target"]),
+                total_tracked=int(sla_data["conversations_closed"]),
+                compliance_rate=sla_data["sla_compliance_rate"],
+            ),
+        )
+
+    metrics_list = list(metrics_map.values())
+    metrics_list.sort(key=lambda metric: metric.channel)
+    return metrics_list
