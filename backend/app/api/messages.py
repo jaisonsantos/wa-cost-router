@@ -133,10 +133,16 @@ class SendMessageRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _coerce_legacy_payload(cls, values: Any) -> Any:
-        if isinstance(values, dict) and "channel_address" not in values:
-            legacy = values.get("to_number")
-            if legacy is not None:
-                values["channel_address"] = legacy
+        if isinstance(values, dict):
+            if "channel_address" not in values:
+                legacy = values.get("to_number")
+                if legacy is not None:
+                    values["channel_address"] = legacy
+
+            channel_value = values.get("channel")
+            if strip_to_none(channel_value) is None:
+                if values.get("channel_address") is not None or values.get("to_number") is not None:
+                    values["channel"] = "whatsapp"
         return values
 
     @field_validator("idempotency_key", "template_id", "template_category", mode="before")
