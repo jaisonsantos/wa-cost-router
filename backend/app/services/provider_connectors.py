@@ -219,9 +219,19 @@ class GupshupConnector(ProviderConnector):
 class SandboxProviderConnector(ProviderConnector):
     """Conector fake usado quando SANDBOX_PROVIDERS estiver habilitado."""
 
-    def __init__(self, provider_name: str, credentials: Dict[str, Any], base_url: Optional[str] = None):
+    def __init__(
+        self,
+        provider_name: str,
+        credentials: Dict[str, Any],
+        base_url: Optional[str] = None,
+        *,
+        latency_ms: Optional[int] = None,
+        failure_rate: Optional[float] = None,
+    ):
         super().__init__(credentials, base_url)
         self.provider_name = provider_name
+        self._latency_override = latency_ms
+        self._failure_rate_override = failure_rate
 
     async def send_message(
         self,
@@ -293,9 +303,11 @@ class SandboxProviderConnector(ProviderConnector):
         sample = int(fingerprint[:8], 16) / 0xFFFFFFFF
         return sample < failure_rate
 
-    @staticmethod
-    def _resolve_latency_ms() -> int:
-        raw_value = settings.SANDBOX_LATENCY_MS
+    def _resolve_latency_ms(self) -> int:
+        if self._latency_override is not None:
+            raw_value = self._latency_override
+        else:
+            raw_value = settings.SANDBOX_LATENCY_MS
         try:
             latency_ms = int(raw_value)
         except (TypeError, ValueError):
@@ -307,9 +319,11 @@ class SandboxProviderConnector(ProviderConnector):
 
         return max(latency_ms, 0)
 
-    @staticmethod
-    def _resolve_failure_rate() -> float:
-        raw_value = settings.SANDBOX_FAILURE_RATE
+    def _resolve_failure_rate(self) -> float:
+        if self._failure_rate_override is not None:
+            raw_value = self._failure_rate_override
+        else:
+            raw_value = settings.SANDBOX_FAILURE_RATE
         try:
             failure_rate = float(raw_value)
         except (TypeError, ValueError):
@@ -320,6 +334,166 @@ class SandboxProviderConnector(ProviderConnector):
             return 0.0
 
         return min(max(failure_rate, 0.0), 1.0)
+
+
+class TwilioConnector(ProviderConnector):
+    """Conector para envio de SMS via Twilio."""
+
+    def __init__(
+        self,
+        credentials: Dict[str, Any],
+        base_url: Optional[str] = None,
+        *,
+        transport: Optional[httpx.BaseTransport] = None,
+        http_client: Optional[httpx.AsyncClient] = None,
+    ):
+        default_base_url = base_url or "https://api.twilio.com/2010-04-01"
+        super().__init__(credentials, default_base_url)
+        self._transport = transport
+        self._http_client = http_client
+
+    async def send_message(
+        self,
+        to_number: str,
+        template_id: str,
+        variables: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        start = datetime.now()
+        account_sid, auth_token = self._resolve_auth()
+        payload = self._build_payload(to_number, variables or {})
+
+        try:
+            async with self._get_client(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/Accounts/{account_sid}/Messages.json",
+                    data=payload,
+                    auth=(account_sid, auth_token),
+                )
+
+            latency_ms = int((datetime.now() - start).total_seconds() * 1000)
+            if response.status_code in (200, 201, 202):
+                data = response.json()
+                return {
+                    "success": True,
+                    "provider_message_id": data.get("sid"),
+                    "latency_ms": latency_ms,
+                    "response": data,
+                }
+
+            error_message = self._extract_error_message(response)
+            return {
+                "success": False,
+                "error_code": str(response.status_code),
+                "error_message": error_message,
+                "latency_ms": latency_ms,
+                "response": self._safe_response_json(response),
+            }
+        except Exception as exc:
+            logger.error("Twilio send error: %s", exc)
+            return {
+                "success": False,
+                "error_code": "CONNECTOR_ERROR",
+                "error_message": str(exc),
+                "latency_ms": int((datetime.now() - start).total_seconds() * 1000),
+            }
+
+    async def health_check(self) -> Dict[str, Any]:
+        start = datetime.now()
+        account_sid, auth_token = self._resolve_auth()
+        try:
+            async with self._get_client(timeout=10.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/Accounts/{account_sid}.json",
+                    auth=(account_sid, auth_token),
+                )
+
+            latency_ms = int((datetime.now() - start).total_seconds() * 1000)
+            payload = self._safe_response_json(response)
+            return {
+                "healthy": response.status_code == 200,
+                "status_code": response.status_code,
+                "latency_ms": latency_ms,
+                "response": payload,
+            }
+        except Exception as exc:
+            logger.error("Twilio health check error: %s", exc)
+            return {
+                "healthy": False,
+                "error": str(exc),
+            }
+
+    def _resolve_auth(self) -> tuple[str, str]:
+        account_sid = (self.credentials or {}).get("account_sid")
+        auth_token = (self.credentials or {}).get("auth_token")
+        if not account_sid or not auth_token:
+            raise ValueError("Twilio credentials must include account_sid and auth_token")
+        return account_sid, auth_token
+
+    def _build_payload(self, to_number: str, variables: Dict[str, Any]) -> Dict[str, Any]:
+        if not to_number:
+            raise ValueError("Recipient phone number is required for Twilio SMS")
+
+        from_number = variables.get("from_number") or (self.credentials or {}).get("from_number")
+        messaging_service_sid = (
+            variables.get("messaging_service_sid")
+            or (self.credentials or {}).get("messaging_service_sid")
+        )
+        if not from_number and not messaging_service_sid:
+            raise ValueError("Twilio requires from_number or messaging_service_sid")
+
+        body = (
+            variables.get("body")
+            or variables.get("text")
+            or variables.get("message")
+            or variables.get("content")
+        )
+        if not body:
+            raise ValueError("Twilio SMS payload must include message body")
+
+        payload: Dict[str, Any] = {
+            "To": to_number,
+            "Body": body,
+        }
+
+        if from_number:
+            payload["From"] = from_number
+        if messaging_service_sid:
+            payload["MessagingServiceSid"] = messaging_service_sid
+
+        status_callback = variables.get("status_callback")
+        if status_callback:
+            payload["StatusCallback"] = status_callback
+
+        return payload
+
+    @asynccontextmanager
+    async def _get_client(self, *, timeout: float):
+        if self._http_client is not None:
+            yield self._http_client
+            return
+
+        async with httpx.AsyncClient(timeout=timeout, transport=self._transport) as client:
+            yield client
+
+    @staticmethod
+    def _extract_error_message(response: httpx.Response) -> str:
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            return response.text
+
+        message = data.get("message") or data.get("detail")
+        if message:
+            return str(message)
+        return response.text or "Unknown Twilio error"
+
+    @staticmethod
+    def _safe_response_json(response: httpx.Response) -> Dict[str, Any]:
+        try:
+            payload = response.json()
+        except json.JSONDecodeError:
+            payload = {"raw": response.text}
+        return payload
 
 
 class SendGridConnector(ProviderConnector):
@@ -527,17 +701,27 @@ def get_connector(
     base_url: Optional[str] = None,
     *,
     provider_type: Optional[str] = None,
+    sandbox_options: Optional[Dict[str, Any]] = None,
 ) -> ProviderConnector:
     """Factory para obter conector apropriado respeitando o modo sandbox"""
 
     if settings.SANDBOX_PROVIDERS:
-        return SandboxProviderConnector(provider_name, credentials, base_url)
+        sandbox_options = sandbox_options or {}
+        return SandboxProviderConnector(
+            provider_name,
+            credentials,
+            base_url,
+            latency_ms=sandbox_options.get("latency_ms"),
+            failure_rate=sandbox_options.get("failure_rate"),
+        )
 
     connectors = {
         "360dialog": Dialog360Connector,
         "gupshup": GupshupConnector,
         "sendgrid": SendGridConnector,
         "email": SendGridConnector,
+        "twilio": TwilioConnector,
+        "sms": TwilioConnector,
     }
 
     lookup_keys = []
