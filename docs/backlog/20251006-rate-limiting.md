@@ -7,7 +7,7 @@ owner: "unassigned"
 depends_on: []
 ---
 
-> - **Status:** Pendente
+> - **Status:** Concluído
 > - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
 
 ## Contexto
@@ -30,10 +30,10 @@ Atualmente qualquer tenant pode saturar `POST /messages/send` ou endpoints crít
 
 ## Subtasks
 
-- [ ] Criar helper em `app/core` para manipular contadores Redis com TTL.
-- [ ] Aplicar rate limit em `/auth/login` (proteção contra brute force) e `/messages/send`.
-- [ ] Escrever testes unitários cobrindo limites, reset e fallback.
-- [ ] Atualizar documentação (`docs/security/SECURITY.md`) com política de rate limit.
+- [x] Criar helper em `app/core` para manipular contadores Redis com TTL (`backend/app/core/rate_limiter.py`).
+- [x] Aplicar rate limit em `/auth/login` (proteção contra brute force) e `/messages/send` (`backend/app/api/auth.py`, `backend/app/api/messages.py`).
+- [x] Escrever testes unitários cobrindo limites, reset e fallback (`backend/tests/test_messages_api.py`).
+- [x] Atualizar documentação (`docs/security/SECURITY.md`, `docs/operations/OPERATIONS.md`) e demonstração Postman (`docs/postman/README.md#demonstração-de-rate-limit-429-too-many-requests`).
 
 ## Referências
 

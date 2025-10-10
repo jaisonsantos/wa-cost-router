@@ -7,7 +7,7 @@ owner: "unassigned"
 depends_on: ["20251006-rate-limiting"]
 ---
 
-> - **Status:** Pendente
+> - **Status:** Concluído
 > - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
 
 ## Contexto
@@ -30,11 +30,11 @@ Falhas consecutivas de um provedor (ex.: 360dialog) podem degradar a fila inteir
 
 ## Subtasks
 
-- [ ] Definir thresholds/configuração via env (`CIRCUIT_BREAKER_THRESHOLD`, `CIRCUIT_BREAKER_COOLDOWN`).
-- [ ] Persistir estado no Redis (estrutura chave `circuit:{provider_id}`).
-- [ ] Atualizar `RoutingEngine.select_provider` para consultar estado antes de escolher provedor.
-- [ ] Adicionar logs e métricas (`Counter`/`Gauge`) em `backend/app/api/messages.py`.
-- [ ] Atualizar [Postman](../postman/README.md) com instruções para simular fallback.
+- [x] Definir thresholds/configuração via env (`CIRCUIT_BREAKER_THRESHOLD`, `CIRCUIT_BREAKER_COOLDOWN_SECONDS`) e documentar operação (`docs/operations/OPERATIONS.md`).
+- [x] Persistir estado no Redis (estrutura chave `circuit:{provider_id}`) através de `CircuitBreakerStore` (`backend/app/core/circuit_breaker.py`).
+- [x] Atualizar `RoutingEngine`/delivery para consultar estado antes de escolher provedor (`backend/app/api/messages.py`).
+- [x] Adicionar logs e métricas (`messages_circuit_breaker_state`, `messages_delivery_attempts_total`) em `backend/app/api/messages.py`.
+- [x] Atualizar [Postman](../postman/README.md#demonstração-de-circuit-breaker-rota-com-fallback) com instruções para simular fallback.
 
 ## Referências
 

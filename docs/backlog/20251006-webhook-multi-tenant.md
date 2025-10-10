@@ -7,7 +7,7 @@ owner: "unassigned"
 depends_on: []
 ---
 
-> - **Status:** Em andamento
+> - **Status:** Concluído
 > - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
 
 ## Contexto
@@ -34,7 +34,7 @@ O endpoint [`POST /integrations/wa/webhook`](../api/API_REFERENCE.md) grava even
 - [x] Implementar verificação da assinatura (compatível com Meta Cloud API).
 - [x] Resolver TODO no código do webhook (`org_id` hardcoded) usando lookup por `phone_id`.
 - [x] Adicionar logs mascarados (`message_event_id` apenas) em caso de erro.
-- [ ] Atualizar Postman request **WA - Webhook Receive** com headers/variáveis necessárias.
+- [x] Atualizar Postman request **WA - Webhook Receive** com headers/variáveis necessárias (instruções de assinatura conforme [docs/postman/README.md](../postman/README.md#assinatura-do-webhook)).
 - [x] Escrever guia de operação em `docs/operations/OPERATIONS.md` descrevendo rotação de secrets.
 
 ## Referências
