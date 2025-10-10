@@ -6,10 +6,12 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, Set, Tuple
 from uuid import UUID
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.models import Contact, ContactChannelOptIn, OptInStatusEnum
+from app.services.contacts.repository import ContactRepository
+
+PHONE_CHANNELS = {"sms", "whatsapp"}
 
 
 class ContactOptOutError(Exception):
@@ -35,10 +37,22 @@ def _normalize_channel(channel: Optional[str]) -> Optional[str]:
     return str(channel).strip().lower()
 
 
-def _normalize_address(address: Optional[str]) -> Optional[str]:
+def _normalize_address(address: Optional[str], *, channel: Optional[str] = None) -> Optional[str]:
     if address is None:
         return None
-    return str(address).strip().lower()
+
+    normalized_channel = _normalize_channel(channel)
+    if normalized_channel in PHONE_CHANNELS:
+        return ContactRepository._normalize_phone(address)
+
+    value = str(address).strip()
+    if not value:
+        return None
+
+    if normalized_channel == "email":
+        return value.lower()
+
+    return value.lower()
 
 
 @dataclass
@@ -59,12 +73,12 @@ class ContactRoutingPreferences:
         if not self.allowed_channels:
             return False
 
-        normalized = _normalize_address(address) if address is not None else self.normalized_address
-        if normalized is None:
+        if address is None and self.normalized_address is None:
             return any(bool(addresses) for addresses in self.allowed_channels.values())
 
-        for addresses in self.allowed_channels.values():
-            if normalized in addresses:
+        for channel_key, addresses in self.allowed_channels.items():
+            normalized = _normalize_address(address or self.normalized_address, channel=channel_key)
+            if normalized is not None and normalized in addresses:
                 return True
         return False
 
@@ -82,7 +96,7 @@ class ContactRoutingPreferences:
         if address is None:
             return True
 
-        normalized_address = _normalize_address(address)
+        normalized_address = _normalize_address(address, channel=normalized_channel)
         return normalized_address in addresses if normalized_address is not None else False
 
     def known_channels(self) -> Set[str]:
@@ -95,23 +109,36 @@ class ContactPreferenceResolver:
     def __init__(self, db: Session, org_id: str) -> None:
         self.db = db
         self.org_id = org_id
+        self.repository = ContactRepository(db)
 
-    def load(self, *, channel_address: Optional[str]) -> ContactRoutingPreferences:
-        normalized_address = _normalize_address(channel_address)
+    def load(
+        self,
+        *,
+        channel: Optional[str],
+        channel_address: Optional[str],
+    ) -> ContactRoutingPreferences:
+        normalized_channel = _normalize_channel(channel)
+        normalized_address = _normalize_address(channel_address, channel=normalized_channel)
 
         if normalized_address is None:
             return ContactRoutingPreferences(contact_id=None, normalized_address=None)
 
-        contact = (
-            self.db.query(Contact)
-            .filter(Contact.org_id == self.org_id)
-            .filter(Contact.phone.isnot(None))
-            .filter(func.lower(Contact.phone) == normalized_address)
-            .first()
-        )
+        contact: Optional[Contact] = None
+        if normalized_channel == "email":
+            contact = self.repository.find_by_email(org_id=self.org_id, email=channel_address)
+        elif normalized_channel in PHONE_CHANNELS:
+            contact = self.repository.find_by_sms(org_id=self.org_id, phone_number=channel_address)
+        else:
+            # Fallback for legacy callers without explicit channel.
+            contact = self.repository.find_by_sms(org_id=self.org_id, phone_number=channel_address)
+            if not contact:
+                contact = self.repository.find_by_email(org_id=self.org_id, email=channel_address)
 
         if not contact:
-            return ContactRoutingPreferences(contact_id=None, normalized_address=normalized_address)
+            return ContactRoutingPreferences(
+                contact_id=None,
+                normalized_address=normalized_address,
+            )
 
         opt_ins = (
             self.db.query(ContactChannelOptIn)
@@ -127,10 +154,9 @@ class ContactPreferenceResolver:
 
         latest_by_key: Dict[Tuple[str, Optional[str]], ContactChannelOptIn] = {}
         for opt_in in opt_ins:
-            key = (
-                _normalize_channel(opt_in.channel) or "",
-                _normalize_address(opt_in.channel_address),
-            )
+            channel_key = _normalize_channel(opt_in.channel) or ""
+            address_key = _normalize_address(opt_in.channel_address, channel=channel_key)
+            key = (channel_key, address_key)
             if key in latest_by_key:
                 continue
             latest_by_key[key] = opt_in
@@ -163,4 +189,4 @@ class MultiChannelConsentResolver:
     ) -> ContactRoutingPreferences:
         # Current implementation is channel-agnostic; future iterations will
         # leverage the channel to select the appropriate lookup strategy.
-        return self._delegate.load(channel_address=channel_address)
+        return self._delegate.load(channel=channel, channel_address=channel_address)

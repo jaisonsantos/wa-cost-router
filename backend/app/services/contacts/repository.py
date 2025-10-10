@@ -56,7 +56,12 @@ class ContactRepository:
         )
 
     def find_by_phone(self, *, org_id, phone_number: Optional[str]) -> Optional[Contact]:
-        """Return the first contact that matches the phone number for the org."""
+        """Deprecated alias for :meth:`find_by_sms`."""
+
+        return self.find_by_sms(org_id=org_id, phone_number=phone_number)
+
+    def find_by_sms(self, *, org_id, phone_number: Optional[str]) -> Optional[Contact]:
+        """Return the first contact matching the SMS/phone address for the org."""
 
         normalized_number = self._normalize_phone(phone_number)
         if not normalized_number:
@@ -74,6 +79,21 @@ class ContactRepository:
             .filter(Contact.org_id == org_id)
             .filter(Contact.phone.isnot(None))
             .filter(func.lower(phone_expr) == normalized_number.lower())
+            .first()
+        )
+
+    def find_by_email(self, *, org_id, email: Optional[str]) -> Optional[Contact]:
+        """Return the first contact that matches the email for the org."""
+
+        normalized_email = self._normalize_email(email)
+        if not normalized_email:
+            return None
+
+        return (
+            self.db.query(Contact)
+            .filter(Contact.org_id == org_id)
+            .filter(Contact.email.isnot(None))
+            .filter(func.lower(Contact.email) == normalized_email)
             .first()
         )
 
@@ -116,6 +136,20 @@ class ContactRepository:
 
         digits = re.sub(r"[^0-9]", "", phone_number)
         return digits or None
+
+    @staticmethod
+    def _normalize_email(email: Optional[str]) -> Optional[str]:
+        if email is None:
+            return None
+
+        if not isinstance(email, str):
+            return None
+
+        stripped = email.strip()
+        if not stripped:
+            return None
+
+        return stripped.lower()
 
     # Queries --------------------------------------------------------------
     def list_contacts(
