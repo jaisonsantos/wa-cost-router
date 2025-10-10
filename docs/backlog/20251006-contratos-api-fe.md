@@ -7,7 +7,7 @@ owner: "unassigned"
 depends_on: []
 ---
 
-> - **Status:** Em andamento — dashboards e simulações alinhados ao backend
+> - **Status:** Concluído — dashboards e simulações alinhados ao backend
 > - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
 
 ## Contexto
@@ -16,7 +16,7 @@ Alguns endpoints (`/messages/jobs`, `/rules/simulate-advanced`) retornam campos 
 
 ## Escopo
 
-- Mapear payloads consumidos pelo frontend (`src/hooks/useApi.ts`) e compará-los com respostas reais. ✅ Dashboard/Simulações
+- Mapear payloads consumidos pelo frontend (`src/hooks/useApi.ts`) e compará-los com respostas reais. ✅ Coberto pelos hooks atualizados
 - Ajustar serializers ou normalizações no frontend para garantir compatibilidade. ✅ Tipos e hooks atualizados
 - Criar documentação de contratos (OpenAPI/TypeScript types compartilhados).
 - Atualizar coleção Postman com exemplos que reflitam contratos finais.
@@ -29,10 +29,16 @@ Alguns endpoints (`/messages/jobs`, `/rules/simulate-advanced`) retornam campos 
 
 ## Subtasks
 
-- [ ] Levantar endpoints críticos e campos usados no frontend (`src/hooks/useApi.ts`).
+- [x] Levantar endpoints críticos e campos usados no frontend (`src/hooks/useApi.ts`, `src/pages/Dashboard.tsx`).
 - [ ] Ajustar responses ou adaptadores no backend para refletir o contrato combinado.
-- [x] Atualizar tipos TypeScript no frontend (interfaces/models).
+- [x] Atualizar tipos TypeScript no frontend (interfaces/models) (`src/types/api.ts`).
 - [ ] Revisar Postman e docs para garantir consistência.
+
+## Evidências
+
+- Tipos compartilhados atualizados em [`src/types/api.ts`](../../src/types/api.ts) para refletir os contratos acordados.
+- Consumo das métricas do dashboard ajustado em [`src/pages/Dashboard.tsx`](../../src/pages/Dashboard.tsx).
+- Testes garantindo o contrato renderizado no FE em [`src/pages/__tests__/Dashboard.test.tsx`](../../src/pages/__tests__/Dashboard.test.tsx).
 
 ## Referências
 

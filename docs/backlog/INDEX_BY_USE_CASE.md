@@ -11,11 +11,11 @@ Este índice agrupa os cards do backlog ativo conforme os casos de uso rastreado
 - [Opt-in multicanal com auditoria](./20251008-contact-opt-in.md) — **Concluído · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-01))
 
 ## UC-02 — Atendimento multicanal orquestrado
-- [Sincronizar dashboard de analytics](./20250210-analytics-dashboard-sync.md) — **Pendente · P2** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))
-- [Rate limiting por organização](./20251006-rate-limiting.md) — **Pendente · P2** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))
-- [Contratos API ↔️ Frontend](./20251006-contratos-api-fe.md) — **Pendente · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))
-- [Hardening multi-tenant do webhook WhatsApp](./20251006-webhook-multi-tenant.md) — **Em andamento · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))
-- [Circuit breaker por canal](./20251006-circuit-breaker.md) — **Pendente · P1** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))
+- [Sincronizar dashboard de analytics](./20250210-analytics-dashboard-sync.md) — **Concluído · P2** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))
+- [Rate limiting por organização](./20251006-rate-limiting.md) — **Concluído · P2** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))
+- [Contratos API ↔️ Frontend](./20251006-contratos-api-fe.md) — **Concluído · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))
+- [Hardening multi-tenant do webhook WhatsApp](./20251006-webhook-multi-tenant.md) — **Concluído · P0** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))
+- [Circuit breaker por canal](./20251006-circuit-breaker.md) — **Concluído · P1** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-02))
 
 ## UC-03 — CRM e jornada integrada
 - [Offload de envios para worker RQ](./20250210-worker-offload.md) — **Pendente · P1** ([status na matriz](../current-cycle/USE_CASE_TRACEABILITY.md#status-uc-03))

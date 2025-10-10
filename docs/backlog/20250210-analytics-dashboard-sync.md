@@ -1,6 +1,6 @@
 # 20250210 - Sincronizar dashboard de analytics (P2)
 
-> - **Status:** Em andamento — métricas e simulações integradas ao backend
+> - **Status:** Concluído — métricas e simulações integradas ao backend
 > - **Caso de uso:** [UC-02 — Atendimento multicanal orquestrado](../current-cycle/USE_CASE_TRACEABILITY.md#uc-02--atendimento-multicanal-orquestrado)
 
 ## Contexto
@@ -10,9 +10,9 @@ O dashboard atual consome eventos limitados e não reflete os dados que serão g
 Ao sincronizar o dashboard com os eventos reais, stakeholders terão visibilidade precisa de custos, economia e performance, aumentando a confiança no produto.
 
 ## Escopo inicial
-- Atualizar serviços/frontend para consumir os novos campos de `MessageEvent` e `CostRecord`. ✅ Dashboard sincronizado
-- Ajustar agregações e gráficos para mostrar baseline vs. otimizado, sucesso/falha, economia. ✅ Indicadores e alertas ativos
-- Criar testes de integração (React Testing Library) cobrindo renderização com dados reais. ✅ Cobertura adicionada (`src/pages/__tests__/`)
+- Atualizar serviços/frontend para consumir os novos campos de `MessageEvent` e `CostRecord`. ✅ Dashboard sincronizado (`src/types/api.ts`, `src/hooks/useApi.ts`, `src/pages/Dashboard.tsx`)
+- Ajustar agregações e gráficos para mostrar baseline vs. otimizado, sucesso/falha, economia. ✅ Indicadores e alertas ativos (`src/pages/Dashboard.tsx`)
+- Criar testes de integração (React Testing Library) cobrindo renderização com dados reais. ✅ Cobertura adicionada (`src/pages/__tests__/Dashboard.test.tsx`)
 - Garantir endpoints backend com filtros/ordenções necessários para o dashboard.
 - Atualizar documentação com capturas de tela e fluxo analítico.
 
@@ -30,3 +30,7 @@ Ao sincronizar o dashboard com os eventos reais, stakeholders terão visibilidad
 
 - Capturas de tela de referência podem ser regeneradas com `node scripts/capture-screenshots.mjs`,
   que salva as imagens em `artifacts/screenshots/` (diretório ignorado pelo Git) para anexos externos.
+
+- Tipagem e contratos sincronizados com o backend em [`src/types/api.ts`](../../src/types/api.ts).
+- Hooks e componentes consumindo métricas reais em [`src/hooks/useApi.ts`](../../src/hooks/useApi.ts) e [`src/pages/Dashboard.tsx`](../../src/pages/Dashboard.tsx).
+- Testes garantindo a renderização do dashboard com dados reais em [`src/pages/__tests__/Dashboard.test.tsx`](../../src/pages/__tests__/Dashboard.test.tsx).
