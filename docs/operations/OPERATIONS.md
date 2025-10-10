@@ -50,6 +50,13 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 - O serviço `OptInRequestService` é acionado para re-enfileirar solicitações de opt-in por e-mail. Verifique `contact_opt_in_request` para acompanhar follow-ups e reenvios.
 - Para reprocessar um evento depois de concedido o consentimento, reenvie a notificação do Meta (o endpoint é idempotente por `provider_event_id`; remova o hash correspondente em `contact_consent_audit` se precisar liberar uma nova tentativa).
 
+## Webhook SMS (Twilio)
+
+- Endpoint `POST /integrations/sms/webhook` valida cada requisição com o header `X-Twilio-Signature` usando o `auth_token` armazenado nas credenciais do provedor (`provider_credential`). Requests sem assinatura ou com hash divergente retornam `403` para evitar spoofing.
+- O mapeamento org/provedor é feito a partir do número destino (`To`) ou do `MessagingServiceSid` informado pelo Twilio. Os valores devem estar cadastrados no metadata/credenciais do provedor (`type = "sms"`), incluindo variações adicionais (`numbers`, `channels.sms.inbound_numbers`).
+- Mensagens aceitas geram `message_event` com `channel="sms"`, normalizando telefone do contato e mascarando payload sensível (`Body`, `From`, `To`). O hash SHA-256 do corpo é persistido em `attributes.body_digest` para rastreabilidade sem expor conteúdo.
+- Se o contato estiver cadastrado porém sem opt-in ativo, a requisição é negada (`{"status": "denied"}`) e o `OptInRequestService` enfileira follow-up por e-mail (`requested_channel="sms"`). Considere revisar cadastros e consentimentos após cada negação em produção.
+
 ## Pipeline CI
 
 - **Workflow**: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) executado em `push` e `pull_request` para `main`, além de gatilho manual via `workflow_dispatch`.
