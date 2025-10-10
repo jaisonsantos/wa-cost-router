@@ -6,7 +6,11 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, "/app")
 
 from app.core.database import SessionLocal  # noqa: E402
-from app.core.security import hash_password, encrypt_token  # noqa: E402
+from app.core.security import (
+    hash_password,
+    encrypt_token,
+    encrypt_credentials,
+)  # noqa: E402
 from app.models.models import (  # noqa: E402
     Organization,
     User,
@@ -24,6 +28,7 @@ from app.models.models import (  # noqa: E402
     ContactStatusEnum,
     OptInStatusEnum,
     ContactImportStatusEnum,
+    ProviderCredential,
 )
 
 
@@ -38,6 +43,10 @@ DEFAULT_WEBHOOK_VERIFY_TOKEN = "my-verify-token"
 DEFAULT_WEBHOOK_SECRET = "my-webhook-secret"
 DEFAULT_ACCESS_TOKEN = "fake-wa-access-token"
 DEFAULT_PROVIDER_NAME = "360dialog"
+
+DEFAULT_EMAIL_PROVIDER_NAME = "SendGrid"
+DEFAULT_EMAIL_WEBHOOK_TOKEN = "demo-email-webhook-token"
+DEFAULT_EMAIL_WEBHOOK_SECRET = "demo-email-webhook-secret"
 
 DEFAULT_CONTACT_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")
 DEFAULT_CONTACT_EMAIL = "dana.customer@example.com"
@@ -167,6 +176,56 @@ def seed():
                         currency="USD",
                     )
                 )
+
+        email_provider = (
+            db.query(Provider)
+            .filter(
+                Provider.org_id == org.id,
+                Provider.name == DEFAULT_EMAIL_PROVIDER_NAME,
+            )
+            .first()
+        )
+
+        if not email_provider:
+            email_provider = Provider(
+                org_id=org.id,
+                name=DEFAULT_EMAIL_PROVIDER_NAME,
+                type="email",
+                status="active",
+            )
+            db.add(email_provider)
+            db.flush()
+        else:
+            email_provider.status = "active"
+
+        email_credentials_payload = {
+            "webhook_token": DEFAULT_EMAIL_WEBHOOK_TOKEN,
+            "inbound_verify_token": DEFAULT_EMAIL_WEBHOOK_TOKEN,
+            "inbound_signing_secret": DEFAULT_EMAIL_WEBHOOK_SECRET,
+        }
+
+        email_credentials = (
+            db.query(ProviderCredential)
+            .filter(
+                ProviderCredential.org_id == org.id,
+                ProviderCredential.provider_id == email_provider.id,
+            )
+            .first()
+        )
+
+        if not email_credentials:
+            email_credentials = ProviderCredential(
+                org_id=org.id,
+                provider_id=email_provider.id,
+                credentials_encrypted=encrypt_credentials(email_credentials_payload),
+                is_active=True,
+            )
+            db.add(email_credentials)
+        else:
+            email_credentials.credentials_encrypted = encrypt_credentials(
+                email_credentials_payload
+            )
+            email_credentials.is_active = True
 
         events_exist = db.query(MessageEvent).filter(MessageEvent.org_id == org.id).first()
         if not events_exist:
