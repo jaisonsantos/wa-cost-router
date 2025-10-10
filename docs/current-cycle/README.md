@@ -31,6 +31,15 @@ Outros comandos úteis:
 | `make ci` | Reproduz localmente o pipeline (ver [Operações › Pipeline CI](../operations/OPERATIONS.md#pipeline-ci)). |
 | `make down` | Remove serviços e volumes para limpeza rápida. |
 
+## Atualizações recentes
+
+- **Dashboard unificado (2025-02-10):** a SPA passou a consumir `GET /reports/dashboard-metrics` e `GET /reports/provider-metrics`, removendo agregações locais e exibindo recomendações e alertas emitidos pelo backend. A documentação de contratos foi sincronizada com os tipos TypeScript em `src/types/api.ts`.
+- **Simulações alinhadas ao backend:** a tela de regras integra `POST /rules/simulate` e `POST /rules/simulate-advanced`, reaproveitando os volumes reais dos principais países para calcular baseline vs. otimizado e gerando recomendações contextualizadas.
+- **Qualidade e validação:** novos testes de interface (Vitest + React Testing Library) cobrem estados de sucesso/erro das telas de Dashboard e Regras. A coleção Newman foi executada após os ajustes garantindo compatibilidade ponta-a-ponta.
+
+- Capturas atualizadas do dashboard e das simulações podem ser geradas executando `node scripts/capture-screenshots.mjs`.
+- Os arquivos resultantes ficam em `artifacts/screenshots/` (ignorados pelo Git) para anexar manualmente ao PR ou à wiki.
+
 ## Marcos e datas-alvo do ciclo de contatos/opt-ins
 
 | Marco | Data-alvo | Resultado esperado | Dependências chave |

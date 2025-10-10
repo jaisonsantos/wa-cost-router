@@ -28,6 +28,7 @@ import {
   SendMessageRequest,
   SendMessageResponse,
   SetProviderCredentialsResponse,
+  SimulateRulesRequest,
   SimulateRulesResult,
   SummaryResponse,
   WAConnectionResponse,
@@ -108,8 +109,8 @@ export const useToggleRule = () => {
 };
 
 export const useSimulateRules = () => {
-  return useMutation<SimulateRulesResult, Error, void>({
-    mutationFn: () => api.simulateRules(),
+  return useMutation<SimulateRulesResult, Error, SimulateRulesRequest>({
+    mutationFn: (payload) => api.simulateRules(payload),
     onSuccess: (data) => {
       toast({
         title: "Simulação concluída",

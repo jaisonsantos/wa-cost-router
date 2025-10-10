@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,25 +19,57 @@ interface CountryVolume {
   volume: number;
 }
 
-export default function AdvancedSimulator() {
-  const [countries, setCountries] = useState<CountryVolume[]>([{ country: "BR", volume: 1000 }]);
-  const [category, setCategory] = useState("marketing");
+interface AdvancedSimulatorProps {
+  defaultCountries?: CountryVolume[];
+  defaultCategory?: string;
+}
+
+export default function AdvancedSimulator({
+  defaultCountries,
+  defaultCategory = "marketing",
+}: AdvancedSimulatorProps) {
+  const [countries, setCountries] = useState<CountryVolume[]>(
+    defaultCountries && defaultCountries.length > 0 ? defaultCountries : [{ country: "BR", volume: 1000 }],
+  );
+  const [category, setCategory] = useState(defaultCategory);
   const [results, setResults] = useState<AdvancedSimulationResponse | null>(null);
-  
+
   const simulate = useSimulateAdvanced();
 
+  const userCustomized = useRef(false);
+
+  useEffect(() => {
+    if (!userCustomized.current && defaultCountries && defaultCountries.length > 0) {
+      setCountries(defaultCountries);
+    }
+  }, [defaultCountries]);
+
+  useEffect(() => {
+    if (!userCustomized.current && defaultCategory) {
+      setCategory(defaultCategory);
+    }
+  }, [defaultCategory]);
+
   const addCountry = () => {
+    userCustomized.current = true;
     setCountries([...countries, { country: "", volume: 0 }]);
   };
 
   const removeCountry = (index: number) => {
+    userCustomized.current = true;
     setCountries(countries.filter((_, i) => i !== index));
   };
 
   const updateCountry = (index: number, field: "country" | "volume", value: string | number) => {
+    userCustomized.current = true;
     const updated = [...countries];
     updated[index] = { ...updated[index], [field]: value };
     setCountries(updated);
+  };
+
+  const handleCategoryChange = (value: string) => {
+    userCustomized.current = true;
+    setCategory(value);
   };
 
   const handleSimulate = async () => {
@@ -60,7 +92,7 @@ export default function AdvancedSimulator() {
         volumes: volumesMap,
         category,
       });
-      
+
       setResults(result);
     } catch (error) {
       console.error("Simulation error:", error);
@@ -159,7 +191,7 @@ export default function AdvancedSimulator() {
 
         <div>
           <Label>Categoria de Template</Label>
-          <Select value={category} onValueChange={setCategory}>
+          <Select value={category} onValueChange={handleCategoryChange}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -179,6 +211,11 @@ export default function AdvancedSimulator() {
           <PlayCircle className="mr-2 h-4 w-4" />
           {simulate.isPending ? "Simulando..." : "Executar Simulação"}
         </Button>
+        {simulate.isError && (
+          <p className="text-sm text-destructive">
+            {(simulate.error as Error | undefined)?.message ?? "Não foi possível executar a simulação."}
+          </p>
+        )}
 
         {/* Resultados */}
         {results && (

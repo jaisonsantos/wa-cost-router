@@ -314,6 +314,12 @@ export interface SimulateRulesResult {
   saved: number;
 }
 
+export interface SimulateRulesRequest {
+  countries: string[];
+  volumes: Record<string, number>;
+  category: string;
+}
+
 export interface AdvancedSimulationProviderBreakdown {
   provider_id: string;
   provider_name: string;
