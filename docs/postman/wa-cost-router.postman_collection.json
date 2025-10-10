@@ -2,7 +2,7 @@
   "info": {
     "name": "WA Cost Router",
     "_postman_id": "4f6d5d8b-1d2c-4a8d-9b1e-0c1234567890",
-    "description": "Coleção completa da API WA Cost Router para desenvolvimento local.",
+    "description": "Cole\u00e7\u00e3o completa da API WA Cost Router para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1370,6 +1370,111 @@
                   "  } else if (body.status === 'denied') {",
                   "    pm.expect(body.processed).to.be.undefined;",
                   "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Email - Webhook Verify",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/integrations/email/webhook?token={{email_webhook_token}}&challenge=ping",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "integrations",
+                "email",
+                "webhook"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{email_webhook_token}}"
+                },
+                {
+                  "key": "challenge",
+                  "value": "ping"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Webhook verify responded with challenge', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.eql('ping');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Email - Webhook Receive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message_id\": \"email-postman-{{$timestamp}}\",\n  \"timestamp\": \"{{$timestamp}}\",\n  \"from\": \"Webhook Sender <sender@example.com>\",\n  \"subject\": \"Teste inbound via Postman\",\n  \"text\": \"Corpo de mensagem de teste\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/integrations/email/webhook?token={{email_webhook_token}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "integrations",
+                "email",
+                "webhook"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{email_webhook_token}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  const secret = pm.environment.get('email_webhook_secret') || '';",
+                  "  const body = pm.request.body && pm.request.body.raw ? pm.request.body.raw : '';",
+                  "  if (!secret) {",
+                  "    pm.request.headers.upsert({ key: 'X-Email-Signature', value: '' });",
+                  "    return;",
+                  "  }",
+                  "  const signature = CryptoJS.enc.Base64.stringify(CryptoJS.HmacSHA256(body, secret));",
+                  "  pm.request.headers.upsert({ key: 'X-Email-Signature', value: signature });",
+                  "})();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Webhook accepted payload', () => {",
+                  "  pm.response.to.have.status(200);",
                   "});"
                 ]
               }
