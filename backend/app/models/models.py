@@ -88,6 +88,8 @@ class MessageEvent(Base):
     )
     message_job_id = Column(UUID(as_uuid=True), ForeignKey("message_job.id"))
     connection_id = Column(UUID(as_uuid=True), ForeignKey("wa_connection.id"))
+    channel = Column(String, nullable=False, default="whatsapp")
+    channel_address = Column(String)
     contact_id = Column(
         UUID(as_uuid=True), ForeignKey("contact.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -231,6 +233,11 @@ class MessageJob(Base):
     org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
     idempotency_key = Column(String, nullable=False, index=True)
     to_number = Column(String, nullable=False)
+    channel = Column(String, nullable=False, default="whatsapp")
+    channel_address = Column(String)
+    contact_id = Column(
+        UUID(as_uuid=True), ForeignKey("contact.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     template_id = Column(String, nullable=False)
     template_category = Column(String)
     variables = Column(JSON)

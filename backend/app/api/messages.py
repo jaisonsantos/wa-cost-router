@@ -7,7 +7,7 @@ from typing import Dict, Any, Iterable, Optional, Tuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -37,6 +37,9 @@ from app.models.models import (
     RateCard,
     JobStatusEnum,
     AttemptStatusEnum,
+    Contact,
+    ContactChannelOptIn,
+    OptInStatusEnum,
 )
 from app.core.normalization import (
     normalize_country_code,
@@ -69,6 +72,9 @@ CIRCUIT_STATE_GAUGE = Gauge(
     "Estado atual do circuito por provedor (0=closed,1=half-open,2=open)",
     labelnames=["provider_id"],
 )
+
+
+PHONE_CHANNELS = {"whatsapp", "sms"}
 
 
 @dataclass
@@ -116,29 +122,61 @@ def _limit_messages_send(
 
 class SendMessageRequest(BaseModel):
     idempotency_key: str
-    to_number: str
+    channel: str
     template_id: str
     template_category: str = "marketing"
     variables: Dict[str, Any] = {}
+    contact_id: Optional[UUID] = None
+    channel_address: Optional[str] = None
     country_iso: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_legacy_payload(cls, values: Any) -> Any:
+        if isinstance(values, dict) and "channel_address" not in values:
+            legacy = values.get("to_number")
+            if legacy is not None:
+                values["channel_address"] = legacy
+        return values
 
     @field_validator("idempotency_key", "template_id", "template_category", mode="before")
     @classmethod
     def _trim_required_strings(cls, value: Any) -> Any:
         return strip_to_none(value)
 
-    @field_validator("to_number", mode="before")
+    @field_validator("channel", mode="before")
     @classmethod
-    def _validate_to_number(cls, value: Any) -> str:
-        normalized = normalize_international_phone(value)
+    def _normalize_channel(cls, value: Any) -> str:
+        normalized = strip_to_none(value)
         if normalized is None:
-            raise ValueError("to_number is required")
+            raise ValueError("channel is required")
+        return normalized.lower()
+
+    @field_validator("channel_address", mode="before")
+    @classmethod
+    def _normalize_channel_address(cls, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = strip_to_none(value)
         return normalized
 
     @field_validator("country_iso", mode="before")
     @classmethod
     def _normalize_country(cls, value: Any) -> Any:
         return normalize_country_code(value)
+
+    @model_validator(mode="after")
+    def _validate_recipient(self) -> "SendMessageRequest":
+        if self.contact_id is None and self.channel_address is None:
+            raise ValueError("Either contact_id or channel_address must be provided")
+
+        if self.channel_address is not None:
+            normalized = _normalize_channel_address_value(self.channel, self.channel_address)
+            if normalized is None:
+                raise ValueError("Invalid channel_address for the requested channel")
+            self.channel_address = normalized
+
+        return self
 
 class SendMessageResponse(BaseModel):
     job_id: str
@@ -176,16 +214,38 @@ async def send_message(
             message="Message already processed (idempotent)"
         )
     
-    # 2. Inferir país do número se não fornecido
-    country_iso = data.country_iso or _infer_country_from_number(data.to_number)
-    
-    # 3. Criar job
+    # 2. Resolver endereço do canal/contato
+    resolved_contact_id, resolved_address = _resolve_recipient_context(
+        db=db,
+        org_id=current_user["org_id"],
+        channel=data.channel,
+        contact_id=data.contact_id,
+        provided_address=data.channel_address,
+    )
+
+    if resolved_address is None:
+        raise HTTPException(status_code=422, detail="Unable to resolve channel address")
+
+    data.channel_address = resolved_address
+    if resolved_contact_id is not None:
+        data.contact_id = resolved_contact_id
+
+    # 3. Inferir país do endereço se não fornecido
+    if data.channel in PHONE_CHANNELS:
+        country_iso = data.country_iso or _infer_country_from_number(resolved_address)
+    else:
+        country_iso = data.country_iso or "XX"
+
+    # 4. Criar job
     job_identifier = uuid.uuid4()
     job = MessageJob(
         id=job_identifier,
         org_id=current_user["org_id"],
         idempotency_key=data.idempotency_key,
-        to_number=data.to_number,
+        to_number=resolved_address,
+        channel=data.channel,
+        channel_address=resolved_address,
+        contact_id=resolved_contact_id,
         template_id=data.template_id,
         template_category=data.template_category,
         variables=data.variables,
@@ -236,7 +296,7 @@ async def send_message(
             country_iso=country_iso,
             category=data.template_category,
             template_id=data.template_id,
-            contact_address=data.to_number,
+            contact_address=resolved_address,
         )
     except ContactOptOutError as exc:
         job.status = JobStatusEnum.failed_final
@@ -255,8 +315,8 @@ async def send_message(
                     opt_in_service.enqueue_request(
                         org_id=current_user["org_id"],
                         contact_id=exc.contact_id,
-                        requested_channel=exc.channel or "whatsapp",
-                        requested_address=exc.channel_address or data.to_number,
+                        requested_channel=exc.channel or job.channel,
+                        requested_address=exc.channel_address or job.channel_address,
                         trigger_metadata={
                             "message_job_id": str(job_identifier),
                             "template_id": data.template_id,
@@ -483,7 +543,7 @@ async def _attempt_delivery_with_fallback(
 
             try:
                 result = await connector.send_message(
-                    to_number=data.to_number,
+                    to_number=job.channel_address,
                     template_id=data.template_id,
                     variables=data.variables
                 )
@@ -568,6 +628,9 @@ async def _attempt_delivery_with_fallback(
                     org_id=job.org_id,
                     message_job_id=job_identifier,
                     connection_id=None,
+                    channel=job.channel,
+                    channel_address=job.channel_address,
+                    contact_id=job.contact_id,
                     provider_event_id=provider_message_id,
                     direction="outbound",
                     template_name=job.template_id,
@@ -680,6 +743,135 @@ def _log_circuit_transition(
             provider_id,
             extra=payload,
         )
+
+
+def _normalize_channel_address_value(
+    channel: Optional[str],
+    address: Optional[str],
+) -> Optional[str]:
+    trimmed = strip_to_none(address)
+    if trimmed is None:
+        return None
+
+    normalized_channel = strip_to_none(channel)
+    if normalized_channel:
+        normalized_channel = normalized_channel.lower()
+
+    if normalized_channel in PHONE_CHANNELS:
+        return normalize_international_phone(trimmed)
+
+    return trimmed
+
+
+def _select_contact_channel_address(
+    *,
+    db: Session,
+    contact: Contact,
+    channel: Optional[str],
+) -> Optional[str]:
+    normalized_channel = strip_to_none(channel)
+    if normalized_channel:
+        normalized_channel = normalized_channel.lower()
+
+    if not normalized_channel:
+        return None
+
+    opt_in = (
+        db.query(ContactChannelOptIn)
+        .filter(ContactChannelOptIn.org_id == contact.org_id)
+        .filter(ContactChannelOptIn.contact_id == contact.id)
+        .filter(ContactChannelOptIn.channel == normalized_channel)
+        .filter(ContactChannelOptIn.status == OptInStatusEnum.granted)
+        .order_by(
+            ContactChannelOptIn.version.desc(),
+            ContactChannelOptIn.updated_at.desc(),
+        )
+        .first()
+    )
+
+    if opt_in and opt_in.channel_address:
+        normalized = _normalize_channel_address_value(normalized_channel, opt_in.channel_address)
+        if normalized is not None:
+            return normalized
+
+    if normalized_channel in PHONE_CHANNELS and contact.phone:
+        normalized = _normalize_channel_address_value(normalized_channel, contact.phone)
+        if normalized is not None:
+            return normalized
+
+    if normalized_channel == "email" and contact.email:
+        return contact.email.strip()
+
+    return None
+
+
+def _resolve_recipient_context(
+    *,
+    db: Session,
+    org_id: Any,
+    channel: str,
+    contact_id: Optional[UUID],
+    provided_address: Optional[str],
+) -> Tuple[Optional[UUID], Optional[str]]:
+    org_uuid = _coerce_uuid(org_id)
+    if org_uuid is None:
+        raise HTTPException(status_code=400, detail="Invalid organization context")
+
+    normalized_channel = strip_to_none(channel)
+    if normalized_channel:
+        normalized_channel = normalized_channel.lower()
+
+    resolved_contact_id: Optional[UUID] = None
+    resolved_address = provided_address
+
+    if contact_id is not None:
+        contact = (
+            db.query(Contact)
+            .filter(Contact.id == contact_id)
+            .filter(Contact.org_id == org_uuid)
+            .first()
+        )
+
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+
+        resolved_contact_id = contact.id
+
+        if resolved_address is not None:
+            normalized_address = _normalize_channel_address_value(normalized_channel, resolved_address)
+            if normalized_address is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Invalid channel_address for the requested channel",
+                )
+            resolved_address = normalized_address
+        else:
+            resolved_address = _select_contact_channel_address(
+                db=db,
+                contact=contact,
+                channel=normalized_channel,
+            )
+            if resolved_address is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Contact has no address for requested channel",
+                )
+    else:
+        if resolved_address is None:
+            raise HTTPException(
+                status_code=422,
+                detail="channel_address is required when contact_id is not provided",
+            )
+
+        normalized_address = _normalize_channel_address_value(normalized_channel, resolved_address)
+        if normalized_address is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid channel_address for the requested channel",
+            )
+        resolved_address = normalized_address
+
+    return resolved_contact_id, resolved_address
 
 
 def _normalize_estimated_cost(value: Any) -> int:
@@ -828,6 +1020,9 @@ def list_message_jobs(
             "id": str(job.id),
             "status": job.status.value,
             "to_number": job.to_number,
+            "channel": job.channel,
+            "channel_address": job.channel_address,
+            "contact_id": str(job.contact_id) if job.contact_id else None,
             "template_id": job.template_id,
             "template_category": job.template_category,
             "country_iso": job.country_iso,
@@ -870,6 +1065,9 @@ def get_job_status(
         "id": str(job.id),
         "status": job.status.value,
         "to_number": job.to_number,
+        "channel": job.channel,
+        "channel_address": job.channel_address,
+        "contact_id": str(job.contact_id) if job.contact_id else None,
         "template_id": job.template_id,
         "template_category": job.template_category,
         "country_iso": job.country_iso,
