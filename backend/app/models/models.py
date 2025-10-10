@@ -200,6 +200,127 @@ class ContactImportStatusEnum(str, enum.Enum):
     failed = "failed"
 
 
+class ConversationStatusEnum(str, enum.Enum):
+    open = "open"
+    waiting = "waiting"
+    closed = "closed"
+
+
+class QueueStatusEnum(str, enum.Enum):
+    open = "open"
+    responded = "responded"
+    closed = "closed"
+
+
+class Conversation(Base):
+    __tablename__ = "conversation"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    contact_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("contact.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    channel = Column(String, nullable=False)
+    channel_address = Column(String, nullable=False)
+    status = Column(
+        Enum(ConversationStatusEnum),
+        nullable=False,
+        default=ConversationStatusEnum.waiting,
+    )
+    opened_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_inbound_at = Column(DateTime(timezone=True))
+    last_outbound_at = Column(DateTime(timezone=True))
+    first_response_at = Column(DateTime(timezone=True))
+    first_response_latency_seconds = Column(Integer)
+    closed_at = Column(DateTime(timezone=True))
+    meta = Column("metadata", JSON)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_conversation_org_channel_status", "org_id", "channel", "status"),
+    )
+
+    queue_entries = relationship(
+        "QueueEntry",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+
+
+class QueueEntry(Base):
+    __tablename__ = "queue_entry"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    conversation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("conversation.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    channel = Column(String, nullable=False)
+    status = Column(Enum(QueueStatusEnum), nullable=False, default=QueueStatusEnum.open)
+    opened_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    responded_at = Column(DateTime(timezone=True))
+    closed_at = Column(DateTime(timezone=True))
+    first_response_latency_seconds = Column(Integer)
+    total_duration_seconds = Column(Integer)
+    meta = Column("metadata", JSON)
+
+    __table_args__ = (
+        Index("ix_queue_entry_org_channel_status", "org_id", "channel", "status"),
+    )
+
+    conversation = relationship("Conversation", back_populates="queue_entries")
+
+
+class SlaSnapshot(Base):
+    __tablename__ = "sla_snapshot"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    channel = Column(String, nullable=False)
+    period_start = Column(DateTime(timezone=True), nullable=False)
+    period_end = Column(DateTime(timezone=True), nullable=False)
+    sla_target_seconds = Column(Integer, nullable=False)
+    conversations_opened = Column(Integer, nullable=False, default=0)
+    conversations_closed = Column(Integer, nullable=False, default=0)
+    first_response_avg_seconds = Column(Integer)
+    first_response_within_target = Column(Integer, nullable=False, default=0)
+    backlog_open = Column(Integer, nullable=False, default=0)
+    backlog_closed = Column(Integer, nullable=False, default=0)
+    backlog_pending = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "channel", "period_start", name="uq_sla_snapshot_period"),
+    )
+
+
 class Provider(Base):
     __tablename__ = "provider"
 

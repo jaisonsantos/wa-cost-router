@@ -25,6 +25,7 @@ from app.models.models import (
     ProviderCredential,
 )
 from app.services.contacts.repository import ContactRepository
+from app.services.conversations import ConversationLifecycleService
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +270,15 @@ def _ingest_email_event(
     )
 
     db.add(event)
+
+    lifecycle_service = ConversationLifecycleService(db)
+    lifecycle_service.handle_inbound(
+        org_id=provider.org_id,
+        channel="email",
+        channel_address=sender_email,
+        contact_id=getattr(contact, "id", None),
+        occurred_at=timestamp,
+    )
 
     proof_hash = hashlib.sha256(
         f"email:{provider.org_id}:{contact.id}:{message_id}".encode("utf-8")
