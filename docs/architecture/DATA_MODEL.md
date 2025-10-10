@@ -12,8 +12,8 @@
 | `routing_rule` | `org_id`, `conditions_json`, `actions_json`, `priority`, `is_enabled` | JSON com condicionais e provedores. |
 | `message_job` | `org_id`, `idempotency_key`, `status` | Unique `(org_id,idempotency_key)`. |
 | `delivery_attempt` | `message_job_id`, `provider_id`, `attempt_number`, `status`, `provider_response` | Armazena resposta crua. |
-| `cost_record` | `message_job_id`, `provider_id`, `price_eur`, `price_table_version` | Auditoria de custo. |
-| `message_event` | `org_id`, `message_job_id`, `provider_event_id`, `unit_cost_minor`, `baseline_cost_minor` | Base para relatórios (agora referencia `message_job`). |
+| `cost_record` | `message_job_id`, `provider_id`, `price_eur` (minor units), `price_table_version` | Auditoria de custo otimizado. |
+| `message_event` | `org_id`, `message_job_id`, `provider_event_id`, `unit_cost_minor`, `baseline_cost_minor`, `currency` | Base para relatórios com custos reais/baseline vinculados ao job. |
 | `rate_card` | `provider_id`, `country_iso`, `category`, `unit_cost_minor` | Cada tarifa pertence a um provedor ativo. |
 | `wa_connection` | `org_id`, `business_id`, `phone_id`, `access_token_enc`, `webhook_secret_enc` | Tokens de acesso/webhook criptografados; `webhook_verify_token` único por organização. |
 
@@ -48,6 +48,8 @@ rate_card ──> provider
 - Migration `002_encrypt_provider_credentials` converte credenciais para texto criptografado com Fernet.
 - `rate_card` referencia diretamente `provider` via `provider_id`; backlog P3 cobre escopo adicional por organização.
 - `provider_response` e `variables` exigem sanitização/anonimização (ver backlog P1 sanitização PII).
+- `cost_record.price_eur` armazena valores em minor units e segue a moeda do `rate_card` associado; os relatórios convertem diretamente sem dividir por 100.
+- `message_event` registra `unit_cost_minor` (custo real) e `baseline_cost_minor` (cenário mais caro) para alimentar economia no dashboard.
 
 ## Veja também
 

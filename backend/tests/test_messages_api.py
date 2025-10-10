@@ -46,6 +46,7 @@ from app.models.models import (  # noqa: E402
     RoutingRule,
     CostRecord,
     MessageJob,
+    MessageEvent,
 )
 from app.services.routing_engine import RoutingEngine  # noqa: E402
 import app.services.routing_engine as routing_engine_module  # noqa: E402
@@ -303,6 +304,27 @@ def test_send_message_returns_success(client, db_session):
     assert payload["estimated_cost"] == 85
     assert payload["job_id"]
 
+    job_uuid = uuid.UUID(payload["job_id"])
+    event = (
+        db_session.query(MessageEvent)
+        .filter(MessageEvent.message_job_id == job_uuid)
+        .one()
+    )
+
+    assert event.unit_cost_minor == 85
+    assert event.baseline_cost_minor == 85
+    assert event.currency == "USD"
+    assert event.template_name == "welcome"
+    assert event.country_iso == "BR"
+    assert event.provider_event_id
+
+    stored_cost = (
+        db_session.query(CostRecord)
+        .filter(CostRecord.message_job_id == job_uuid)
+        .one()
+    )
+    assert stored_cost.price_eur == 85
+
 
 def test_send_message_handles_routing_engine_error(client, db_session, monkeypatch):
     test_client, org_id = client
@@ -329,6 +351,7 @@ def test_send_message_handles_routing_engine_error(client, db_session, monkeypat
     assert payload["status"] == "failed_final"
     assert payload["message"] == "Routing engine error"
     assert payload["provider_used"] is None
+    assert db_session.query(MessageEvent).count() == 0
 
 
 def test_send_message_handles_delivery_exception(client, db_session, monkeypatch):
@@ -356,6 +379,7 @@ def test_send_message_handles_delivery_exception(client, db_session, monkeypatch
     assert payload["status"] == "failed_final"
     assert payload["message"] == "Delivery orchestration error"
     assert payload["provider_used"] is None
+    assert db_session.query(MessageEvent).count() == 0
 
 
 def test_send_message_handles_job_commit_failure(client, db_session, monkeypatch):
@@ -389,6 +413,7 @@ def test_send_message_handles_job_commit_failure(client, db_session, monkeypatch
     assert payload["status"] == "failed_final"
     assert payload["message"] == "Message job persistence error"
     assert payload["provider_used"] is None
+    assert db_session.query(MessageEvent).count() == 0
 
 
 def test_send_message_handles_non_iterable_fallback_chain(client, db_session, monkeypatch):
@@ -421,6 +446,14 @@ def test_send_message_handles_non_iterable_fallback_chain(client, db_session, mo
     payload = response.json()
     assert payload["status"] in {"delivered", "delivered_with_fallback"}
     assert payload["provider_used"] == "360dialog"
+
+    job_uuid = uuid.UUID(payload["job_id"])
+    events = (
+        db_session.query(MessageEvent)
+        .filter(MessageEvent.message_job_id == job_uuid)
+        .all()
+    )
+    assert len(events) == 1
 
 
 def test_send_message_defaults_invalid_estimated_cost(client, db_session, monkeypatch):
@@ -456,7 +489,15 @@ def test_send_message_defaults_invalid_estimated_cost(client, db_session, monkey
     job_uuid = uuid.UUID(payload["job_id"])
     stored_costs = db_session.query(CostRecord).filter(CostRecord.message_job_id == job_uuid).all()
     assert len(stored_costs) == 1
-    assert stored_costs[0].price_eur == 0
+    assert stored_costs[0].price_eur == 85
+
+    event = (
+        db_session.query(MessageEvent)
+        .filter(MessageEvent.message_job_id == job_uuid)
+        .one()
+    )
+    assert event.unit_cost_minor == 85
+    assert event.baseline_cost_minor == 85
 
 
 def test_send_message_rejects_when_contact_opted_out(client, db_session):

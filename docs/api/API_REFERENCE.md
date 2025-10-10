@@ -249,6 +249,7 @@ Agenda envio aplicando roteamento e fallback.
 - `400 Bad Request` – nenhum provedor disponível ou erro de roteamento persistido.
 - `403 Forbidden` – contato com opt-out registrado (gera enfileiramento de reconfirmação).
 - `429 Too Many Requests` – limite de envios por `org_id` excedido; inclui headers `Retry-After` e `X-RateLimit-Remaining: 0` para orientar o retry.
+- Fluxos bem sucedidos criam `MessageEvent` vinculado ao `MessageJob` com `unit_cost_minor`, `baseline_cost_minor`, `currency`, `country_iso` e `template_name`, garantindo consistência das métricas.
 
 **Circuit breaker & métricas**
 - Falhas consecutivas por provedor são persistidas em Redis (`circuit:{provider_id}`) com limiar configurável via `CIRCUIT_BREAKER_THRESHOLD` e cooldown `CIRCUIT_BREAKER_COOLDOWN_SECONDS`.
@@ -298,7 +299,7 @@ Erros: `404 Not Found` para jobs inexistentes.
 ### `GET /events`
 Consulta eventos de mensagens (inbound/outbound) armazenados.
 
-Parâmetros opcionais: `limit` (máx. 1000), `offset`, `country`, `template`, `from`, `to` (ISO). Retorna lista com `direction`, `template_name`, `category`, `country_iso`, `timestamp_provider`, `delivery_status`, `unit_cost_minor`, `currency`.
+Parâmetros opcionais: `limit` (máx. 1000), `offset`, `country`, `template`, `from`, `to` (ISO). Retorna lista com `direction`, `template_name`, `category`, `country_iso`, `timestamp_provider`, `delivery_status`, `unit_cost_minor`, `baseline_cost_minor`, `currency`.
 
 ## Tarifas
 
@@ -321,9 +322,9 @@ Retorna custos e economia (últimos 7 dias por padrão ou intervalo customizado 
 
 ### `GET /reports/dashboard-metrics`
 Métricas completas do dashboard para `days` (1–90):
-- Totais (`total_messages`, `total_cost_minor`, `baseline_cost_minor`, `saved_minor`).
+- Totais (`total_messages`, `total_cost_minor`, `baseline_cost_minor`, `saved_minor`) alimentados diretamente por `MessageEvent`.
 - `success_rate`, `avg_latency_ms`.
-- `top_countries[]`, `top_templates[]`.
+- `top_countries[]`, `top_templates[]` com `cost_minor` agregado.
 - `alerts[]`, `recommendations[]` com mensagens em português.
 Erros: valores fora do range retornam `422`.
 

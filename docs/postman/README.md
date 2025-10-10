@@ -15,7 +15,7 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 6. **Contacts** – dispara importação assíncrona (`POST /contacts/imports`), lista catálogos, cria contato, edita atributos, alterna status ativo/inativo e consulta histórico de consentimento.
 7. **Contact Segments** – cria segmento, atualiza metadados, associa/desassocia o contato criado e configura política de limites/opt-out.
 8. **Rates** – consulta tarifas e importa CSV de exemplo (`docs/postman/sample_rates.csv`) usando o `provider_name` do provedor criado na etapa Providers.
-9. **Reports** – consome métricas de dashboard, resumo e métricas por provedor.
+9. **Reports** – consome métricas de dashboard, resumo, métricas por provedor e valida que `/events` retorna `unit_cost_minor`/`baseline_cost_minor`.
 10. **Integrations** – cria conexão WA, valida webhook (`hub.verify_token`) e envia payload de webhook (repetir a criação com o mesmo `phone_id` apenas atualiza o registro).
 11. **Admin** – checa `/admin/health` e `/admin/metrics`.
 12. **Cleanup** – remove credenciais do provedor criado durante o fluxo.

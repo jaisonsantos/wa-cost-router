@@ -1141,6 +1141,22 @@
         },
         {
           "name": "Reports - Dashboard Metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Dashboard metrics include baseline savings\", function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('baseline_cost_minor');",
+                  "  pm.expect(body).to.have.property('total_cost_minor');",
+                  "  pm.expect(body).to.have.property('saved_minor');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": {
@@ -1178,6 +1194,45 @@
                 {
                   "key": "days",
                   "value": "7"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reports - Events",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Events expose unit and baseline cost\", function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.be.an('array');",
+                  "  if (body.length > 0) {",
+                  "    pm.expect(body[0]).to.have.property('unit_cost_minor');",
+                  "    pm.expect(body[0]).to.have.property('baseline_cost_minor');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/events?limit=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
                 }
               ]
             }
