@@ -302,6 +302,7 @@ async def send_message(
             country_iso=country_iso,
             category=data.template_category,
             template_id=data.template_id,
+            channel=data.channel,
             contact_address=resolved_address,
         )
     except ContactOptOutError as exc:

@@ -172,7 +172,11 @@ def _bootstrap_routing_stack(db_session, org_id, *, to_number: str = DEFAULT_NUM
             {"type": "country", "values": ["BR"]},
             {"type": "category", "values": ["MARKETING"]},
         ],
-        actions_json={"primary_provider": str(provider.id), "fallback_chain": []},
+        actions_json={
+            "channel": "whatsapp",
+            "primary_provider": str(provider.id),
+            "fallback_chain": [],
+        },
         priority=10,
     )
     db_session.add(rule)
@@ -669,6 +673,7 @@ def test_circuit_breaker_opens_and_triggers_fallback(client, db_session, monkeyp
     rule = db_session.query(RoutingRule).filter(RoutingRule.org_id == org_id).first()
     assert rule is not None
     rule.actions_json = {
+        "channel": "whatsapp",
         "primary_provider": str(primary.id),
         "fallback_chain": [str(fallback.id)],
     }

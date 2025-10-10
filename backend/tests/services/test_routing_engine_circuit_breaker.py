@@ -5,6 +5,8 @@ from datetime import datetime
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -27,6 +29,11 @@ from app.models.models import (  # noqa: E402
     RoutingRule,
 )
 from app.services.routing_engine import RoutingEngine  # noqa: E402
+
+
+@compiles(PGUUID, "sqlite")
+def compile_uuid_sqlite(type_, compiler, **kw):  # pragma: no cover - sqlite shim
+    return "TEXT"
 
 
 TEST_ENGINE = create_engine(
@@ -110,6 +117,7 @@ def test_routing_engine_skips_open_circuit(db_session):
         is_enabled=True,
         conditions_json=[{"type": "country", "values": ["BR"]}],
         actions_json={
+            "channel": "whatsapp",
             "primary_provider": str(primary.id),
             "fallback_chain": [str(fallback.id)],
         },
@@ -130,6 +138,7 @@ def test_routing_engine_skips_open_circuit(db_session):
         country_iso="BR",
         category="MARKETING",
         template_id=None,
+        channel="whatsapp",
     )
 
     assert decision is not None
