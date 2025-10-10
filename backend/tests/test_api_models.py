@@ -42,16 +42,23 @@ def test_provider_response_accepts_configured_flags():
     assert response.has_credentials is False
 
 
-def test_rule_create_accepts_dict_actions():
+def test_rule_create_parses_actions_model():
+    provider_id = uuid.uuid4()
+
     rule = RuleCreate(
         name="Route",
         is_enabled=True,
         conditions=[{"type": "country", "values": ["BR"]}],
-        actions={"primary_provider": "prov", "fallback_chain": []},
+        actions={
+            "primary_provider": str(provider_id),
+            "fallback_chain": [],
+            "channel": "WhatsApp",
+        },
         priority=10,
     )
 
-    assert rule.actions["primary_provider"] == "prov"
+    assert rule.actions.primary_provider == provider_id
+    assert rule.actions.channel == "whatsapp"
 
 
 @pytest.mark.parametrize("template_name", [None, "promo"])

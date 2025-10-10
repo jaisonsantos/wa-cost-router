@@ -147,3 +147,20 @@ class ContactPreferenceResolver:
             normalized_address=normalized_address,
             allowed_channels=allowed_channels,
         )
+
+
+class MultiChannelConsentResolver:
+    """Facade that will evolve to resolve consent across multiple channels."""
+
+    def __init__(self, db: Session, org_id: str) -> None:
+        self._delegate = ContactPreferenceResolver(db, org_id)
+
+    def resolve(
+        self,
+        *,
+        channel: Optional[str],
+        channel_address: Optional[str],
+    ) -> ContactRoutingPreferences:
+        # Current implementation is channel-agnostic; future iterations will
+        # leverage the channel to select the appropriate lookup strategy.
+        return self._delegate.load(channel_address=channel_address)

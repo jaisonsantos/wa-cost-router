@@ -1,11 +1,16 @@
-from typing import Optional, List, Dict, Any, Union, Iterable, Tuple
+from typing import Optional, List, Dict, Union, Tuple, Any
 from uuid import UUID
+
+from sqlalchemy import func
 from sqlalchemy.orm import Session
+from pydantic import ValidationError
+
 from app.models.models import RoutingRule, Provider, RateCard
+from app.schemas.routing_rules import RoutingRuleActions
 from app.services.routing import (
-    ContactPreferenceResolver,
     ContactOptOutError,
     ContactRoutingPreferences,
+    MultiChannelConsentResolver,
 )
 import logging
 
@@ -22,10 +27,12 @@ class RoutingEngine:
         org_id: str,
         *,
         circuit_breaker: Optional[CircuitBreakerStore] = None,
+        consent_resolver: Optional[MultiChannelConsentResolver] = None,
     ):
         self.db = db
         self.org_id = org_id
         self._circuit_breaker = circuit_breaker or get_circuit_breaker_store()
+        self._consent_resolver = consent_resolver or MultiChannelConsentResolver(db, org_id)
     
     def select_provider(
         self,
@@ -33,11 +40,12 @@ class RoutingEngine:
         category: str,
         template_id: Optional[str] = None,
         *,
+        channel: Optional[str] = None,
         contact_address: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Seleciona o provedor baseado nas regras ativas e custos
-        
+
         Returns:
             Dict com provider_id, fallback_chain, estimated_cost
         """
@@ -47,70 +55,104 @@ class RoutingEngine:
             RoutingRule.is_enabled.is_(True)
         ).order_by(RoutingRule.priority.asc()).all()
 
-        preferences = None
-        if contact_address is not None:
-            resolver = ContactPreferenceResolver(self.db, self.org_id)
-            preferences = resolver.load(channel_address=contact_address)
+        normalized_channel = self._normalize_channel(channel)
+        preferences: Optional[ContactRoutingPreferences] = None
+        if self._consent_resolver and contact_address is not None:
+            preferences = self._consent_resolver.resolve(
+                channel=normalized_channel,
+                channel_address=contact_address,
+            )
 
         denied_by_consent = False
-        denied_channel: Optional[str] = None
+        denied_channel: Optional[str] = normalized_channel
+
+        if (
+            preferences
+            and preferences.contact_exists
+            and normalized_channel
+            and contact_address is not None
+            and not preferences.is_channel_allowed(normalized_channel, contact_address)
+        ):
+            raise ContactOptOutError(
+                contact_id=preferences.contact_id,
+                channel=normalized_channel,
+                channel_address=contact_address,
+            )
 
         # 2. Avaliar condições de cada regra
         for rule in rules:
-            if self._evaluate_conditions(rule.conditions_json, country_iso, category, template_id):
-                # Regra aplicável, extrair ação
-                primary_candidate = rule.actions_json.get("primary_provider")
-                fallback_chain = rule.actions_json.get("fallback_chain", [])
+            if not self._evaluate_conditions(
+                rule.conditions_json, country_iso, category, template_id
+            ):
+                continue
 
-                candidates: List[Provider] = []
+            try:
+                actions = RoutingRuleActions.model_validate(rule.actions_json or {})
+            except ValidationError as exc:
+                logger.warning(
+                    "Invalid actions_json for rule %s: %s",
+                    rule.id,
+                    exc,
+                )
+                continue
 
-                raw_identifiers: List[Any] = []
-                if primary_candidate:
-                    raw_identifiers.append(primary_candidate)
-
-                if isinstance(fallback_chain, Iterable) and not isinstance(fallback_chain, (str, bytes)):
-                    raw_identifiers.extend(list(fallback_chain))
-                elif fallback_chain not in (None, ""):
-                    logger.warning(
-                        "Invalid fallback chain %r for rule %s; ignoring",
-                        fallback_chain,
-                        rule.id,
-                    )
-
-                for raw_identifier in raw_identifiers:
-                    provider = self._get_provider(raw_identifier)
-                    if not provider:
-                        continue
-
-                    if preferences and not preferences.is_channel_allowed(provider.type, contact_address):
-                        denied_by_consent = True
-                        denied_channel = provider.type
-                        continue
-
-                    if self._is_provider_blocked(provider):
-                        continue
-
-                    candidates.append(provider)
-
-                if not candidates:
+            if actions.channel is not None:
+                if normalized_channel is None:
+                    continue
+                if actions.channel != normalized_channel:
                     continue
 
-                selected_provider = candidates[0]
-                estimated_cost = self._get_estimated_cost(selected_provider.id, country_iso, category)
-                fallback_ids = [str(provider.id) for provider in candidates[1:]]
+            candidates: List[Provider] = []
+            for provider_id in actions.all_providers():
+                provider = self._get_provider(provider_id)
+                if not provider:
+                    continue
 
-                return {
-                    "provider_id": str(selected_provider.id),
-                    "fallback_chain": fallback_ids,
-                    "estimated_cost": estimated_cost,
-                    "rule_id": str(rule.id),
-                    "rule_name": rule.name,
-                }
+                provider_channel = self._normalize_channel(provider.type)
+                if normalized_channel and provider_channel != normalized_channel:
+                    continue
+                if provider_channel is None:
+                    logger.warning(
+                        "Provider %s for org %s has no channel type; skipping",
+                        provider.id,
+                        self.org_id,
+                    )
+                    continue
+
+                if (
+                    preferences
+                    and preferences.contact_exists
+                    and not preferences.is_channel_allowed(provider_channel, contact_address)
+                ):
+                    denied_by_consent = True
+                    denied_channel = provider_channel
+                    continue
+
+                if self._is_provider_blocked(provider):
+                    continue
+
+                candidates.append(provider)
+
+            if not candidates:
+                continue
+
+            selected_provider = candidates[0]
+            estimated_cost = self._get_estimated_cost(selected_provider.id, country_iso, category)
+            fallback_ids = [str(provider.id) for provider in candidates[1:]]
+
+            return {
+                "provider_id": str(selected_provider.id),
+                "fallback_chain": fallback_ids,
+                "estimated_cost": estimated_cost,
+                "rule_id": str(rule.id),
+                "rule_name": rule.name,
+            }
 
         # 3. Fallback: escolher provedor mais barato
         cheapest, cheapest_denied, cheapest_denied_channel = self._find_cheapest_provider(
             country_iso,
             category,
+            channel=normalized_channel,
             preferences=preferences,
             contact_address=contact_address,
         )
@@ -129,10 +171,18 @@ class RoutingEngine:
 
         if (
             preferences
+            and preferences.contact_exists
             and contact_address is not None
             and (
                 denied_by_consent
-                or not preferences.has_allowed_channels_for(contact_address)
+                or (
+                    normalized_channel
+                    and not preferences.is_channel_allowed(normalized_channel, contact_address)
+                )
+                or (
+                    not normalized_channel
+                    and not preferences.has_allowed_channels_for(contact_address)
+                )
             )
         ):
             raise ContactOptOutError(
@@ -166,9 +216,16 @@ class RoutingEngine:
             elif cond_type == "template":
                 if template_id and template_id not in condition.get("values", []):
                     return False
-        
+
         return True
-    
+
+    @staticmethod
+    def _normalize_channel(channel: Optional[str]) -> Optional[str]:
+        if channel is None:
+            return None
+        normalized = str(channel).strip().lower()
+        return normalized or None
+
     def _get_provider(self, provider_id: Union[str, UUID]) -> Optional[Provider]:
         try:
             provider_uuid = UUID(str(provider_id))
@@ -215,11 +272,12 @@ class RoutingEngine:
         country_iso: str,
         category: str,
         *,
+        channel: Optional[str] = None,
         preferences: Optional[ContactRoutingPreferences] = None,
         contact_address: Optional[str] = None,
     ) -> Tuple[Optional[Dict[str, Any]], bool, Optional[str]]:
         """Encontra o provedor mais barato para país/categoria"""
-        rates = (
+        query = (
             self.db.query(RateCard, Provider)
             .join(Provider, RateCard.provider_id == Provider.id)
             .filter(
@@ -228,20 +286,32 @@ class RoutingEngine:
                 RateCard.category == category,
                 Provider.status == "active",
             )
-            .order_by(RateCard.unit_cost_minor.asc())
-            .all()
         )
+
+        if channel:
+            query = query.filter(func.lower(Provider.type) == channel)
+
+        rates = query.order_by(RateCard.unit_cost_minor.asc()).all()
 
         denied_by_consent = False
         denied_channel: Optional[str] = None
 
         for rate, provider in rates:
+            provider_channel = self._normalize_channel(provider.type)
+            if channel and provider_channel != channel:
+                continue
+
             if self._is_provider_blocked(provider):
                 continue
 
-            if preferences and not preferences.is_channel_allowed(provider.type, contact_address):
+            if (
+                preferences
+                and preferences.contact_exists
+                and provider_channel
+                and not preferences.is_channel_allowed(provider_channel, contact_address)
+            ):
                 denied_by_consent = True
-                denied_channel = provider.type
+                denied_channel = provider_channel
                 continue
 
             return {

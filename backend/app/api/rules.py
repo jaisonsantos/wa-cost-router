@@ -2,9 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Dict, Any
+from uuid import UUID
+
 from app.core.database import get_db
 from app.api.dependencies import get_current_user
 from app.models.models import RoutingRule
+from app.schemas.routing_rules import (
+    RoutingRuleActions,
+    RoutingRuleValidationError,
+    ensure_providers_match_channel,
+)
 
 router = APIRouter()
 
@@ -12,7 +19,7 @@ class RuleCreate(BaseModel):
     name: str
     is_enabled: bool = True
     conditions: List[Dict[str, Any]]
-    actions: Dict[str, Any]
+    actions: RoutingRuleActions
     priority: int = 100
 
 class RuleResponse(BaseModel):
@@ -20,7 +27,7 @@ class RuleResponse(BaseModel):
     name: str
     is_enabled: bool
     conditions: List[Dict[str, Any]]
-    actions: Dict[str, Any]
+    actions: RoutingRuleActions
     priority: int
 
 @router.get("/", response_model=List[RuleResponse])
@@ -28,18 +35,22 @@ def list_rules(current_user: dict = Depends(get_current_user), db: Session = Dep
     rules = db.query(RoutingRule).filter(
         RoutingRule.org_id == current_user["org_id"]
     ).order_by(RoutingRule.priority.asc()).all()
-    
-    return [
-        RuleResponse(
-            id=str(r.id),
-            name=r.name,
-            is_enabled=r.is_enabled,
-            conditions=r.conditions_json,
-            actions=r.actions_json,
-            priority=r.priority
+
+    responses: List[RuleResponse] = []
+    for rule in rules:
+        actions = RoutingRuleActions.model_validate(rule.actions_json or {})
+        responses.append(
+            RuleResponse(
+                id=str(rule.id),
+                name=rule.name,
+                is_enabled=rule.is_enabled,
+                conditions=rule.conditions_json,
+                actions=actions,
+                priority=rule.priority,
+            )
         )
-        for r in rules
-    ]
+
+    return responses
 
 @router.post("/", response_model=RuleResponse)
 def create_rule(
@@ -47,12 +58,19 @@ def create_rule(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    org_id = UUID(str(current_user["org_id"]))
+
+    try:
+        ensure_providers_match_channel(db, org_id, data.actions)
+    except RoutingRuleValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     rule = RoutingRule(
-        org_id=current_user["org_id"],
+        org_id=org_id,
         name=data.name,
         is_enabled=data.is_enabled,
         conditions_json=data.conditions,
-        actions_json=data.actions,
+        actions_json=data.actions.model_dump(mode="json"),
         priority=data.priority
     )
     db.add(rule)
@@ -64,7 +82,7 @@ def create_rule(
         name=rule.name,
         is_enabled=rule.is_enabled,
         conditions=rule.conditions_json,
-        actions=rule.actions_json,
+        actions=RoutingRuleActions.model_validate(rule.actions_json or {}),
         priority=rule.priority
     )
 
@@ -79,14 +97,19 @@ def update_rule(
         RoutingRule.id == rule_id,
         RoutingRule.org_id == current_user["org_id"]
     ).first()
-    
+
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
-    
+
+    try:
+        ensure_providers_match_channel(db, UUID(str(current_user["org_id"])), data.actions)
+    except RoutingRuleValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     rule.name = data.name
     rule.is_enabled = data.is_enabled
     rule.conditions_json = data.conditions
-    rule.actions_json = data.actions
+    rule.actions_json = data.actions.model_dump(mode="json")
     rule.priority = data.priority
     
     db.commit()
