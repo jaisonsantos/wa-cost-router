@@ -178,6 +178,18 @@ Persistem credenciais criptografadas para o provedor.
 - `400 Bad Request` – `Invalid provider_id` ou sem credenciais para health check.
 - `404 Not Found` – provedor inexistente para a organização.
 
+#### Credenciais suportadas
+
+- **Twilio (SMS)**
+  - `account_sid` (string, obrigatório) – SID da conta principal Twilio.
+  - `auth_token` (string, obrigatório) – token de autenticação REST.
+  - `from_number` (string, obrigatório caso `messaging_service_sid` não seja enviado) – número habilitado para SMS.
+  - `messaging_service_sid` (string, opcional) – use quando preferir um Messaging Service ao invés do número remetente.
+  - `status_callback` (string, opcional) – URL para receber atualizações de entrega.
+  - `body`/`text`/`message` (string, obrigatório no envio) – conteúdo da mensagem SMS.
+
+> ℹ️ Em ambientes com `SANDBOX_PROVIDERS=true`, o conector de sandbox aceita os mesmos parâmetros e permite simular latência e falhas ajustando `SANDBOX_LATENCY_MS`, `SANDBOX_FAILURE_RATE` ou informando `sandbox_options` no factory interno (`get_connector`).
+
 ### `POST /providers/{provider_id}/health`
 Executa o `health_check` do conector usando as credenciais ativas.
 
