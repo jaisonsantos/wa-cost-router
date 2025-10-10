@@ -89,7 +89,7 @@ Outros comandos úteis:
 - **Autenticação**: JWT assinado com `JWT_SECRET`; tokens de provedores criptografados com Fernet (`APP_SECRET_KEY`).
 - **Multi-tenant**: todo acesso a dados é filtrado por `org_id`. O webhook WhatsApp ainda precisa mapear `phone_id → org_id` (vide backlog P0).
 - **Logs & métricas**: `/admin/metrics` expõe métricas Prometheus; proteger em ambiente produtivo.
-- **Seeds**: `backend/scripts/seed.py` popula apenas dados demo (org, usuário, rates, eventos) sem criar tabelas.
+- **Seeds**: `backend/scripts/seed.py` popula dados demo (org, usuário, rates, eventos) sem criar tabelas e agora inclui `MessageEvent` com `unit_cost_minor`/`baseline_cost_minor` consistentes para validar relatórios.
 
 ## Estrutura de diretórios
 

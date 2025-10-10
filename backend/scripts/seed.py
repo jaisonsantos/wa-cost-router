@@ -141,6 +141,7 @@ def seed():
             ("BR", "MARKETING", 85),
             ("BR", "UTILITY", 42),
             ("ES", "MARKETING", 95),
+            ("US", "AUTHENTICATION", 120),
             ("GLOBAL", "MARKETING", 100),
         ]
 
@@ -176,8 +177,42 @@ def seed():
                 ("password_reset", "AUTHENTICATION", "US"),
             ]
 
+            cc_map = {"BR": "+55", "ES": "+34", "US": "+1"}
+
             for index in range(20):
                 template_name, category, country_iso = templates[index % len(templates)]
+
+                rate = (
+                    db.query(RateCard)
+                    .filter(
+                        RateCard.provider_id == provider.id,
+                        RateCard.country_iso == country_iso,
+                        RateCard.category == category,
+                    )
+                    .order_by(RateCard.effective_from.desc())
+                    .first()
+                )
+
+                if not rate and country_iso != "GLOBAL":
+                    rate = (
+                        db.query(RateCard)
+                        .filter(
+                            RateCard.provider_id == provider.id,
+                            RateCard.country_iso == "GLOBAL",
+                            RateCard.category == category,
+                        )
+                        .order_by(RateCard.effective_from.desc())
+                        .first()
+                    )
+
+                unit_cost_minor = rate.unit_cost_minor if rate else 0
+                currency = rate.currency if rate else "USD"
+
+                multiplier = 1.35 if category == "MARKETING" else 1.2
+                baseline_cost_minor = int(unit_cost_minor * multiplier) if unit_cost_minor else 0
+                if baseline_cost_minor < unit_cost_minor:
+                    baseline_cost_minor = unit_cost_minor
+
                 db.add(
                     MessageEvent(
                         org_id=org.id,
@@ -187,9 +222,12 @@ def seed():
                         template_name=template_name,
                         category=category,
                         country_iso=country_iso,
-                        phone_cc="+55",
+                        phone_cc=cc_map.get(country_iso),
                         timestamp_provider=now - timedelta(days=index % 7),
                         delivery_status="delivered",
+                        unit_cost_minor=unit_cost_minor,
+                        baseline_cost_minor=baseline_cost_minor,
+                        currency=currency,
                     )
                 )
 

@@ -18,6 +18,7 @@ class EventResponse(BaseModel):
     timestamp_provider: datetime
     delivery_status: Optional[str]
     unit_cost_minor: Optional[int]
+    baseline_cost_minor: Optional[int]
     currency: Optional[str]
 
 @router.get("", response_model=list[EventResponse])
@@ -55,6 +56,7 @@ def list_events(
             timestamp_provider=e.timestamp_provider,
             delivery_status=e.delivery_status,
             unit_cost_minor=e.unit_cost_minor,
+            baseline_cost_minor=e.baseline_cost_minor,
             currency=e.currency
         )
         for e in events
