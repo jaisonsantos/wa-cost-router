@@ -21,6 +21,7 @@ from app.models.models import (
     OptInStatusEnum,
 )
 from app.services.contacts import ContactRepository, OptInRequestService
+from app.services.conversations import ConversationLifecycleService
 from app.services.routing.preferences import ContactPreferenceResolver
 
 router = APIRouter()
@@ -394,6 +395,8 @@ async def webhook_receive(request: Request, db: Session = Depends(get_db)):
                         connection_id=connection.id,
                         provider_event_id=provider_id,
                         direction="inbound",
+                        channel="whatsapp",
+                        channel_address=channel_address,
                         timestamp_provider=timestamp_provider,
                         delivery_status="received",
                         attributes=attributes,
@@ -401,8 +404,17 @@ async def webhook_receive(request: Request, db: Session = Depends(get_db)):
                     )
                 )
 
+    lifecycle_service = ConversationLifecycleService(db)
     for event in pending_events:
         db.add(event)
+        if event.direction == "inbound" and event.channel_address:
+            lifecycle_service.handle_inbound(
+                org_id=event.org_id,
+                channel=event.channel or "whatsapp",
+                channel_address=event.channel_address,
+                contact_id=event.contact_id,
+                occurred_at=event.timestamp_provider,
+            )
 
     db.commit()
     return {"status": "ok", "processed": len(pending_events)}

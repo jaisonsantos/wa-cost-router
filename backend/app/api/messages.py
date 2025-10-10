@@ -47,6 +47,7 @@ from app.core.normalization import (
     strip_to_none,
 )
 from app.services.contacts import OptInRequestService
+from app.services.conversations import ConversationLifecycleService
 from app.services.provider_connectors import get_connector
 from app.services.routing import ContactOptOutError
 from app.services.routing_engine import RoutingEngine
@@ -652,6 +653,15 @@ async def _attempt_delivery_with_fallback(
                     currency=currency,
                 )
                 db.add(message_event)
+
+                lifecycle_service = ConversationLifecycleService(db)
+                lifecycle_service.handle_outbound(
+                    org_id=job.org_id,
+                    channel=job.channel,
+                    channel_address=job.channel_address or job.to_number,
+                    contact_id=job.contact_id,
+                    occurred_at=message_event.timestamp_provider,
+                )
 
                 job.status = (
                     JobStatusEnum.delivered

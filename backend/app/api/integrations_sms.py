@@ -23,6 +23,7 @@ from app.models.models import (
     ProviderCredential,
 )
 from app.services.contacts import ContactRepository, OptInRequestService
+from app.services.conversations import ConversationLifecycleService
 from app.services.routing.preferences import ContactPreferenceResolver
 
 logger = logging.getLogger(__name__)
@@ -314,6 +315,17 @@ async def sms_webhook(request: Request, db: Session = Depends(get_db)):
     )
 
     db.add(event)
+
+    if from_number:
+        lifecycle_service = ConversationLifecycleService(db)
+        lifecycle_service.handle_inbound(
+            org_id=provider.org_id,
+            channel="sms",
+            channel_address=from_number,
+            contact_id=contact_id if has_consent else None,
+            occurred_at=timestamp_provider,
+        )
+
     db.commit()
 
     return {"status": "ok", "processed": 1}

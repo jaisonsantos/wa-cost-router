@@ -29,6 +29,11 @@ from app.models.models import (  # noqa: E402
     OptInStatusEnum,
     ContactImportStatusEnum,
     ProviderCredential,
+    Conversation,
+    QueueEntry,
+    SlaSnapshot,
+    ConversationStatusEnum,
+    QueueStatusEnum,
 )
 
 
@@ -395,6 +400,78 @@ def seed():
                 updated_at=seed_timestamp,
             )
             db.add(marketing_opt_in)
+
+        conversation = (
+            db.query(Conversation)
+            .filter(Conversation.org_id == org.id)
+            .filter(Conversation.channel == "whatsapp")
+            .filter(Conversation.channel_address == DEFAULT_CONTACT_PHONE)
+            .order_by(Conversation.opened_at.desc())
+            .first()
+        )
+
+        if not conversation:
+            conversation_opened = now - timedelta(hours=2)
+            conversation_response = conversation_opened + timedelta(minutes=10)
+            conversation_closed = conversation_opened + timedelta(minutes=45)
+            conversation = Conversation(
+                org_id=org.id,
+                contact_id=demo_contact.id,
+                channel="whatsapp",
+                channel_address=DEFAULT_CONTACT_PHONE,
+                status=ConversationStatusEnum.closed,
+                opened_at=conversation_opened,
+                last_inbound_at=conversation_opened,
+                first_response_at=conversation_response,
+                first_response_latency_seconds=600,
+                last_outbound_at=conversation_closed,
+                closed_at=conversation_closed,
+            )
+            db.add(conversation)
+            db.flush()
+
+            queue_entry = QueueEntry(
+                org_id=org.id,
+                conversation_id=conversation.id,
+                channel="whatsapp",
+                status=QueueStatusEnum.closed,
+                opened_at=conversation_opened,
+                responded_at=conversation_response,
+                closed_at=conversation_closed,
+                first_response_latency_seconds=conversation.first_response_latency_seconds,
+                total_duration_seconds=int(
+                    (conversation_closed - conversation_opened).total_seconds()
+                ),
+            )
+            db.add(queue_entry)
+
+            snapshot_start = (now - timedelta(days=1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            existing_snapshot = (
+                db.query(SlaSnapshot)
+                .filter(SlaSnapshot.org_id == org.id)
+                .filter(SlaSnapshot.channel == "whatsapp")
+                .filter(SlaSnapshot.period_start == snapshot_start)
+                .first()
+            )
+            if not existing_snapshot:
+                db.add(
+                    SlaSnapshot(
+                        org_id=org.id,
+                        channel="whatsapp",
+                        period_start=snapshot_start,
+                        period_end=snapshot_start + timedelta(days=1),
+                        sla_target_seconds=900,
+                        conversations_opened=1,
+                        conversations_closed=1,
+                        first_response_avg_seconds=conversation.first_response_latency_seconds,
+                        first_response_within_target=1,
+                        backlog_open=1,
+                        backlog_closed=1,
+                        backlog_pending=0,
+                    )
+                )
 
         pilot_segment = (
             db.query(ContactSegment)
