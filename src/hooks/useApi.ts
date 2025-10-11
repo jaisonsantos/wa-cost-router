@@ -14,6 +14,7 @@ import {
   MessageJobDetail,
   MessageJobSummary,
   MessageJobsQueryParams,
+  MessageJobDetailsQueryParams,
   Organization,
   Provider,
   ProviderCredentialInput,
@@ -256,17 +257,19 @@ export const useHealthCheckProvider = () => {
 };
 
 // Messages
-export const useMessageJobs = (params?: MessageJobsQueryParams) => {
+export const useMessageJobs = (params: MessageJobsQueryParams = {}) => {
+  const { status, channel, direction } = params;
   return useQuery<MessageJobSummary[], Error>({
-    queryKey: ["messageJobs", params],
+    queryKey: ["messageJobs", status ?? null, channel ?? null, direction ?? null],
     queryFn: () => api.getMessageJobs(params),
   });
 };
 
-export const useMessageJobDetails = (jobId: string) => {
+export const useMessageJobDetails = (jobId: string, params: MessageJobDetailsQueryParams = {}) => {
+  const { channel } = params;
   return useQuery<MessageJobDetail, Error>({
-    queryKey: ["messageJob", jobId],
-    queryFn: () => api.getMessageJobDetails(jobId),
+    queryKey: ["messageJob", jobId, channel ?? null],
+    queryFn: () => api.getMessageJobDetails(jobId, params),
     enabled: !!jobId,
   });
 };

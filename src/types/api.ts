@@ -110,9 +110,33 @@ export interface MessageJobAttempt {
   timestamp?: string | null;
 }
 
+export type MessageDirection = "inbound" | "outbound";
+
+export interface MessageJobConversationEntry {
+  id: string;
+  direction: MessageDirection;
+  channel: string;
+  channel_address: string;
+  content: string;
+  timestamp: string;
+  status?: string | null;
+  sender?: string | null;
+}
+
+export interface MessageJobConversationHistory {
+  channel: string;
+  contact_address: string;
+  contact_name?: string | null;
+  messages: MessageJobConversationEntry[];
+}
+
 export interface MessageJobSummary {
   id: string;
   status: string;
+  direction: MessageDirection;
+  channel: string;
+  channel_address: string;
+  contact_name?: string | null;
   to_number: string;
   template_id: string;
   template_category: string;
@@ -124,6 +148,7 @@ export interface MessageJobSummary {
 export interface MessageJobDetail extends MessageJobSummary {
   attempts: MessageJobAttempt[];
   total_cost_minor: number;
+  conversation_history?: MessageJobConversationHistory[];
 }
 
 export interface Event {
@@ -439,6 +464,12 @@ export interface EventsQueryParams {
 
 export interface MessageJobsQueryParams {
   status?: string;
+  channel?: string;
+  direction?: MessageDirection;
+}
+
+export interface MessageJobDetailsQueryParams {
+  channel?: string;
 }
 
 export interface CreateWAConnectionPayload {

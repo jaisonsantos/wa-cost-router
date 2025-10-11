@@ -40,6 +40,7 @@ import {
   ChannelMetricsQueryParams,
   QueueMetricsResponse,
   QueueMetricsQueryParams,
+  MessageJobDetailsQueryParams,
 } from "@/types/api";
 
 export const API_BASE_URL = "http://localhost:8000";
@@ -359,13 +360,31 @@ class ApiClient {
   }
 
   // Messages
-  async getMessageJobs(params?: MessageJobsQueryParams): Promise<MessageJobSummary[]> {
-    const query = params?.status ? `?status=${params.status}` : "";
-    return this.request<MessageJobSummary[]>(`/messages/jobs${query}`);
+  async getMessageJobs(params: MessageJobsQueryParams = {}): Promise<MessageJobSummary[]> {
+    const searchParams = new URLSearchParams();
+    if (params.status) {
+      searchParams.append("status", params.status);
+    }
+    if (params.channel) {
+      searchParams.append("channel", params.channel);
+    }
+    if (params.direction) {
+      searchParams.append("direction", params.direction);
+    }
+    const query = searchParams.toString();
+    return this.request<MessageJobSummary[]>(`/messages/jobs${query ? `?${query}` : ""}`);
   }
 
-  async getMessageJobDetails(jobId: string): Promise<MessageJobDetail> {
-    return this.request<MessageJobDetail>(`/messages/jobs/${jobId}`);
+  async getMessageJobDetails(
+    jobId: string,
+    params: MessageJobDetailsQueryParams = {},
+  ): Promise<MessageJobDetail> {
+    const searchParams = new URLSearchParams();
+    if (params.channel) {
+      searchParams.append("channel", params.channel);
+    }
+    const query = searchParams.toString();
+    return this.request<MessageJobDetail>(`/messages/jobs/${jobId}${query ? `?${query}` : ""}`);
   }
 
   async sendMessage(data: SendMessageRequest): Promise<SendMessageResponse> {
