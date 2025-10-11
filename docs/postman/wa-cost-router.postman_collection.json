@@ -2,7 +2,7 @@
   "info": {
     "name": "WA Cost Router",
     "_postman_id": "4f6d5d8b-1d2c-4a8d-9b1e-0c1234567890",
-    "description": "Cole\u00e7\u00e3o completa da API WA Cost Router para desenvolvimento local.",
+    "description": "Coleção completa da API WA Cost Router para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -262,6 +262,106 @@
               "path": [
                 "providers",
                 "{{provider_id}}",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Providers - Create SMS (Twilio)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.id) {",
+                  "    pm.environment.set('sms_provider_id', body.id);",
+                  "  }",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Twilio\",\n  \"type\": \"sms\",\n  \"base_url\": \"https://api.twilio.com/2010-04-01\",\n  \"metadata\": {\n    \"region\": \"us1\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/providers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Providers - Save Credentials (SMS)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider_id\": \"{{sms_provider_id}}\",\n  \"credentials\": {\n    \"account_sid\": \"{{sms_account_sid}}\",\n    \"auth_token\": \"{{sms_auth_token}}\",\n    \"from_number\": \"{{sms_from_number}}\",\n    \"messaging_service_sid\": \"{{sms_messaging_service_sid}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/providers/credentials",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers",
+                "credentials"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Providers - Health Check (SMS)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('SMS provider health exposes status', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('provider_id');",
+                  "  pm.expect(body).to.have.property('healthy');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/providers/{{sms_provider_id}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers",
+                "{{sms_provider_id}}",
                 "health"
               ]
             }
@@ -1687,20 +1787,38 @@
                 "type": "text/javascript",
                 "exec": [
                   "(() => {",
-                  "  const body = pm.request.body && pm.request.body.urlencoded ? pm.request.body.urlencoded : [];",
-                  "  body.forEach(item => {",
-                  "    if (item && typeof item.value === 'string') {",
-                  "      item.value = pm.variables.replaceIn(item.value);",
+                  "  const rawBody = pm.request.body && pm.request.body.urlencoded;",
+                  "  const entries = [];",
+                  "  if (rawBody) {",
+                  "    if (Array.isArray(rawBody)) {",
+                  "      entries.push(...rawBody);",
+                  "    } else if (typeof rawBody.all === 'function') {",
+                  "      entries.push(...rawBody.all());",
+                  "    } else if (typeof rawBody.each === 'function') {",
+                  "      rawBody.each(item => entries.push(item));",
+                  "    } else if (typeof rawBody.toJSON === 'function') {",
+                  "      const jsonItems = rawBody.toJSON();",
+                  "      if (Array.isArray(jsonItems)) {",
+                  "        jsonItems.forEach(item => entries.push(item));",
+                  "      }",
                   "    }",
-                  "  });",
+                  "  }",
+                  "  const resolved = entries",
+                  "    .filter(item => item && !item.disabled)",
+                  "    .map(item => {",
+                  "      const value = pm.variables.replaceIn(item.value || '');",
+                  "      if (item && typeof item.value !== 'undefined') {",
+                  "        item.value = value;",
+                  "      }",
+                  "      return [item.key, value];",
+                  "    });",
                   "  const authToken = pm.environment.get('sms_webhook_auth_token') || '';",
                   "  const url = pm.request.url.toString();",
-                  "  const params = body.filter(item => !item.disabled).map(item => [item.key, item.value || '']);",
-                  "  params.sort((a, b) => a[0].localeCompare(b[0]));",
+                  "  resolved.sort((a, b) => a[0].localeCompare(b[0]));",
                   "  let signature = '';",
                   "  if (authToken) {",
                   "    let payload = url;",
-                  "    params.forEach(([key, value]) => {",
+                  "    resolved.forEach(([key, value]) => {",
                   "      payload += key + value;",
                   "    });",
                   "    const digest = CryptoJS.HmacSHA1(payload, authToken);",

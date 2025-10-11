@@ -9,7 +9,7 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 
 1. **Auth** – registra usuário aleatório (`postman+timestamp`) com senha forte gerada no runtime e efetua login (token salvo automaticamente).
 2. **Organization** – obtém `org_id` via `/orgs/current`.
-3. **Providers** – cria provedor WhatsApp (360dialog), salva credenciais fake e executa health check.
+3. **Providers** – cria provedores WhatsApp (360dialog) e SMS (Twilio), persiste credenciais fake e executa health check.
 4. **Rules** – lista, cria, atualiza e alterna regras, incluindo simulação avançada.
 5. **Messages** – envia mensagem, lista jobs, consulta detalhes do job usando `job_id` capturado, executa o cenário opcional **Messages - Rate Limit Demo** para validar respostas `429` e concentra a pasta **Multi-Channel Regression** para validar WhatsApp/SMS/e-mail.
 6. **Contacts** – dispara importação assíncrona (`POST /contacts/imports`), lista catálogos, cria contato, edita atributos, alterna status ativo/inativo e consulta histórico de consentimento.
@@ -38,9 +38,11 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 | `wa_phone_id`, `wa_business_id`, `wa_access_token`, `wa_verify_token`, `wa_webhook_secret` | Dados seed para testar integrações WhatsApp (incluindo secret usado no HMAC do webhook). |
 | `wa_contact_phone` | Número E.164 usado como remetente no payload do webhook; ajuste conforme o contato criado no catálogo. |
 | `sms_contact_phone` | Número E.164 usado como originador das mensagens SMS (reaproveitado nos testes multi-canal). |
+| `sms_from_number` | Número remetente configurado nas credenciais Twilio (utilizado ao enviar SMS). |
 | `sms_inbound_number` | Número curto/long code configurado como destino nos webhooks SMS. |
 | `sms_messaging_service_sid` | SID opcional do Messaging Service (Twilio) para validar roteamento inbound. |
 | `sms_webhook_auth_token` | Token de autenticação (Twilio Auth Token) utilizado para assinar o webhook SMS. |
+| `sms_account_sid` / `sms_auth_token` | Credenciais usadas para salvar o provedor Twilio e simular autenticação nos testes. |
 | `email_webhook_token` | Token utilizado para autenticar as rotas `/integrations/email/webhook`. |
 | `email_webhook_secret` | Secret usado para assinar o header `X-Email-Signature` nas requisições inbound de e-mail. |
 
@@ -109,6 +111,8 @@ O arquivo [`multi_channel_regression.json`](./multi_channel_regression.json) par
 - `variables`: objeto arbitrário enviado para o template — utilize chaves coerentes com os placeholders cadastrados no backend.
 
 Ao rodar `make postman-test`, todos os cenários são processados sequencialmente e o `job_id` da última execução permanece disponível para consultas posteriores.
+
+> ℹ️ O CSV `sample_rates.csv` já inclui tarifas de exemplo para `Twilio` (SMS) e `SendGrid` (e-mail); execute a pasta **Rates** após criar os provedores para que a regressão multi-canal utilize esses custos.
 
 ## Veja também
 
