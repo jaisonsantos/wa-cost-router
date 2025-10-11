@@ -19,6 +19,7 @@ from app.models.models import (  # noqa: E402
     WAConnection,
     RateCard,
     MessageEvent,
+    MessageJob,
     Provider,
     Contact,
     ContactChannelOptIn,
@@ -34,6 +35,7 @@ from app.models.models import (  # noqa: E402
     SlaSnapshot,
     ConversationStatusEnum,
     QueueStatusEnum,
+    JobStatusEnum,
 )
 
 
@@ -49,9 +51,19 @@ DEFAULT_WEBHOOK_SECRET = "my-webhook-secret"
 DEFAULT_ACCESS_TOKEN = "fake-wa-access-token"
 DEFAULT_PROVIDER_NAME = "360dialog"
 
-DEFAULT_EMAIL_PROVIDER_NAME = "SendGrid"
+DEFAULT_EMAIL_PROVIDER_NAME = "SendGrid Sandbox"
 DEFAULT_EMAIL_WEBHOOK_TOKEN = "demo-email-webhook-token"
 DEFAULT_EMAIL_WEBHOOK_SECRET = "demo-email-webhook-secret"
+DEFAULT_EMAIL_API_KEY = "SG.fake-sandbox-key"
+DEFAULT_EMAIL_FROM_ADDRESS = "noreply@demo.local"
+DEFAULT_EMAIL_UNIT_COST_MINOR = 75
+
+DEFAULT_SMS_PROVIDER_NAME = "Twilio Sandbox"
+DEFAULT_SMS_ACCOUNT_SID = "AC00000000000000000000000000000000"
+DEFAULT_SMS_AUTH_TOKEN = "demo-sms-auth-token"
+DEFAULT_SMS_FROM_NUMBER = "+15558675309"
+DEFAULT_SMS_WEBHOOK_TOKEN = "demo-sms-webhook-token"
+DEFAULT_SMS_UNIT_COST_MINOR = 140
 
 DEFAULT_CONTACT_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")
 DEFAULT_CONTACT_EMAIL = "dana.customer@example.com"
@@ -191,19 +203,32 @@ def seed():
             .first()
         )
 
+        email_provider_meta = {
+            "channels": {
+                "email": {
+                    "from_address": DEFAULT_EMAIL_FROM_ADDRESS,
+                    "sandbox": True,
+                }
+            }
+        }
+
         if not email_provider:
             email_provider = Provider(
                 org_id=org.id,
                 name=DEFAULT_EMAIL_PROVIDER_NAME,
                 type="email",
                 status="active",
+                meta=email_provider_meta,
             )
             db.add(email_provider)
             db.flush()
         else:
             email_provider.status = "active"
+            email_provider.meta = email_provider_meta
 
         email_credentials_payload = {
+            "api_key": DEFAULT_EMAIL_API_KEY,
+            "from_email": DEFAULT_EMAIL_FROM_ADDRESS,
             "webhook_token": DEFAULT_EMAIL_WEBHOOK_TOKEN,
             "inbound_verify_token": DEFAULT_EMAIL_WEBHOOK_TOKEN,
             "inbound_signing_secret": DEFAULT_EMAIL_WEBHOOK_SECRET,
@@ -232,68 +257,115 @@ def seed():
             )
             email_credentials.is_active = True
 
-        events_exist = db.query(MessageEvent).filter(MessageEvent.org_id == org.id).first()
-        if not events_exist:
-            templates = [
-                ("welcome_msg", "MARKETING", "BR"),
-                ("order_confirmation", "UTILITY", "BR"),
-                ("promo_campaign", "MARKETING", "ES"),
-                ("password_reset", "AUTHENTICATION", "US"),
-            ]
+        email_rate = (
+            db.query(RateCard)
+            .filter(
+                RateCard.provider_id == email_provider.id,
+                RateCard.country_iso == "GLOBAL",
+                RateCard.category == "MARKETING",
+            )
+            .order_by(RateCard.effective_from.desc())
+            .first()
+        )
 
-            cc_map = {"BR": "+55", "ES": "+34", "US": "+1"}
-
-            for index in range(20):
-                template_name, category, country_iso = templates[index % len(templates)]
-
-                rate = (
-                    db.query(RateCard)
-                    .filter(
-                        RateCard.provider_id == provider.id,
-                        RateCard.country_iso == country_iso,
-                        RateCard.category == category,
-                    )
-                    .order_by(RateCard.effective_from.desc())
-                    .first()
+        if not email_rate:
+            db.add(
+                RateCard(
+                    provider_id=email_provider.id,
+                    effective_from=now,
+                    source="seed",
+                    country_iso="GLOBAL",
+                    category="MARKETING",
+                    unit_cost_minor=DEFAULT_EMAIL_UNIT_COST_MINOR,
+                    currency="USD",
                 )
+            )
 
-                if not rate and country_iso != "GLOBAL":
-                    rate = (
-                        db.query(RateCard)
-                        .filter(
-                            RateCard.provider_id == provider.id,
-                            RateCard.country_iso == "GLOBAL",
-                            RateCard.category == category,
-                        )
-                        .order_by(RateCard.effective_from.desc())
-                        .first()
-                    )
+        sms_provider = (
+            db.query(Provider)
+            .filter(
+                Provider.org_id == org.id,
+                Provider.name == DEFAULT_SMS_PROVIDER_NAME,
+            )
+            .first()
+        )
 
-                unit_cost_minor = rate.unit_cost_minor if rate else 0
-                currency = rate.currency if rate else "USD"
+        sms_provider_meta = {
+            "channels": {
+                "sms": {
+                    "inbound_numbers": [DEFAULT_SMS_FROM_NUMBER],
+                    "sandbox": True,
+                }
+            }
+        }
 
-                multiplier = 1.35 if category == "MARKETING" else 1.2
-                baseline_cost_minor = int(unit_cost_minor * multiplier) if unit_cost_minor else 0
-                if baseline_cost_minor < unit_cost_minor:
-                    baseline_cost_minor = unit_cost_minor
+        if not sms_provider:
+            sms_provider = Provider(
+                org_id=org.id,
+                name=DEFAULT_SMS_PROVIDER_NAME,
+                type="sms",
+                status="active",
+                meta=sms_provider_meta,
+            )
+            db.add(sms_provider)
+            db.flush()
+        else:
+            sms_provider.status = "active"
+            sms_provider.meta = sms_provider_meta
 
-                db.add(
-                    MessageEvent(
-                        org_id=org.id,
-                        connection_id=connection.id,
-                        provider_event_id=f"evt_{index:02d}_sandbox",
-                        direction="outbound",
-                        template_name=template_name,
-                        category=category,
-                        country_iso=country_iso,
-                        phone_cc=cc_map.get(country_iso),
-                        timestamp_provider=now - timedelta(days=index % 7),
-                        delivery_status="delivered",
-                        unit_cost_minor=unit_cost_minor,
-                        baseline_cost_minor=baseline_cost_minor,
-                        currency=currency,
-                    )
+        sms_credentials_payload = {
+            "account_sid": DEFAULT_SMS_ACCOUNT_SID,
+            "auth_token": DEFAULT_SMS_AUTH_TOKEN,
+            "from_number": DEFAULT_SMS_FROM_NUMBER,
+            "inbound_verify_token": DEFAULT_SMS_WEBHOOK_TOKEN,
+        }
+
+        sms_credentials = (
+            db.query(ProviderCredential)
+            .filter(
+                ProviderCredential.org_id == org.id,
+                ProviderCredential.provider_id == sms_provider.id,
+            )
+            .first()
+        )
+
+        if not sms_credentials:
+            sms_credentials = ProviderCredential(
+                org_id=org.id,
+                provider_id=sms_provider.id,
+                credentials_encrypted=encrypt_credentials(sms_credentials_payload),
+                is_active=True,
+            )
+            db.add(sms_credentials)
+        else:
+            sms_credentials.credentials_encrypted = encrypt_credentials(
+                sms_credentials_payload
+            )
+            sms_credentials.is_active = True
+
+        sms_rate = (
+            db.query(RateCard)
+            .filter(
+                RateCard.provider_id == sms_provider.id,
+                RateCard.country_iso == "BR",
+                RateCard.category == "MARKETING",
+            )
+            .order_by(RateCard.effective_from.desc())
+            .first()
+        )
+
+        if not sms_rate:
+            db.add(
+                RateCard(
+                    provider_id=sms_provider.id,
+                    effective_from=now,
+                    source="seed",
+                    country_iso="BR",
+                    category="MARKETING",
+                    unit_cost_minor=DEFAULT_SMS_UNIT_COST_MINOR,
+                    currency="USD",
                 )
+            )
 
         demo_contact = (
             db.query(Contact)
@@ -400,6 +472,328 @@ def seed():
                 updated_at=seed_timestamp,
             )
             db.add(marketing_opt_in)
+
+        email_opt_in = (
+            db.query(ContactChannelOptIn)
+            .filter(ContactChannelOptIn.contact_id == demo_contact.id)
+            .filter(ContactChannelOptIn.channel == "email")
+            .filter(ContactChannelOptIn.channel_address == DEFAULT_CONTACT_EMAIL)
+            .filter(ContactChannelOptIn.version == 1)
+            .first()
+        )
+        if not email_opt_in:
+            email_opt_in = ContactChannelOptIn(
+                org_id=org.id,
+                contact_id=demo_contact.id,
+                channel="email",
+                channel_address=DEFAULT_CONTACT_EMAIL,
+                status=OptInStatusEnum.granted,
+                version=1,
+                legal_basis="opt_in",
+                captured_at=seed_timestamp,
+                source=DEFAULT_CONTACT_SOURCE,
+                source_metadata={"seed": True},
+                evidence_uri="https://example.com/proof/email-opt-in",
+                proof_hash=hashlib.sha256(b"optin:email:dona-dana:v1").hexdigest(),
+                created_at=seed_timestamp,
+                updated_at=seed_timestamp,
+            )
+            db.add(email_opt_in)
+
+        sms_opt_in = (
+            db.query(ContactChannelOptIn)
+            .filter(ContactChannelOptIn.contact_id == marketing_contact.id)
+            .filter(ContactChannelOptIn.channel == "sms")
+            .filter(ContactChannelOptIn.channel_address == DEFAULT_MARKETING_CONTACT_PHONE)
+            .filter(ContactChannelOptIn.version == 1)
+            .first()
+        )
+        if not sms_opt_in:
+            sms_opt_in = ContactChannelOptIn(
+                org_id=org.id,
+                contact_id=marketing_contact.id,
+                channel="sms",
+                channel_address=DEFAULT_MARKETING_CONTACT_PHONE,
+                status=OptInStatusEnum.granted,
+                version=1,
+                legal_basis="opt_in",
+                captured_at=seed_timestamp,
+                source=DEFAULT_CONTACT_SOURCE,
+                source_metadata={"seed": True},
+                evidence_uri="https://example.com/proof/sms-opt-in-john",
+                proof_hash=hashlib.sha256(b"optin:sms:john-customer:v1").hexdigest(),
+                created_at=seed_timestamp,
+                updated_at=seed_timestamp,
+            )
+            db.add(sms_opt_in)
+
+        jobs_by_channel = {}
+        job_definitions = [
+            {
+                "idempotency_key": "seed:whatsapp:welcome",
+                "to_number": DEFAULT_CONTACT_PHONE,
+                "channel": "whatsapp",
+                "channel_address": DEFAULT_CONTACT_PHONE,
+                "contact_id": demo_contact.id,
+                "template_id": "welcome_msg",
+                "template_category": "MARKETING",
+                "variables": {"body_params": ["Dona"]},
+                "country_iso": "BR",
+                "status": JobStatusEnum.delivered,
+            },
+            {
+                "idempotency_key": "seed:email:onboarding",
+                "to_number": DEFAULT_CONTACT_EMAIL,
+                "channel": "email",
+                "channel_address": DEFAULT_CONTACT_EMAIL,
+                "contact_id": demo_contact.id,
+                "template_id": "welcome_email",
+                "template_category": "MARKETING",
+                "variables": {
+                    "subject": "Bem-vinda ao piloto",
+                    "body_params": ["Dona"],
+                },
+                "country_iso": "GLOBAL",
+                "status": JobStatusEnum.delivered,
+            },
+            {
+                "idempotency_key": "seed:sms:promo",
+                "to_number": DEFAULT_MARKETING_CONTACT_PHONE,
+                "channel": "sms",
+                "channel_address": DEFAULT_MARKETING_CONTACT_PHONE,
+                "contact_id": marketing_contact.id,
+                "template_id": "promo_sms",
+                "template_category": "MARKETING",
+                "variables": {"body_params": ["Oferta especial"]},
+                "country_iso": "BR",
+                "status": JobStatusEnum.delivered,
+            },
+        ]
+
+        for job_def in job_definitions:
+            job = (
+                db.query(MessageJob)
+                .filter(
+                    MessageJob.org_id == org.id,
+                    MessageJob.idempotency_key == job_def["idempotency_key"],
+                )
+                .first()
+            )
+
+            if not job:
+                job = MessageJob(
+                    org_id=org.id,
+                    idempotency_key=job_def["idempotency_key"],
+                    to_number=job_def["to_number"],
+                    channel=job_def["channel"],
+                    channel_address=job_def["channel_address"],
+                    contact_id=job_def.get("contact_id"),
+                    template_id=job_def["template_id"],
+                    template_category=job_def.get("template_category"),
+                    variables=job_def.get("variables"),
+                    country_iso=job_def.get("country_iso"),
+                    status=job_def.get("status", JobStatusEnum.delivered),
+                    created_at=seed_timestamp,
+                )
+                db.add(job)
+                db.flush()
+            else:
+                job.to_number = job_def["to_number"]
+                job.channel = job_def["channel"]
+                job.channel_address = job_def["channel_address"]
+                job.contact_id = job_def.get("contact_id")
+                job.template_category = job_def.get("template_category")
+                job.country_iso = job_def.get("country_iso")
+                job.variables = job_def.get("variables")
+                job.status = job_def.get("status", JobStatusEnum.delivered)
+
+            jobs_by_channel[job_def["channel"]] = job
+
+        whatsapp_job = jobs_by_channel.get("whatsapp")
+        email_job = jobs_by_channel.get("email")
+        sms_job = jobs_by_channel.get("sms")
+
+        templates = [
+            ("welcome_msg", "MARKETING", "BR"),
+            ("order_confirmation", "UTILITY", "BR"),
+            ("promo_campaign", "MARKETING", "ES"),
+            ("password_reset", "AUTHENTICATION", "US"),
+        ]
+
+        cc_map = {"BR": "+55", "ES": "+34", "US": "+1", "GLOBAL": "+1"}
+        contact_cycle = [demo_contact.id, marketing_contact.id]
+
+        for index in range(20):
+            template_name, category, country_iso = templates[index % len(templates)]
+            provider_event_id = f"evt_{index:02d}_sandbox"
+
+            exists = (
+                db.query(MessageEvent)
+                .filter(MessageEvent.provider_event_id == provider_event_id)
+                .first()
+            )
+            if exists:
+                continue
+
+            rate = (
+                db.query(RateCard)
+                .filter(
+                    RateCard.provider_id == provider.id,
+                    RateCard.country_iso == country_iso,
+                    RateCard.category == category,
+                )
+                .order_by(RateCard.effective_from.desc())
+                .first()
+            )
+
+            if not rate and country_iso != "GLOBAL":
+                rate = (
+                    db.query(RateCard)
+                    .filter(
+                        RateCard.provider_id == provider.id,
+                        RateCard.country_iso == "GLOBAL",
+                        RateCard.category == category,
+                    )
+                    .order_by(RateCard.effective_from.desc())
+                    .first()
+                )
+
+            unit_cost_minor = rate.unit_cost_minor if rate else 0
+            currency = rate.currency if rate else "USD"
+            multiplier = 1.35 if category == "MARKETING" else 1.2
+            baseline_cost_minor = int(unit_cost_minor * multiplier) if unit_cost_minor else 0
+            if baseline_cost_minor < unit_cost_minor:
+                baseline_cost_minor = unit_cost_minor
+
+            cc = cc_map.get(country_iso, "+1")
+            channel_address = f"{cc}5550{index:04d}"
+            contact_id = contact_cycle[index % len(contact_cycle)]
+            job_id = whatsapp_job.id if whatsapp_job and index == 0 else None
+
+            db.add(
+                MessageEvent(
+                    org_id=org.id,
+                    message_job_id=job_id,
+                    connection_id=connection.id,
+                    channel="whatsapp",
+                    channel_address=channel_address,
+                    contact_id=contact_id,
+                    provider_event_id=provider_event_id,
+                    direction="outbound",
+                    template_name=template_name,
+                    category=category,
+                    country_iso=country_iso,
+                    phone_cc=cc,
+                    timestamp_provider=now - timedelta(days=index % 7),
+                    delivery_status="delivered",
+                    unit_cost_minor=unit_cost_minor,
+                    baseline_cost_minor=baseline_cost_minor,
+                    currency=currency,
+                )
+            )
+
+        email_events = [
+            {
+                "provider_event_id": "email_evt_seed_01",
+                "template_name": "welcome_email",
+                "delivery_status": "delivered",
+                "timestamp": now - timedelta(hours=3),
+                "baseline_cost_minor": DEFAULT_EMAIL_UNIT_COST_MINOR + 20,
+                "attributes": {
+                    "subject": "Bem-vinda ao piloto",
+                    "from": DEFAULT_EMAIL_FROM_ADDRESS,
+                },
+            },
+            {
+                "provider_event_id": "email_evt_seed_02",
+                "template_name": "reactivation_email",
+                "delivery_status": "bounced",
+                "timestamp": now - timedelta(hours=9),
+                "baseline_cost_minor": DEFAULT_EMAIL_UNIT_COST_MINOR + 15,
+                "attributes": {
+                    "subject": "Sua conta quase lá",
+                    "from": DEFAULT_EMAIL_FROM_ADDRESS,
+                },
+            },
+        ]
+
+        for event_data in email_events:
+            exists = (
+                db.query(MessageEvent)
+                .filter(MessageEvent.provider_event_id == event_data["provider_event_id"])
+                .first()
+            )
+            if exists:
+                continue
+
+            db.add(
+                MessageEvent(
+                    org_id=org.id,
+                    message_job_id=email_job.id if email_job else None,
+                    channel="email",
+                    channel_address=DEFAULT_CONTACT_EMAIL,
+                    contact_id=demo_contact.id,
+                    provider_event_id=event_data["provider_event_id"],
+                    direction="outbound",
+                    template_name=event_data["template_name"],
+                    category="MARKETING",
+                    country_iso="GLOBAL",
+                    timestamp_provider=event_data["timestamp"],
+                    delivery_status=event_data["delivery_status"],
+                    unit_cost_minor=DEFAULT_EMAIL_UNIT_COST_MINOR,
+                    baseline_cost_minor=event_data["baseline_cost_minor"],
+                    currency="USD",
+                    attributes=event_data["attributes"],
+                )
+            )
+
+        sms_events = [
+            {
+                "provider_event_id": "sms_evt_seed_01",
+                "delivery_status": "delivered",
+                "timestamp": now - timedelta(hours=2),
+                "baseline_cost_minor": DEFAULT_SMS_UNIT_COST_MINOR + 60,
+                "attributes": {"provider_sid": "SM-SEED-01"},
+            },
+            {
+                "provider_event_id": "sms_evt_seed_02",
+                "delivery_status": "failed",
+                "timestamp": now - timedelta(hours=6),
+                "baseline_cost_minor": DEFAULT_SMS_UNIT_COST_MINOR + 40,
+                "attributes": {"provider_sid": "SM-SEED-02"},
+            },
+        ]
+
+        for event_data in sms_events:
+            exists = (
+                db.query(MessageEvent)
+                .filter(MessageEvent.provider_event_id == event_data["provider_event_id"])
+                .first()
+            )
+            if exists:
+                continue
+
+            db.add(
+                MessageEvent(
+                    org_id=org.id,
+                    message_job_id=sms_job.id if sms_job else None,
+                    channel="sms",
+                    channel_address=DEFAULT_MARKETING_CONTACT_PHONE,
+                    contact_id=marketing_contact.id,
+                    provider_event_id=event_data["provider_event_id"],
+                    direction="outbound",
+                    template_name="promo_sms",
+                    category="MARKETING",
+                    country_iso="BR",
+                    phone_cc="+55",
+                    timestamp_provider=event_data["timestamp"],
+                    delivery_status=event_data["delivery_status"],
+                    unit_cost_minor=DEFAULT_SMS_UNIT_COST_MINOR,
+                    baseline_cost_minor=event_data["baseline_cost_minor"],
+                    currency="USD",
+                    attributes=event_data["attributes"],
+                )
+            )
 
         conversation = (
             db.query(Conversation)

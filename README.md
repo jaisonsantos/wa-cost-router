@@ -22,6 +22,17 @@ Comandos úteis:
 - `make test-backend` – executa a suíte Pytest localizada em `backend/tests`.
 - `npm run test:e2e` – executa a suíte Playwright contra a stack sandbox (requer serviços do `make dev` ativos).
 
+### Recriando seeds após novas migrations
+
+Sempre que o modelo de dados for alterado por uma migration, aplique o schema atualizado e regenere os dados sandbox para manter a base consistente:
+
+```bash
+make migrate
+make seed
+```
+
+Se preferir executar manualmente, use `docker compose run --rm api alembic upgrade head` seguido de `docker compose run --rm api python scripts/seed.py`.
+
 ### Testes End-to-End
 
 A suíte Playwright, disponível em `tests/e2e`, simula envios via API sandbox (`SANDBOX_PROVIDERS=true`) e valida na UI os fluxos de e-mail e SMS.
