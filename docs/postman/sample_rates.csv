@@ -1,3 +1,5 @@
 provider_name,effective_from,country_iso,category,template_name,unit_cost_minor,currency,notes
 360dialog,2024-01-01T00:00:00+00:00,BR,MARKETING,,85,USD,Demo BR marketing rate
 360dialog,2024-01-01T00:00:00+00:00,BR,UTILITY,,42,USD,Demo BR utility rate
+Twilio,2024-01-01T00:00:00+00:00,BR,UTILITY,,38,USD,Demo SMS utility rate
+SendGrid,2024-01-01T00:00:00+00:00,GLOBAL,UTILITY,,25,USD,Demo email utility rate
