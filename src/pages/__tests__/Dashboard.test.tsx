@@ -216,5 +216,101 @@ describe("Dashboard", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("timeout")).toBeInTheDocument();
   });
+
+  it("renders channel specific alerts with correct severity based on SLA and backlog", () => {
+    useDashboardMetricsMock.mockReturnValue({
+      data: {
+        total_messages: 0,
+        total_cost_minor: 0,
+        baseline_cost_minor: 0,
+        saved_minor: 0,
+        success_rate: 98,
+        avg_latency_ms: 1200,
+        top_countries: [],
+        top_templates: [],
+        alerts: [],
+        recommendations: [],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    useProviderMetricsMock.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    useChannelMetricsMock.mockReturnValue({
+      data: [
+        {
+          channel: "sms",
+          conversations_opened: 80,
+          conversations_closed: 74,
+          backlog: { open: 6, pending: 2, closed: 74 },
+          first_response: { average_seconds: 62, sample_size: 74 },
+          sla: { target_seconds: 60, within_target: 58, total_tracked: 74, compliance_rate: 82 },
+        },
+        {
+          channel: "email",
+          conversations_opened: 95,
+          conversations_closed: 70,
+          backlog: { open: 10, pending: 5, closed: 70 },
+          first_response: { average_seconds: 91, sample_size: 70 },
+          sla: { target_seconds: 60, within_target: 45, total_tracked: 70, compliance_rate: 65 },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    useQueueMetricsMock.mockReturnValue({
+      data: [
+        {
+          channel: "sms",
+          backlog: { open: 9, responded: 3, closed: 74, total: 86 },
+          first_response: { average_seconds: 59, sample_size: 74 },
+          sla: { target_seconds: 60, within_target: 58, total_tracked: 74, compliance_rate: 82 },
+        },
+        {
+          channel: "email",
+          backlog: { open: 16, responded: 6, closed: 70, total: 92 },
+          first_response: { average_seconds: 91, sample_size: 70 },
+          sla: { target_seconds: 60, within_target: 45, total_tracked: 70, compliance_rate: 65 },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderDashboard();
+
+    expect(screen.getByText("Alertas por canal")).toBeInTheDocument();
+    expect(
+      screen.getByText("Sms apresenta queda de SLA (82.0%)."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Sms possui 9 conversas abertas no backlog."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Email está com apenas 65.0% dentro do SLA."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Tempo médio de primeira resposta (91s) excede a meta de 60s."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Email acumula 16 conversas abertas aguardando atendimento."),
+    ).toBeInTheDocument();
+
+    const warningBadges = screen.getAllByText("Atenção");
+    const criticalBadges = screen.getAllByText("Crítico");
+
+    expect(warningBadges.length).toBeGreaterThan(0);
+    expect(criticalBadges.length).toBeGreaterThan(0);
+  });
 });
 

@@ -186,4 +186,116 @@ describe("Messages", () => {
     const lastDetailsCall = useMessageJobDetailsMock.mock.calls.at(-1);
     expect(lastDetailsCall?.[1]).toMatchObject({ channel: "whatsapp", channel_address: undefined });
   });
+
+  it("shows unique channel options and resets filters when selecting all channels", async () => {
+    const createdAt = new Date("2024-01-01T12:00:00Z").toISOString();
+
+    const jobs = [
+      {
+        id: "job-whatsapp",
+        status: "processing",
+        direction: "outbound",
+        channel: "whatsapp",
+        channel_address: "+5511988888888",
+        contact_id: null,
+        contact_name: null,
+        to_number: "+5511988888888",
+        template_id: "welcome_whatsapp",
+        template_category: "marketing",
+        country_iso: "BR",
+        created_at: createdAt,
+        total_cost_minor: null,
+      },
+      {
+        id: "job-email",
+        status: "delivered",
+        direction: "outbound",
+        channel: "email",
+        channel_address: "cliente@example.com",
+        contact_id: "contact-email",
+        contact_name: "Contato Email",
+        to_number: null,
+        template_id: "email_digest",
+        template_category: "utility",
+        country_iso: "US",
+        created_at: createdAt,
+        total_cost_minor: 250,
+      },
+      {
+        id: "job-sms",
+        status: "failed",
+        direction: "outbound",
+        channel: "sms",
+        channel_address: "+15551234567",
+        contact_id: null,
+        contact_name: null,
+        to_number: "+15551234567",
+        template_id: "otp_sms",
+        template_category: "utility",
+        country_iso: "US",
+        created_at: createdAt,
+        total_cost_minor: null,
+      },
+      {
+        id: "job-email-duplicate",
+        status: "failed",
+        direction: "outbound",
+        channel: "email",
+        channel_address: "duplicado@example.com",
+        contact_id: null,
+        contact_name: null,
+        to_number: null,
+        template_id: "email_digest",
+        template_category: "utility",
+        country_iso: "US",
+        created_at: createdAt,
+        total_cost_minor: null,
+      },
+    ];
+
+    useMessageJobsMock.mockReturnValue({
+      data: jobs,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    useMessageJobDetailsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderMessages();
+
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("combobox", { name: "Filtrar por canal" }));
+
+    const optionTexts = screen
+      .getAllByRole("option")
+      .map((option) => option.textContent?.trim())
+      .filter(Boolean) as string[];
+
+    expect(optionTexts[0]).toBe("Todos os canais");
+    expect(optionTexts.slice(1)).toEqual(["Email", "Sms", "Whatsapp"]);
+
+    await user.click(screen.getByRole("option", { name: "Sms" }));
+
+    let lastJobsCall = useMessageJobsMock.mock.calls.at(-1);
+    expect(lastJobsCall?.[0]).toMatchObject({ channel: "sms" });
+
+    let lastDetailsCall = useMessageJobDetailsMock.mock.calls.at(-1);
+    expect(lastDetailsCall?.[1]).toMatchObject({ channel: "sms", channel_address: undefined });
+
+    await user.click(screen.getByRole("combobox", { name: "Filtrar por canal" }));
+    await user.click(screen.getByRole("option", { name: "Todos os canais" }));
+
+    lastJobsCall = useMessageJobsMock.mock.calls.at(-1);
+    expect(lastJobsCall?.[0]).toMatchObject({ channel: undefined });
+
+    lastDetailsCall = useMessageJobDetailsMock.mock.calls.at(-1);
+    expect(lastDetailsCall?.[1]).toMatchObject({ channel: undefined, channel_address: undefined });
+  });
 });

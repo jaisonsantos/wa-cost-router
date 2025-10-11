@@ -20,6 +20,17 @@ Comandos úteis:
 - `make down` – derruba todos os serviços e volumes.
 - `make lint-backend` – valida estilo/código do backend com Ruff.
 - `make test-backend` – executa a suíte Pytest localizada em `backend/tests`.
+- `npm run test:e2e` – executa a suíte Playwright contra a stack sandbox (requer serviços do `make dev` ativos).
+
+### Testes End-to-End
+
+A suíte Playwright, disponível em `tests/e2e`, simula envios via API sandbox (`SANDBOX_PROVIDERS=true`) e valida na UI os fluxos de e-mail e SMS.
+
+1. Suba a stack local completa: `make dev`.
+2. Na primeira execução, instale navegadores Playwright: `npx playwright install --with-deps`.
+3. Execute os testes: `npm run test:e2e`.
+
+Os testes utilizam o usuário demo (`admin@demo.local` / `demo123`) criado pelo seed automático e limpam-se sozinhos ao final.
 
 ## Contribuindo
 

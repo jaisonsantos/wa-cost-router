@@ -231,9 +231,11 @@ ci-e2e: ## Spin up stack and execute Newman tests
 	echo "API did not become ready in time" >&2; \
 	exit 1; \
 	fi; \
-	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --reporters cli,junit --reporter-junit-export newman-report.xml; \
-	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --folder "Multi-Channel Regression" --iteration-data docs/postman/multi_channel_regression.json --reporters cli; \
-	'
+        npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --reporters cli,junit --reporter-junit-export newman-report.xml; \
+        npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --folder "Multi-Channel Regression" --iteration-data docs/postman/multi_channel_regression.json --reporters cli; \
+        npx playwright install --with-deps; \
+        npm run test:e2e; \
+        '
 
 shell-api: ## Open a shell inside the API container
 	$(DC) exec api bash
