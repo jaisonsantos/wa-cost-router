@@ -205,6 +205,39 @@ def _bootstrap_routing_stack(db_session, org_id, *, to_number: str = DEFAULT_NUM
     return provider, contact
 
 
+def _seed_contact_with_opt_in(
+    *,
+    contact_factory,
+    org_id,
+    phone: str | None = None,
+    email: str | None = None,
+    channel: str,
+    channel_address: str,
+):
+    return contact_factory(
+        org_id=org_id,
+        phone=phone,
+        email=email,
+        opt_ins=[{"channel": channel, "channel_address": channel_address}],
+    )
+
+
+def _create_rule_for_channel(
+    *,
+    routing_rule_factory,
+    org_id,
+    channel: str,
+    providers,
+    template_category: str = "MARKETING",
+):
+    return routing_rule_factory(
+        org_id=org_id,
+        channel=channel,
+        providers=providers,
+        template_category=template_category,
+    )
+
+
 def test_send_message_enforces_rate_limit(client, db_session, monkeypatch):
     test_client, org_id = client
 
@@ -405,7 +438,203 @@ def test_send_message_handles_delivery_exception(client, db_session, monkeypatch
     assert payload["status"] == "failed_final"
     assert payload["message"] == "Delivery orchestration error"
     assert payload["provider_used"] is None
-    assert db_session.query(MessageEvent).count() == 0
+
+
+def test_send_message_via_email_channel(
+    client,
+    db_session,
+    organization_factory,
+    contact_factory,
+    email_provider_seed,
+    routing_rule_factory,
+):
+    test_client, org_id = client
+    organization_factory(org_id=org_id)
+
+    seed = email_provider_seed(org_id=org_id)
+    _create_rule_for_channel(
+        routing_rule_factory=routing_rule_factory,
+        org_id=org_id,
+        channel="email",
+        providers=[seed["provider"]],
+    )
+
+    contact = _seed_contact_with_opt_in(
+        contact_factory=contact_factory,
+        org_id=org_id,
+        email="recipient@example.com",
+        channel="email",
+        channel_address="recipient@example.com",
+    )
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "email-success",
+            "channel": "email",
+            "contact_id": str(contact.id),
+            "template_id": "welcome_email",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Alice"]},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "delivered"
+    assert payload["provider_used"] == seed["provider"].name
+    assert payload["estimated_cost"] == 75
+
+    job = (
+        db_session.query(MessageJob)
+        .filter(MessageJob.id == uuid.UUID(payload["job_id"]))
+        .one()
+    )
+    assert job.channel == "email"
+    assert job.contact_id == contact.id
+
+
+def test_send_message_sms_with_fallback(
+    client,
+    db_session,
+    monkeypatch,
+    organization_factory,
+    contact_factory,
+    sms_provider_seed,
+    provider_factory,
+    routing_rule_factory,
+):
+    test_client, org_id = client
+    organization_factory(org_id=org_id)
+
+    primary_seed = sms_provider_seed(org_id=org_id, unit_cost_minor=220)
+    backup_provider = provider_factory(
+        org_id=org_id,
+        name="Backup Twilio",
+        provider_type="sms",
+        channel="sms",
+        unit_cost_minor=150,
+        country_iso="BR",
+        meta={"channels": {"sms": {"inbound_numbers": ["+15558670000"]}}},
+        credentials={
+            "account_sid": "AC999",
+            "auth_token": "backup-secret",
+            "from_number": "+15558670000",
+        },
+    )
+
+    _create_rule_for_channel(
+        routing_rule_factory=routing_rule_factory,
+        org_id=org_id,
+        channel="sms",
+        providers=[primary_seed["provider"], backup_provider],
+    )
+
+    contact = _seed_contact_with_opt_in(
+        contact_factory=contact_factory,
+        org_id=org_id,
+        phone="+15551230000",
+        channel="sms",
+        channel_address="+15551230000",
+    )
+
+    attempts: list[str] = []
+
+    class StubConnector:
+        def __init__(self, provider_name: str):
+            self.provider_name = provider_name
+
+        async def send_message(self, **kwargs):
+            attempts.append(self.provider_name)
+            if self.provider_name == primary_seed["provider"].name:
+                return {
+                    "success": False,
+                    "error_code": "500",
+                    "error_message": "primary failure",
+                }
+            return {
+                "success": True,
+                "provider_message_id": "backup-1",
+                "response": {"status": "ok"},
+            }
+
+    def fake_get_connector(provider_name, credentials, base_url, **kwargs):
+        return StubConnector(provider_name)
+
+    monkeypatch.setattr(messages_module, "get_connector", fake_get_connector)
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "sms-fallback",
+            "channel": "sms",
+            "contact_id": str(contact.id),
+            "template_id": "promo",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Promo"]},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "delivered_with_fallback"
+    assert payload["provider_used"] == backup_provider.name
+    assert attempts == [primary_seed["provider"].name, backup_provider.name]
+
+
+def test_send_message_idempotency_with_contact_id(
+    client,
+    db_session,
+    organization_factory,
+    contact_factory,
+    email_provider_seed,
+    routing_rule_factory,
+):
+    test_client, org_id = client
+    organization_factory(org_id=org_id)
+
+    seed = email_provider_seed(org_id=org_id)
+    _create_rule_for_channel(
+        routing_rule_factory=routing_rule_factory,
+        org_id=org_id,
+        channel="email",
+        providers=[seed["provider"]],
+    )
+
+    contact = _seed_contact_with_opt_in(
+        contact_factory=contact_factory,
+        org_id=org_id,
+        email="idem@example.com",
+        channel="email",
+        channel_address="idem@example.com",
+    )
+
+    payload = {
+        "idempotency_key": "contact-idem",
+        "channel": "email",
+        "contact_id": str(contact.id),
+        "template_id": "digest",
+        "template_category": "MARKETING",
+        "variables": {"body_params": ["Daily"]},
+    }
+
+    first = test_client.post("/messages/send", json=payload)
+    assert first.status_code == 200
+    first_job = first.json()["job_id"]
+
+    second = test_client.post("/messages/send", json=payload)
+    assert second.status_code == 200
+    payload_second = second.json()
+    assert payload_second["job_id"] == first_job
+    assert payload_second["message"] == "Message already processed (idempotent)"
+
+    assert (
+        db_session.query(MessageJob)
+        .filter(MessageJob.idempotency_key == payload["idempotency_key"])
+        .count()
+        == 1
+    )
+    assert db_session.query(MessageEvent).count() == 1
 
 
 def test_send_message_handles_job_commit_failure(client, db_session, monkeypatch):
