@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CheckCircle, XCircle, Clock, AlertCircle, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -15,7 +15,7 @@ import { MessageJobDetail, MessageJobSummary } from "@/types/api";
 export default function Messages() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<MessageJobSummary | null>(null);
 
   const channelParam = channelFilter === "all" ? undefined : channelFilter;
 
@@ -23,7 +23,10 @@ export default function Messages() {
     status: statusFilter === "all" ? undefined : statusFilter,
     channel: channelParam,
   });
-  const { data: jobDetails } = useMessageJobDetails(selectedJobId ?? "", { channel: channelParam });
+  const { data: jobDetails } = useMessageJobDetails(selectedJob?.id ?? "", {
+    channel: selectedJob?.channel ?? channelParam,
+    channel_address: selectedJob?.channel_address,
+  });
 
   const jobsList: MessageJobSummary[] = jobs ?? [];
   const jobDetailsData: MessageJobDetail | undefined = jobDetails;
@@ -156,7 +159,14 @@ export default function Messages() {
                     <TableCell className="font-mono text-sm">
                       {job.channel_address}
                     </TableCell>
-                    <TableCell>{job.contact_name ?? "Contato desconhecido"}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <span>{job.contact_name ?? "Contato desconhecido"}</span>
+                        {job.contact_id ? (
+                          <span className="font-mono text-xs text-muted-foreground">{job.contact_id}</span>
+                        ) : null}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="font-medium">{job.template_id}</span>
@@ -183,7 +193,7 @@ export default function Messages() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => setSelectedJobId(job.id)}
+                        onClick={() => setSelectedJob(job)}
                         aria-label="Ver detalhes"
                       >
                         <Eye className="h-4 w-4" />
@@ -196,10 +206,11 @@ export default function Messages() {
           </CardContent>
         </Card>
 
-        <Dialog open={!!selectedJobId} onOpenChange={() => setSelectedJobId(null)}>
+        <Dialog open={!!selectedJob} onOpenChange={(open) => !open && setSelectedJob(null)}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Detalhes da Mensagem</DialogTitle>
+              <DialogDescription>Informações detalhadas do job selecionado.</DialogDescription>
             </DialogHeader>
             
             {jobDetailsData && (
@@ -211,7 +222,14 @@ export default function Messages() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Contato</p>
-                    <p>{jobDetailsData.contact_name ?? "Contato desconhecido"}</p>
+                    <div className="flex flex-col gap-1">
+                      <p>{jobDetailsData.contact_name ?? "Contato desconhecido"}</p>
+                      {jobDetailsData.contact_id ? (
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {jobDetailsData.contact_id}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Direção</p>

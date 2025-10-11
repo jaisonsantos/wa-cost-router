@@ -27,9 +27,10 @@ const formatSeconds = (seconds: number | null) => {
 
 const ChannelMetricCard = ({ metric, queueMetric }: ChannelMetricCardProps) => {
   const openBacklog = queueMetric?.backlog.open ?? metric.backlog.open;
-  const pendingBacklog = queueMetric?.backlog.pending ?? metric.backlog.pending;
+  const inProgressBacklog = queueMetric?.backlog.responded ?? metric.backlog.pending;
   const closedBacklog = queueMetric?.backlog.closed ?? metric.backlog.closed;
-  const totalQueue = queueMetric?.backlog.total ?? openBacklog + pendingBacklog + closedBacklog;
+  const totalQueue = queueMetric?.backlog.total ?? openBacklog + inProgressBacklog + closedBacklog;
+  const inProgressLabel = queueMetric ? "Respondidas" : "Pendentes";
 
   return (
     <Card className="border-border bg-card/60 backdrop-blur">
@@ -59,8 +60,8 @@ const ChannelMetricCard = ({ metric, queueMetric }: ChannelMetricCardProps) => {
               <Users className="h-4 w-4" />
               <span>Na fila</span>
             </div>
-            <p className="mt-2 text-lg font-semibold">{pendingBacklog.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">Pendentes</p>
+            <p className="mt-2 text-lg font-semibold">{inProgressBacklog.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">{inProgressLabel}</p>
           </div>
           <div className="rounded-lg border bg-muted/40 p-3">
             <div className="flex items-center gap-2 text-muted-foreground">

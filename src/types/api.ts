@@ -136,6 +136,7 @@ export interface MessageJobSummary {
   direction: MessageDirection;
   channel: string;
   channel_address: string;
+  contact_id?: string | null;
   contact_name?: string | null;
   to_number: string;
   template_id: string;
@@ -154,6 +155,8 @@ export interface MessageJobDetail extends MessageJobSummary {
 export interface Event {
   id: string;
   direction: string;
+  channel?: string | null;
+  channel_address?: string | null;
   template_name?: string | null;
   category?: string | null;
   country_iso?: string | null;
@@ -466,10 +469,14 @@ export interface MessageJobsQueryParams {
   status?: string;
   channel?: string;
   direction?: MessageDirection;
+  channel_address?: string;
+  contact_id?: string;
+  queue?: string;
 }
 
 export interface MessageJobDetailsQueryParams {
   channel?: string;
+  channel_address?: string;
 }
 
 export interface CreateWAConnectionPayload {
@@ -496,10 +503,13 @@ export interface ProviderCredentialsRequest {
 
 export interface SendMessageRequest {
   idempotency_key: string;
-  to_number: string;
+  channel: string;
   template_id: string;
   template_category: string;
   variables: Record<string, unknown>;
+  contact_id?: string;
+  channel_address?: string;
+  to_number?: string;
   country_iso?: string;
 }
 
