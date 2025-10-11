@@ -26,6 +26,7 @@
     "channel": "email",
     "template_id": "email_digest",
     "template_category": "UTILITY",
+    "country_iso": "GLOBAL",
     "variables": {
       "subject": "Resumo diário",
       "html_content": "<p>Mensagem automatizada gerada pela suíte multi-canal</p>"

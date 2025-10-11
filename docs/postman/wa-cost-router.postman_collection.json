@@ -516,7 +516,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Route BR Marketing\",\n  \"is_enabled\": true,\n  \"conditions\": [\n    {\n      \"type\": \"country\",\n      \"values\": [\"BR\"]\n    },\n    {\n      \"type\": \"category\",\n      \"values\": [\"MARKETING\"]\n    }\n  ],\n  \"actions\": {\n    \"primary_provider\": \"{{provider_id}}\",\n    \"fallback_chain\": []\n  },\n  \"priority\": 10\n}"
+              "raw": "{\n  \"name\": \"Route BR Marketing\",\n  \"is_enabled\": true,\n  \"conditions\": [\n    {\n      \"type\": \"country\",\n      \"values\": [\"BR\"]\n    },\n    {\n      \"type\": \"category\",\n      \"values\": [\"MARKETING\"]\n    }\n  ],\n  \"actions\": {\n    \"channel\": \"whatsapp\",\n    \"primary_provider\": \"{{provider_id}}\",\n    \"fallback_chain\": []\n  },\n  \"priority\": 10\n}"
             },
             "url": {
               "raw": "{{base_url}}/rules",
@@ -541,7 +541,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Route BR Marketing\",\n  \"is_enabled\": true,\n  \"conditions\": [\n    {\n      \"type\": \"country\",\n      \"values\": [\"BR\"]\n    },\n    {\n      \"type\": \"category\",\n      \"values\": [\"MARKETING\"]\n    }\n  ],\n  \"actions\": {\n    \"primary_provider\": \"{{provider_id}}\",\n    \"fallback_chain\": []\n  },\n  \"priority\": 20\n}"
+              "raw": "{\n  \"name\": \"Route BR Marketing\",\n  \"is_enabled\": true,\n  \"conditions\": [\n    {\n      \"type\": \"country\",\n      \"values\": [\"BR\"]\n    },\n    {\n      \"type\": \"category\",\n      \"values\": [\"MARKETING\"]\n    }\n  ],\n  \"actions\": {\n    \"channel\": \"whatsapp\",\n    \"primary_provider\": \"{{provider_id}}\",\n    \"fallback_chain\": []\n  },\n  \"priority\": 20\n}"
             },
             "url": {
               "raw": "{{base_url}}/rules/{{rule_id}}",
@@ -551,6 +551,56 @@
               "path": [
                 "rules",
                 "{{rule_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Rules - Create SMS Utility",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Route BR Utility SMS\",\n  \"is_enabled\": true,\n  \"conditions\": [\n    {\n      \"type\": \"country\",\n      \"values\": [\"BR\"]\n    },\n    {\n      \"type\": \"category\",\n      \"values\": [\"UTILITY\"]\n    }\n  ],\n  \"actions\": {\n    \"channel\": \"sms\",\n    \"primary_provider\": \"{{sms_provider_id}}\",\n    \"fallback_chain\": []\n  },\n  \"priority\": 15\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rules",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "rules"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Rules - Create Email Utility",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Route Global Utility Email\",\n  \"is_enabled\": true,\n  \"conditions\": [\n    {\n      \"type\": \"category\",\n      \"values\": [\"UTILITY\"]\n    },\n    {\n      \"type\": \"country\",\n      \"values\": [\"GLOBAL\", \"XX\"]\n    }\n  ],\n  \"actions\": {\n    \"channel\": \"email\",\n    \"primary_provider\": \"{{email_provider_id}}\",\n    \"fallback_chain\": []\n  },\n  \"priority\": 30\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rules",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "rules"
               ]
             }
           }
@@ -1817,6 +1867,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "(() => {",
+                  "  const CryptoJS = require('crypto-js');",
                   "  const secret = pm.environment.get('wa_webhook_secret') || '';",
                   "  const body = pm.request.body && pm.request.body.raw ? pm.request.body.raw : '';",
                   "  const signature = CryptoJS.HmacSHA256(body, secret).toString(CryptoJS.enc.Hex);",
@@ -1903,7 +1954,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "(() => {",
-                  "  const crypto = require('crypto');",
+                  "  const CryptoJS = require('crypto-js');",
                   "  const rawBody = pm.request.body && pm.request.body.urlencoded;",
                   "  const entries = [];",
                   "  const pushEntry = (item) => {",
@@ -1941,7 +1992,8 @@
                   "    entries.forEach(([key, value]) => {",
                   "      payload += key + value;",
                   "    });",
-                  "    signature = crypto.createHmac('sha1', authToken).update(payload, 'utf8').digest('base64');",
+                  "    const hmac = CryptoJS.HmacSHA1(payload, authToken);",
+                  "    signature = CryptoJS.enc.Base64.stringify(hmac);",
                   "  }",
                   "  pm.request.headers.upsert({ key: 'X-Twilio-Signature', value: signature });",
                   "})();"
@@ -2045,6 +2097,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "(() => {",
+                  "  const CryptoJS = require('crypto-js');",
                   "  const secret = pm.environment.get('email_webhook_secret') || '';",
                   "  const body = pm.request.body && pm.request.body.raw ? pm.request.body.raw : '';",
                   "  const resolvedBody = pm.variables.replaceIn(body);",

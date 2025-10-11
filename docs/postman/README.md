@@ -10,7 +10,7 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 1. **Auth** – registra usuário aleatório (`postman+timestamp`) com senha forte gerada no runtime e efetua login (token salvo automaticamente).
 2. **Organization** – obtém `org_id` via `/orgs/current`.
 3. **Providers** – cria provedores WhatsApp (360dialog), SMS (Twilio) e e-mail (SendGrid), persiste credenciais fake e executa health check.
-4. **Rules** – lista, cria, atualiza e alterna regras, incluindo simulação avançada.
+4. **Rules** – lista, cria, atualiza e alterna regras, incluindo simulação avançada e regras utilitárias específicas para SMS/e-mail.
 5. **Messages** – envia mensagem, lista jobs, consulta detalhes do job usando `job_id` capturado, executa o cenário opcional **Messages - Rate Limit Demo** para validar respostas `429` e concentra a pasta **Multi-Channel Regression** para validar WhatsApp/SMS/e-mail.
 6. **Contacts** – dispara importação assíncrona (`POST /contacts/imports`), lista catálogos, cria contato, edita atributos, alterna status ativo/inativo e consulta histórico de consentimento.
 7. **Contact Segments** – cria segmento, atualiza metadados, associa/desassocia o contato criado e configura política de limites/opt-out.
@@ -60,7 +60,7 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 #### SMS (Twilio)
 
 - `SMS - Webhook Receive` envia corpo `x-www-form-urlencoded` com os campos padrão (`MessageSid`, `MessagingServiceSid`, `From`, `To`, `Body`, `Timestamp`).
-- O script *pre-request* ordena os pares chave/valor, concatena com a URL final (`{{base_url}}/integrations/sms/webhook`) e calcula o HMAC SHA-1 usando `sms_webhook_auth_token` via módulo `crypto` nativo, reproduzindo a assinatura da Twilio. O digest é convertido em Base64 e enviado no header `X-Twilio-Signature`.
+- O script *pre-request* ordena os pares chave/valor, concatena com a URL final (`{{base_url}}/integrations/sms/webhook`) e calcula o HMAC SHA-1 usando `sms_webhook_auth_token` com o módulo `crypto-js` embutido no Postman/Newman, reproduzindo a assinatura da Twilio. O digest é convertido em Base64 e enviado no header `X-Twilio-Signature`.
 - Ajuste `sms_contact_phone`, `sms_inbound_number` e, quando aplicável, `sms_messaging_service_sid` para simular múltiplos números inbound por organização.
 
 #### E-mail
