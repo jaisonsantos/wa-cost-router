@@ -115,7 +115,9 @@ test.describe("Messages end-to-end", () => {
 
     await page.goto("/messages");
     await expect(page).toHaveURL(/\/messages$/);
-    await expect(page.getByRole("heading", { name: "Mensagens" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Mensagens" }),
+    ).toBeVisible();
 
     const tableBody = page.locator("table tbody");
 
