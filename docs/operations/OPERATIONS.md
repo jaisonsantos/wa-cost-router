@@ -79,7 +79,7 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 
 - **Readiness**: `GET /admin/health` (proteção necessária antes de produção).
 - **Workers**: monitorar filas Redis (`rq info`) e eventos de falha via logs.
-- **Métricas Prometheus**: endpoint `/admin/metrics` publica contadores (`messages_send_total`, `messages_delivery_attempts_total`, `admin_metrics_scrapes_total`) e gauges (`messages_circuit_breaker_state`, `admin_circuit_breakers_open_total`, `admin_circuit_breakers_half_open_total`). Mantenha protegido por rede privada ou auth (ver backlog P1 "proteger-admin-metrics").
+- **Métricas Prometheus**: endpoint `/admin/metrics` publica contadores (`messages_send_total{status,provider,channel}`, `messages_delivery_attempts_total{provider_id,provider,outcome,channel}`, `admin_metrics_scrapes_total`, `sla_first_response_tracked_total{channel}`, `sla_first_response_within_target_total{channel}`), histograma (`sla_first_response_seconds{channel}`) e gauges (`messages_circuit_breaker_state{provider_id}`, `admin_circuit_breakers_open_total`, `admin_circuit_breakers_half_open_total`, `sla_first_response_target_seconds{channel}`). Mantenha protegido por rede privada ou auth (ver backlog P1 "proteger-admin-metrics").
 - **Logs**: `make logs` segue a API com `--tail=200`. Para outros serviços use `docker-compose logs -f <service>`.
 
 ## Backup & restore

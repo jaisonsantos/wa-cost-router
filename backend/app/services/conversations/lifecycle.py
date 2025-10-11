@@ -14,6 +14,8 @@ from app.models.models import (
     QueueStatusEnum,
 )
 
+from app.metrics import record_first_response_latency
+
 
 class ConversationLifecycleService:
     """Service responsible for opening, updating and closing conversations."""
@@ -125,6 +127,11 @@ class ConversationLifecycleService:
             queue_entry.status = QueueStatusEnum.responded
             conversation.first_response_at = occurred_at
             conversation.first_response_latency_seconds = queue_entry.first_response_latency_seconds
+            record_first_response_latency(
+                channel=channel,
+                latency_seconds=queue_entry.first_response_latency_seconds,
+                target_seconds=self.sla_target_seconds,
+            )
         elif (
             conversation.first_response_at is None
             and conversation.last_inbound_at is not None
@@ -133,6 +140,11 @@ class ConversationLifecycleService:
             conversation.first_response_latency_seconds = self._seconds_between(
                 conversation.last_inbound_at,
                 occurred_at,
+            )
+            record_first_response_latency(
+                channel=channel,
+                latency_seconds=conversation.first_response_latency_seconds,
+                target_seconds=self.sla_target_seconds,
             )
 
         if queue_entry and queue_entry.closed_at is None:
