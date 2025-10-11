@@ -3,6 +3,7 @@
     "channel": "whatsapp",
     "template_id": "welcome",
     "template_category": "MARKETING",
+    "country_iso": "BR",
     "address_env": "wa_contact_phone",
     "variables": {
       "body_params": [
