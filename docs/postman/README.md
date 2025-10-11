@@ -31,6 +31,7 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 | `base_url` | URL base da API (default `http://localhost:8000`). |
 | `email` / `password` | Credenciais seed (`admin@demo.local` / `demo123`) usadas como fallback até o prerequest gerar valores fortes por execução. |
 | `token` | JWT salvo pelos testes (não preencha manualmente). |
+| `mc_setup_complete` | Flag controlada pelo script da pasta **Multi-Channel Regression** para evitar recriar provedores/regras a cada iteração (não altere manualmente). |
 | `org_id`, `provider_id`, `rule_id`, `job_id`, `contact_id`, `segment_id`, `contact_import_job_id` | IDs capturados automaticamente para uso em chamadas subsequentes. |
 | `rates_csv_path` | Caminho do CSV usado no import de tarifas (`docs/postman/sample_rates.csv`). |
 | `contacts_csv_path` | Caminho do CSV usado no import de contatos (`docs/postman/sample_contacts.csv`). |
@@ -46,6 +47,7 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 | `email_provider_id` | ID persistido após criar o provedor SendGrid. |
 | `email_api_key` | API key fictícia utilizada para autenticar o conector SendGrid durante os testes. |
 | `email_from_address` | Remetente padrão associado ao provedor de e-mail; pode ser sobrescrito por cenário. |
+| `email_default_country_iso` | Código ISO alfa-2 usado como fallback para e-mails quando o dataset enviar `GLOBAL` ou deixar `country_iso` vazio (default `US`). |
 | `email_webhook_token` | Token utilizado para autenticar as rotas `/integrations/email/webhook`. |
 | `email_webhook_secret` | Secret usado para assinar o header `X-Email-Signature` nas requisições inbound de e-mail. |
 
@@ -111,7 +113,10 @@ O arquivo [`multi_channel_regression.json`](./multi_channel_regression.json) par
 
 - `channel`: aceita `whatsapp`, `sms` ou `email` (pode ser expandido para novos canais sem alterar a coleção).
 - `address_env`: nome da variável de ambiente que contém o endereço do canal (quando vazio, o script gera fallback). Para e-mail é gerado automaticamente `postman-multichannel-<timestamp>@example.com`.
+- `country_iso`: código ISO alfa-2 considerado pela regra de roteamento. Quando omitido, o prerequest usa `BR` para WhatsApp/SMS e o valor de `email_default_country_iso` (default `US`) para e-mail.
 - `variables`: objeto arbitrário enviado para o template — utilize chaves coerentes com os placeholders cadastrados no backend. Para e-mail, o script garante `from_email`, `subject` e `html_content` (derivado de `body` quando presente) antes de enviar.
+
+O script *pre-request* da pasta autentica em toda execução, provisiona (ou reaproveita) provedores WhatsApp/SMS/e-mail com credenciais fictícias, cria as regras utilitárias necessárias e só então monta o payload. A flag `mc_setup_complete` garante idempotência quando múltiplas iterações são executadas no mesmo ambiente.
 
 Ao rodar `make postman-test`, todos os cenários são processados sequencialmente e o `job_id` da última execução permanece disponível para consultas posteriores.
 
