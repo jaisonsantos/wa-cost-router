@@ -135,10 +135,10 @@ describe("Messages", () => {
     expect(screen.getAllByText("contact-1").length).toBeGreaterThan(0);
   });
 
-  it("updates hooks when channel filter changes", async () => {
+  it("filters jobs client-side when channel filter changes", async () => {
     const createdAt = new Date("2024-01-01T12:00:00Z").toISOString();
 
-    const jobSummary = {
+    const whatsappJob = {
       id: "job-1",
       status: "delivered",
       direction: "outbound",
@@ -154,8 +154,24 @@ describe("Messages", () => {
       total_cost_minor: 1200,
     };
 
+    const emailJob = {
+      id: "job-2",
+      status: "processing",
+      direction: "outbound",
+      channel: "email",
+      channel_address: "cliente@example.com",
+      contact_id: "contact-2",
+      contact_name: "Cliente",
+      to_number: null,
+      template_id: "email_digest",
+      template_category: "utility",
+      country_iso: "US",
+      created_at: createdAt,
+      total_cost_minor: null,
+    };
+
     useMessageJobsMock.mockReturnValue({
-      data: [jobSummary],
+      data: [whatsappJob, emailJob],
       isLoading: false,
       isError: false,
       error: null,
@@ -163,7 +179,7 @@ describe("Messages", () => {
 
     useMessageJobDetailsMock.mockReturnValue({
       data: {
-        ...jobSummary,
+        ...whatsappJob,
         attempts: [],
         total_cost_minor: 1200,
         conversation_history: [],
@@ -177,13 +193,138 @@ describe("Messages", () => {
 
     const user = userEvent.setup();
 
+    expect(screen.getByText("cliente@example.com")).toBeInTheDocument();
+
     await user.click(screen.getByRole("combobox", { name: "Filtrar por canal" }));
     await user.click(screen.getByRole("option", { name: "Whatsapp" }));
 
-    const lastJobsCall = useMessageJobsMock.mock.calls.at(-1);
-    expect(lastJobsCall?.[0]).toMatchObject({ channel: "whatsapp" });
+    expect(screen.getByText("+5511988888888")).toBeInTheDocument();
+    expect(screen.queryByText("cliente@example.com")).not.toBeInTheDocument();
 
     const lastDetailsCall = useMessageJobDetailsMock.mock.calls.at(-1);
     expect(lastDetailsCall?.[1]).toMatchObject({ channel: "whatsapp", channel_address: undefined });
+
+    useMessageJobsMock.mock.calls.forEach(([params]) => {
+      if (params) {
+        expect((params as Record<string, unknown>).channel).toBeUndefined();
+      }
+    });
+  });
+
+  it("shows unique channel options and resets filters when selecting all channels", async () => {
+    const createdAt = new Date("2024-01-01T12:00:00Z").toISOString();
+
+    const jobs = [
+      {
+        id: "job-whatsapp",
+        status: "processing",
+        direction: "outbound",
+        channel: "whatsapp",
+        channel_address: "+5511988888888",
+        contact_id: null,
+        contact_name: null,
+        to_number: "+5511988888888",
+        template_id: "welcome_whatsapp",
+        template_category: "marketing",
+        country_iso: "BR",
+        created_at: createdAt,
+        total_cost_minor: null,
+      },
+      {
+        id: "job-email",
+        status: "delivered",
+        direction: "outbound",
+        channel: "email",
+        channel_address: "cliente@example.com",
+        contact_id: "contact-email",
+        contact_name: "Contato Email",
+        to_number: null,
+        template_id: "email_digest",
+        template_category: "utility",
+        country_iso: "US",
+        created_at: createdAt,
+        total_cost_minor: 250,
+      },
+      {
+        id: "job-sms",
+        status: "failed",
+        direction: "outbound",
+        channel: "sms",
+        channel_address: "+15551234567",
+        contact_id: null,
+        contact_name: null,
+        to_number: "+15551234567",
+        template_id: "otp_sms",
+        template_category: "utility",
+        country_iso: "US",
+        created_at: createdAt,
+        total_cost_minor: null,
+      },
+      {
+        id: "job-email-duplicate",
+        status: "failed",
+        direction: "outbound",
+        channel: "email",
+        channel_address: "duplicado@example.com",
+        contact_id: null,
+        contact_name: null,
+        to_number: null,
+        template_id: "email_digest",
+        template_category: "utility",
+        country_iso: "US",
+        created_at: createdAt,
+        total_cost_minor: null,
+      },
+    ];
+
+    useMessageJobsMock.mockReturnValue({
+      data: jobs,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    useMessageJobDetailsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderMessages();
+
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("combobox", { name: "Filtrar por canal" }));
+
+    const optionTexts = screen
+      .getAllByRole("option")
+      .map((option) => option.textContent?.trim())
+      .filter(Boolean) as string[];
+
+    expect(optionTexts[0]).toBe("Todos os canais");
+    expect(optionTexts.slice(1)).toEqual(["Email", "Sms", "Whatsapp"]);
+
+    await user.click(screen.getByRole("option", { name: "Sms" }));
+
+    expect(screen.getAllByText("+15551234567").length).toBeGreaterThan(0);
+    expect(screen.queryByText("cliente@example.com")).not.toBeInTheDocument();
+
+    let lastDetailsCall = useMessageJobDetailsMock.mock.calls.at(-1);
+    expect(lastDetailsCall?.[1]).toMatchObject({ channel: "sms", channel_address: undefined });
+
+    await user.click(screen.getByRole("combobox", { name: "Filtrar por canal" }));
+    await user.click(screen.getByRole("option", { name: "Todos os canais" }));
+
+    expect(screen.getByText("cliente@example.com")).toBeInTheDocument();
+
+    lastDetailsCall = useMessageJobDetailsMock.mock.calls.at(-1);
+    expect(lastDetailsCall?.[1]).toMatchObject({ channel: undefined, channel_address: undefined });
+
+    useMessageJobsMock.mock.calls.forEach(([params]) => {
+      if (params) {
+        expect((params as Record<string, unknown>).channel).toBeUndefined();
+      }
+    });
   });
 });

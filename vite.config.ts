@@ -24,6 +24,7 @@ export default defineConfig(({ mode }) => ({
       "src/**/*.{test,spec}.{ts,tsx}",
       "tests/**/*.{test,spec}.{ts,tsx}",
     ],
+    exclude: ["tests/e2e/**"],
     coverage: {
       reporter: ["text", "lcov"],
       include: ["src/**/*.{ts,tsx}"],
