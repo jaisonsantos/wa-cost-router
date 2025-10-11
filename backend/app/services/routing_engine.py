@@ -265,6 +265,18 @@ class RoutingEngine:
             .first()
         )
 
+        if not rate and country_iso != "GLOBAL":
+            rate = (
+                self.db.query(RateCard)
+                .filter(
+                    RateCard.provider_id == provider_id,
+                    RateCard.country_iso == "GLOBAL",
+                    RateCard.category == category,
+                )
+                .order_by(RateCard.effective_from.desc())
+                .first()
+            )
+
         return rate.unit_cost_minor if rate else 0
     
     def _find_cheapest_provider(

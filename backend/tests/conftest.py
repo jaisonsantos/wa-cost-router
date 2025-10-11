@@ -205,6 +205,7 @@ def email_provider_seed(provider_factory, db_session):
         token: str = "email-token",
         signing_secret: str = "email-secret",
         unit_cost_minor: int = 75,
+        from_email: str = "sandbox@demo.local",
     ) -> Dict[str, Any]:
         provider = provider_factory(
             org_id=org_id,
@@ -212,11 +213,20 @@ def email_provider_seed(provider_factory, db_session):
             provider_type="email",
             channel="email",
             unit_cost_minor=unit_cost_minor,
-            country_iso="XX",
-            meta={},
+            country_iso="GLOBAL",
+            meta={
+                "channels": {
+                    "email": {
+                        "from_address": from_email,
+                        "sandbox": True,
+                    }
+                }
+            },
             credentials={
                 "api_key": "sg-test",
+                "from_email": from_email,
                 "webhook_token": token,
+                "inbound_verify_token": token,
                 "inbound_signing_secret": signing_secret,
             },
         )
@@ -232,7 +242,9 @@ def email_provider_seed(provider_factory, db_session):
             "provider": provider,
             "credential": credential,
             "token": token,
+            "verify_token": token,
             "signing_secret": signing_secret,
+            "from_email": from_email,
         }
 
     return _create
@@ -245,6 +257,7 @@ def sms_provider_seed(provider_factory, db_session):
         org_id: uuid.UUID,
         number: str = "+15558675309",
         auth_token: str = "sms-secret",
+        verify_token: str = "sms-verify",
         unit_cost_minor: int = 140,
     ) -> Dict[str, Any]:
         provider = provider_factory(
@@ -255,13 +268,19 @@ def sms_provider_seed(provider_factory, db_session):
             unit_cost_minor=unit_cost_minor,
             country_iso="BR",
             meta={
-                "channels": {"sms": {"inbound_numbers": [number]}},
+                "channels": {
+                    "sms": {
+                        "inbound_numbers": [number],
+                        "sandbox": True,
+                    }
+                },
             },
             credentials={
                 "account_sid": "AC123456789",
                 "auth_token": auth_token,
                 "from_number": number,
-                "inbound_verify_token": "sms-verify",
+                "inbound_verify_token": verify_token,
+                "webhook_token": verify_token,
             },
         )
 
@@ -277,6 +296,7 @@ def sms_provider_seed(provider_factory, db_session):
             "credential": credential,
             "auth_token": auth_token,
             "number": number,
+            "verify_token": verify_token,
         }
 
     return _create
