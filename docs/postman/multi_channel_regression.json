@@ -1,0 +1,30 @@
+[
+  {
+    "channel": "whatsapp",
+    "template_id": "welcome",
+    "template_category": "MARKETING",
+    "address_env": "wa_contact_phone",
+    "variables": {
+      "body_params": ["John Multi"]
+    }
+  },
+  {
+    "channel": "sms",
+    "template_id": "otp_sms",
+    "template_category": "UTILITY",
+    "address_env": "sms_contact_phone",
+    "country_iso": "BR",
+    "variables": {
+      "body_params": ["123456"]
+    }
+  },
+  {
+    "channel": "email",
+    "template_id": "email_digest",
+    "template_category": "UTILITY",
+    "variables": {
+      "subject": "Resumo diário",
+      "body": "Mensagem automatizada gerada pela suíte multi-canal"
+    }
+  }
+]
