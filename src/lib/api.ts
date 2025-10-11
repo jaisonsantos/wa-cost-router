@@ -371,6 +371,15 @@ class ApiClient {
     if (params.direction) {
       searchParams.append("direction", params.direction);
     }
+    if (params.channel_address) {
+      searchParams.append("channel_address", params.channel_address);
+    }
+    if (params.contact_id) {
+      searchParams.append("contact_id", params.contact_id);
+    }
+    if (params.queue) {
+      searchParams.append("queue", params.queue);
+    }
     const query = searchParams.toString();
     return this.request<MessageJobSummary[]>(`/messages/jobs${query ? `?${query}` : ""}`);
   }
@@ -382,6 +391,9 @@ class ApiClient {
     const searchParams = new URLSearchParams();
     if (params.channel) {
       searchParams.append("channel", params.channel);
+    }
+    if (params.channel_address) {
+      searchParams.append("channel_address", params.channel_address);
     }
     const query = searchParams.toString();
     return this.request<MessageJobDetail>(`/messages/jobs/${jobId}${query ? `?${query}` : ""}`);

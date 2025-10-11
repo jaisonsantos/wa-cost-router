@@ -39,6 +39,7 @@ interface TemplateReportRow {
   percentage: number;
   messages: number;
   countries: string[];
+  channels: string[];
 }
 
 interface HourlyReportRow {
@@ -48,6 +49,13 @@ interface HourlyReportRow {
   savingsEuro: number;
   percentage: number;
 }
+
+const formatChannelLabel = (channel: string) =>
+  channel
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 
 const Reports = () => {
   const [timeRange, setTimeRange] = useState("7d");
@@ -131,6 +139,7 @@ const Reports = () => {
         messages: number;
         category: string;
         countries: Set<string>;
+        channels: Set<string>;
       }
     >
   >((acc, event) => {
@@ -142,6 +151,7 @@ const Reports = () => {
         messages: 0,
         category: event.category ?? "Unknown",
         countries: new Set<string>(),
+        channels: new Set<string>(),
       };
     }
     const cost = (event.unit_cost_minor ?? 0) / 100;
@@ -150,6 +160,9 @@ const Reports = () => {
     acc[template].messages += 1;
     if (event.country_iso) {
       acc[template].countries.add(event.country_iso);
+    }
+    if (event.channel) {
+      acc[template].channels.add(event.channel);
     }
     return acc;
   }, {});
@@ -166,6 +179,7 @@ const Reports = () => {
       percentage,
       messages: stats.messages,
       countries: Array.from(stats.countries).slice(0, 3),
+      channels: Array.from(stats.channels).slice(0, 3),
     };
   });
 
@@ -428,7 +442,10 @@ const Reports = () => {
                   </p>
                 ) : (
                   templateData.map((template, index) => (
-                  <div key={index} className="grid grid-cols-7 gap-4 p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                  <div
+                    key={index}
+                    className="grid grid-cols-8 gap-4 p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                  >
                     <div>
                       <p className="font-medium">{template.name}</p>
                       <Badge
@@ -470,6 +487,15 @@ const Reports = () => {
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground">Países</p>
                       <p className="text-xs">{template.countries.join(", ")}</p>
+                    </div>
+
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground">Canais</p>
+                      <p className="text-xs">
+                        {template.channels.length > 0
+                          ? template.channels.map((channel) => formatChannelLabel(channel)).join(", ")
+                          : "—"}
+                      </p>
                     </div>
                   </div>
                   ))

@@ -54,6 +54,7 @@ describe("Messages", () => {
       direction: "outbound",
       channel: "whatsapp",
       channel_address: "+5511988888888",
+      contact_id: "contact-1",
       contact_name: "Maria Oliveira",
       to_number: "+5511999999999",
       template_id: "welcome_template",
@@ -119,18 +120,19 @@ describe("Messages", () => {
 
     const lastDetailsCallBeforeClick = useMessageJobDetailsMock.mock.calls.at(-1);
     expect(lastDetailsCallBeforeClick?.[0]).toBe("");
-    expect(lastDetailsCallBeforeClick?.[1]).toEqual({ channel: undefined });
+    expect(lastDetailsCallBeforeClick?.[1]).toEqual({ channel: undefined, channel_address: undefined });
 
     fireEvent.click(screen.getByRole("button", { name: /ver detalhes/i }));
 
     const lastDetailsCall = useMessageJobDetailsMock.mock.calls.at(-1);
     expect(lastDetailsCall?.[0]).toBe("job-1");
-    expect(lastDetailsCall?.[1]).toEqual({ channel: undefined });
+    expect(lastDetailsCall?.[1]).toEqual({ channel: "whatsapp", channel_address: "+5511988888888" });
 
     expect(screen.getByText("Histórico da Conversa")).toBeInTheDocument();
     expect(screen.getByText("Olá, Maria!")).toBeInTheDocument();
     expect(screen.getAllByText("Inbound").length).toBeGreaterThan(0);
     expect(screen.getByText("Remetente: Plataforma")).toBeInTheDocument();
+    expect(screen.getAllByText("contact-1").length).toBeGreaterThan(0);
   });
 
   it("updates hooks when channel filter changes", async () => {
@@ -142,6 +144,7 @@ describe("Messages", () => {
       direction: "outbound",
       channel: "whatsapp",
       channel_address: "+5511988888888",
+      contact_id: "contact-1",
       contact_name: "Maria Oliveira",
       to_number: "+5511999999999",
       template_id: "welcome_template",
@@ -181,6 +184,6 @@ describe("Messages", () => {
     expect(lastJobsCall?.[0]).toMatchObject({ channel: "whatsapp" });
 
     const lastDetailsCall = useMessageJobDetailsMock.mock.calls.at(-1);
-    expect(lastDetailsCall?.[1]).toMatchObject({ channel: "whatsapp" });
+    expect(lastDetailsCall?.[1]).toMatchObject({ channel: "whatsapp", channel_address: undefined });
   });
 });
