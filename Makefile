@@ -171,10 +171,10 @@ seed-providers: ## Seed default providers for the current org
 	$(DC) run --rm api python scripts/seed_providers.py
 
 test-backend: ## Run backend test suite (pytest)
-        pytest backend/tests --cov=backend/app --cov=backend/scripts --cov-report=term --cov-report=xml:backend/coverage.xml
+	pytest backend/tests --cov=backend/app --cov=backend/scripts --cov-report=term --cov-report=xml:backend/coverage.xml
 
 test-backend-multichannel: ## Run targeted multi-channel backend tests (email/SMS sandbox flows)
-        scripts/test-backend-multichannel.sh
+	scripts/test-backend-multichannel.sh
 
 postman-test: ## Run Newman collection tests against local stack
 	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --verbose
@@ -192,19 +192,19 @@ ci-backend: ## Build backend images and verify migrations
 	$(DC) run --rm api alembic upgrade head
 
 ci-frontend: ## Lint and build the frontend
-        npm ci
-        npm run lint
-        npm run build
+	npm ci
+	npm run lint
+	npm run build
 
 test-frontend: ## Execute frontend unit tests (Vitest)
-        scripts/test-frontend.sh
+	scripts/test-frontend.sh
 
 ci-e2e: ## Spin up stack and execute Newman + Playwright tests
-        @bash -c '\
-        set -euo pipefail; \
-        trap "$(DC) down -v" EXIT; \
-        $(DC) down -v >/dev/null 2>&1 || true; \
-        $(DC) up -d db redis; \
+	@bash -c '\
+	set -euo pipefail; \
+	trap "$(DC) down -v" EXIT; \
+	$(DC) down -v >/dev/null 2>&1 || true; \
+	$(DC) up -d db redis; \
 	echo "Waiting for Postgres to be ready..."; \
 	ready=0; \
 	for i in $$(seq 1 30); do \
@@ -238,13 +238,13 @@ ci-e2e: ## Spin up stack and execute Newman + Playwright tests
 	echo "API did not become ready in time" >&2; \
 	exit 1; \
 	fi; \
-        npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --reporters cli,junit --reporter-junit-export newman-report.xml; \
-        npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --folder "Multi-Channel Regression" --iteration-data docs/postman/multi_channel_regression.json --reporters cli; \
-        E2E_API_BASE_URL=http://localhost:8000 PLAYWRIGHT_INSTALL_ARGS="--with-deps" scripts/test-e2e.sh; \
-        '
+	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --reporters cli,junit --reporter-junit-export newman-report.xml; \
+	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --folder "Multi-Channel Regression" --iteration-data docs/postman/multi_channel_regression.json --reporters cli; \
+	E2E_API_BASE_URL=http://localhost:8000 PLAYWRIGHT_INSTALL_ARGS="--with-deps" scripts/test-e2e.sh; \
+	'
 
 test-e2e: ## Run Playwright end-to-end UI regression (requires API stack running)
-        scripts/test-e2e.sh
+	scripts/test-e2e.sh
 
 shell-api: ## Open a shell inside the API container
 	$(DC) exec api bash
