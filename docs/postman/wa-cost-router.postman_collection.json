@@ -366,6 +366,106 @@
               ]
             }
           }
+        },
+        {
+          "name": "Providers - Create Email (SendGrid)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  let body = null;",
+                  "  try { body = pm.response.json(); } catch (err) { body = null; }",
+                  "  if (body && body.id) {",
+                  "    pm.environment.set('email_provider_id', body.id);",
+                  "  }",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"SendGrid\",\n  \"type\": \"email\",\n  \"base_url\": \"https://api.sendgrid.com/v3\",\n  \"metadata\": {\n    \"region\": \"us\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/providers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Providers - Save Credentials (Email)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider_id\": \"{{email_provider_id}}\",\n  \"credentials\": {\n    \"api_key\": \"{{email_api_key}}\",\n    \"from_email\": \"{{email_from_address}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/providers/credentials",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers",
+                "credentials"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Providers - Health Check (Email)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Email provider health exposes status', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('provider_id');",
+                  "  pm.expect(body).to.have.property('healthy');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/providers/{{email_provider_id}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "providers",
+                "{{email_provider_id}}",
+                "health"
+              ]
+            }
+          }
         }
       ]
     },
@@ -745,6 +845,22 @@
                       "  let variables = iteration.variables || {};",
                       "  if (typeof variables === 'string') {",
                       "    try { variables = JSON.parse(variables); } catch (err) { variables = { value: variables }; }",
+                      "  }",
+                      "  if (channel === 'email') {",
+                      "    const fallbackFrom = pm.environment.get('email_from_address') || 'no-reply@demo.local';",
+                      "    if (!variables.from_email) {",
+                      "      variables.from_email = fallbackFrom;",
+                      "    }",
+                      "    if (!variables.subject) {",
+                      "      variables.subject = 'Multi-channel regression email';",
+                      "    }",
+                      "    if (variables.body && !variables.html_content) {",
+                      "      variables.html_content = `<p>${variables.body}</p>`;",
+                      "      delete variables.body;",
+                      "    }",
+                      "    if (!variables.html_content && !variables.text_content) {",
+                      "      variables.html_content = `<p>Mensagem automatizada ${new Date().toISOString()}</p>`;",
+                      "    }",
                       "  }",
                       "  const payload = {",
                       "    idempotency_key: `postman-multi-${channel}-${Date.now()}`,",
@@ -1787,42 +1903,45 @@
                 "type": "text/javascript",
                 "exec": [
                   "(() => {",
+                  "  const crypto = require('crypto');",
                   "  const rawBody = pm.request.body && pm.request.body.urlencoded;",
                   "  const entries = [];",
+                  "  const pushEntry = (item) => {",
+                  "    if (!item) { return; }",
+                  "    if (typeof item.disabled !== 'undefined' && item.disabled) { return; }",
+                  "    const key = item.key;",
+                  "    let value = item.value;",
+                  "    if (typeof value === 'string') {",
+                  "      value = pm.variables.replaceIn(value);",
+                  "    }",
+                  "    if (item && typeof item.value !== 'undefined') {",
+                  "      item.value = value;",
+                  "    }",
+                  "    entries.push([key, value != null ? String(value) : '']);",
+                  "  };",
                   "  if (rawBody) {",
                   "    if (Array.isArray(rawBody)) {",
-                  "      entries.push(...rawBody);",
+                  "      rawBody.forEach(pushEntry);",
                   "    } else if (typeof rawBody.all === 'function') {",
-                  "      entries.push(...rawBody.all());",
+                  "      rawBody.all().forEach(pushEntry);",
                   "    } else if (typeof rawBody.each === 'function') {",
-                  "      rawBody.each(item => entries.push(item));",
+                  "      rawBody.each(pushEntry);",
                   "    } else if (typeof rawBody.toJSON === 'function') {",
                   "      const jsonItems = rawBody.toJSON();",
                   "      if (Array.isArray(jsonItems)) {",
-                  "        jsonItems.forEach(item => entries.push(item));",
+                  "        jsonItems.forEach(pushEntry);",
                   "      }",
                   "    }",
                   "  }",
-                  "  const resolved = entries",
-                  "    .filter(item => item && !item.disabled)",
-                  "    .map(item => {",
-                  "      const value = pm.variables.replaceIn(item.value || '');",
-                  "      if (item && typeof item.value !== 'undefined') {",
-                  "        item.value = value;",
-                  "      }",
-                  "      return [item.key, value];",
-                  "    });",
+                  "  entries.sort((a, b) => a[0].localeCompare(b[0]));",
                   "  const authToken = pm.environment.get('sms_webhook_auth_token') || '';",
-                  "  const url = pm.request.url.toString();",
-                  "  resolved.sort((a, b) => a[0].localeCompare(b[0]));",
                   "  let signature = '';",
                   "  if (authToken) {",
-                  "    let payload = url;",
-                  "    resolved.forEach(([key, value]) => {",
+                  "    let payload = pm.request.url.toString();",
+                  "    entries.forEach(([key, value]) => {",
                   "      payload += key + value;",
                   "    });",
-                  "    const digest = CryptoJS.HmacSHA1(payload, authToken);",
-                  "    signature = CryptoJS.enc.Base64.stringify(digest);",
+                  "    signature = crypto.createHmac('sha1', authToken).update(payload, 'utf8').digest('base64');",
                   "  }",
                   "  pm.request.headers.upsert({ key: 'X-Twilio-Signature', value: signature });",
                   "})();"

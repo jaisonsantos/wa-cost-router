@@ -9,7 +9,7 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 
 1. **Auth** – registra usuário aleatório (`postman+timestamp`) com senha forte gerada no runtime e efetua login (token salvo automaticamente).
 2. **Organization** – obtém `org_id` via `/orgs/current`.
-3. **Providers** – cria provedores WhatsApp (360dialog) e SMS (Twilio), persiste credenciais fake e executa health check.
+3. **Providers** – cria provedores WhatsApp (360dialog), SMS (Twilio) e e-mail (SendGrid), persiste credenciais fake e executa health check.
 4. **Rules** – lista, cria, atualiza e alterna regras, incluindo simulação avançada.
 5. **Messages** – envia mensagem, lista jobs, consulta detalhes do job usando `job_id` capturado, executa o cenário opcional **Messages - Rate Limit Demo** para validar respostas `429` e concentra a pasta **Multi-Channel Regression** para validar WhatsApp/SMS/e-mail.
 6. **Contacts** – dispara importação assíncrona (`POST /contacts/imports`), lista catálogos, cria contato, edita atributos, alterna status ativo/inativo e consulta histórico de consentimento.
@@ -43,6 +43,9 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 | `sms_messaging_service_sid` | SID opcional do Messaging Service (Twilio) para validar roteamento inbound. |
 | `sms_webhook_auth_token` | Token de autenticação (Twilio Auth Token) utilizado para assinar o webhook SMS. |
 | `sms_account_sid` / `sms_auth_token` | Credenciais usadas para salvar o provedor Twilio e simular autenticação nos testes. |
+| `email_provider_id` | ID persistido após criar o provedor SendGrid. |
+| `email_api_key` | API key fictícia utilizada para autenticar o conector SendGrid durante os testes. |
+| `email_from_address` | Remetente padrão associado ao provedor de e-mail; pode ser sobrescrito por cenário. |
 | `email_webhook_token` | Token utilizado para autenticar as rotas `/integrations/email/webhook`. |
 | `email_webhook_secret` | Secret usado para assinar o header `X-Email-Signature` nas requisições inbound de e-mail. |
 
@@ -57,7 +60,7 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 #### SMS (Twilio)
 
 - `SMS - Webhook Receive` envia corpo `x-www-form-urlencoded` com os campos padrão (`MessageSid`, `MessagingServiceSid`, `From`, `To`, `Body`, `Timestamp`).
-- O script *pre-request* ordena os pares chave/valor, concatena com a URL final (`{{base_url}}/integrations/sms/webhook`) e calcula o HMAC SHA-1 usando `sms_webhook_auth_token`, reproduzindo a assinatura da Twilio. O digest é convertido em Base64 e enviado no header `X-Twilio-Signature`.
+- O script *pre-request* ordena os pares chave/valor, concatena com a URL final (`{{base_url}}/integrations/sms/webhook`) e calcula o HMAC SHA-1 usando `sms_webhook_auth_token` via módulo `crypto` nativo, reproduzindo a assinatura da Twilio. O digest é convertido em Base64 e enviado no header `X-Twilio-Signature`.
 - Ajuste `sms_contact_phone`, `sms_inbound_number` e, quando aplicável, `sms_messaging_service_sid` para simular múltiplos números inbound por organização.
 
 #### E-mail
@@ -108,7 +111,7 @@ O arquivo [`multi_channel_regression.json`](./multi_channel_regression.json) par
 
 - `channel`: aceita `whatsapp`, `sms` ou `email` (pode ser expandido para novos canais sem alterar a coleção).
 - `address_env`: nome da variável de ambiente que contém o endereço do canal (quando vazio, o script gera fallback). Para e-mail é gerado automaticamente `postman-multichannel-<timestamp>@example.com`.
-- `variables`: objeto arbitrário enviado para o template — utilize chaves coerentes com os placeholders cadastrados no backend.
+- `variables`: objeto arbitrário enviado para o template — utilize chaves coerentes com os placeholders cadastrados no backend. Para e-mail, o script garante `from_email`, `subject` e `html_content` (derivado de `body` quando presente) antes de enviar.
 
 Ao rodar `make postman-test`, todos os cenários são processados sequencialmente e o `job_id` da última execução permanece disponível para consultas posteriores.
 

@@ -5,7 +5,9 @@
     "template_category": "MARKETING",
     "address_env": "wa_contact_phone",
     "variables": {
-      "body_params": ["John Multi"]
+      "body_params": [
+        "John Multi"
+      ]
     }
   },
   {
@@ -15,7 +17,9 @@
     "address_env": "sms_contact_phone",
     "country_iso": "BR",
     "variables": {
-      "body_params": ["123456"]
+      "body_params": [
+        "123456"
+      ]
     }
   },
   {
@@ -24,7 +28,7 @@
     "template_category": "UTILITY",
     "variables": {
       "subject": "Resumo diário",
-      "body": "Mensagem automatizada gerada pela suíte multi-canal"
+      "html_content": "<p>Mensagem automatizada gerada pela suíte multi-canal</p>"
     }
   }
 ]
