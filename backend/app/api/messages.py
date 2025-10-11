@@ -59,13 +59,13 @@ logger = logging.getLogger(__name__)
 MESSAGES_SEND_COUNTER = Counter(
     "messages_send_total",
     "Total de requisições /messages/send processadas",
-    labelnames=["status", "provider"],
+    labelnames=["status", "provider", "channel"],
 )
 
 DELIVERY_ATTEMPTS_COUNTER = Counter(
     "messages_delivery_attempts_total",
     "Total de tentativas de entrega por provedor",
-    labelnames=["provider_id", "provider", "outcome"],
+    labelnames=["provider_id", "provider", "outcome", "channel"],
 )
 
 CIRCUIT_STATE_GAUGE = Gauge(
@@ -416,7 +416,11 @@ async def send_message(
     
     final_provider = result.get("provider_name") or "none"
     try:
-        MESSAGES_SEND_COUNTER.labels(status=result["status"], provider=final_provider).inc()
+        MESSAGES_SEND_COUNTER.labels(
+            status=result["status"],
+            provider=final_provider,
+            channel=data.channel,
+        ).inc()
     except Exception:  # pragma: no cover - metrics failures must not break API
         logger.exception(
             "Failed to record messages_send_total metric",
@@ -523,6 +527,7 @@ async def _attempt_delivery_with_fallback(
                 provider_id=str(provider.id),
                 provider=provider.name,
                 outcome="skipped_circuit",
+                channel=job.channel,
             ).inc()
             continue
 
@@ -585,6 +590,7 @@ async def _attempt_delivery_with_fallback(
                     provider_id=str(provider.id),
                     provider=provider.name,
                     outcome="exception",
+                    channel=job.channel,
                 ).inc()
                 break
 
@@ -674,6 +680,7 @@ async def _attempt_delivery_with_fallback(
                     provider_id=str(provider.id),
                     provider=provider.name,
                     outcome="success",
+                    channel=job.channel,
                 ).inc()
 
                 return {
@@ -698,6 +705,7 @@ async def _attempt_delivery_with_fallback(
                 provider_id=str(provider.id),
                 provider=provider.name,
                 outcome="failure",
+                channel=job.channel,
             ).inc()
 
             break
