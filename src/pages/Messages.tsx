@@ -18,17 +18,25 @@ export default function Messages() {
   const [selectedJob, setSelectedJob] = useState<MessageJobSummary | null>(null);
 
   const channelParam = channelFilter === "all" ? undefined : channelFilter;
+  const messageJobsParams = useMemo(
+    () => (statusFilter === "all" ? {} : { status: statusFilter }),
+    [statusFilter],
+  );
 
-  const { data: jobs, isLoading } = useMessageJobs({
-    status: statusFilter === "all" ? undefined : statusFilter,
-    channel: channelParam,
-  });
+  const { data: jobs, isLoading } = useMessageJobs(messageJobsParams);
   const { data: jobDetails } = useMessageJobDetails(selectedJob?.id ?? "", {
     channel: selectedJob?.channel ?? channelParam,
     channel_address: selectedJob?.channel_address,
   });
 
   const jobsList: MessageJobSummary[] = jobs ?? [];
+  const filteredJobs = useMemo(
+    () =>
+      jobsList.filter((job) =>
+        channelFilter === "all" ? true : job.channel === channelFilter,
+      ),
+    [jobsList, channelFilter],
+  );
   const jobDetailsData: MessageJobDetail | undefined = jobDetails;
 
   const availableChannels = useMemo(
@@ -125,7 +133,7 @@ export default function Messages() {
           <CardHeader>
             <CardTitle>Jobs de Mensagens</CardTitle>
             <CardDescription>
-              {jobsList.length} mensagens encontradas
+              {filteredJobs.length} mensagens encontradas
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -145,62 +153,73 @@ export default function Messages() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {jobsList.map((job) => (
-                  <TableRow key={job.id}>
-                    <TableCell className="font-mono text-sm">
-                      {job.to_number}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getDirectionVariant(job.direction)}>
-                        {formatDirection(job.direction)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="capitalize">{job.channel}</TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {job.channel_address}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <span>{job.contact_name ?? "Contato desconhecido"}</span>
-                        {job.contact_id ? (
-                          <span className="font-mono text-xs text-muted-foreground">{job.contact_id}</span>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{job.template_id}</span>
-                        <span className="text-xs text-muted-foreground capitalize">
-                          {job.template_category}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(job.status)}
-                        <Badge variant={getStatusVariant(job.status)}>
-                          {job.status}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {job.total_cost_minor ? `€${(job.total_cost_minor / 100).toFixed(4)}` : "-"}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedJob(job)}
-                        aria-label="Ver detalhes"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                {filteredJobs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center text-muted-foreground">
+                      Nenhuma mensagem encontrada para os filtros selecionados.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredJobs.map((job) => (
+                    <TableRow key={job.id}>
+                      <TableCell className="font-mono text-sm">
+                        {job.to_number}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getDirectionVariant(job.direction)}>
+                          {formatDirection(job.direction)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="capitalize">{job.channel}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {job.channel_address}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <span>{job.contact_name ?? "Contato desconhecido"}</span>
+                          {job.contact_id ? (
+                            <span className="font-mono text-xs text-muted-foreground">{job.contact_id}</span>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{job.template_id}</span>
+                          <span className="text-xs text-muted-foreground capitalize">
+                            {job.template_category}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(job.status)}
+                          <Badge variant={getStatusVariant(job.status)}>
+                            {job.status}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {job.total_cost_minor ? `€${(job.total_cost_minor / 100).toFixed(4)}` : "-"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDistanceToNow(new Date(job.created_at), {
+                          addSuffix: true,
+                          locale: ptBR,
+                        })}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedJob(job)}
+                          aria-label="Ver detalhes"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
