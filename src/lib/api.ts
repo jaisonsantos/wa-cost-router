@@ -36,6 +36,10 @@ import {
   TokenResponse,
   WAConnectionResponse,
   ContactImportJob,
+  ChannelMetricsResponse,
+  ChannelMetricsQueryParams,
+  QueueMetricsResponse,
+  QueueMetricsQueryParams,
 } from "@/types/api";
 
 export const API_BASE_URL = "http://localhost:8000";
@@ -378,6 +382,30 @@ class ApiClient {
 
   async getProviderMetrics(): Promise<ProviderMetric[]> {
     return this.request<ProviderMetric[]>("/reports/provider-metrics");
+  }
+
+  async getChannelMetrics(params: ChannelMetricsQueryParams = {}): Promise<ChannelMetricsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.from) {
+      searchParams.append("from", params.from);
+    }
+    if (params.to) {
+      searchParams.append("to", params.to);
+    }
+    const query = searchParams.toString();
+    return this.request<ChannelMetricsResponse>(`/reports/channel-metrics${query ? `?${query}` : ""}`);
+  }
+
+  async getQueueMetrics(params: QueueMetricsQueryParams = {}): Promise<QueueMetricsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.from) {
+      searchParams.append("from", params.from);
+    }
+    if (params.to) {
+      searchParams.append("to", params.to);
+    }
+    const query = searchParams.toString();
+    return this.request<QueueMetricsResponse>(`/reports/queues${query ? `?${query}` : ""}`);
   }
 
   // Advanced Simulator

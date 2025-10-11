@@ -3,8 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import MetricCard from "@/components/MetricCard";
 import SimpleLayout from "@/components/SimpleLayout";
-import { useDashboardMetrics, useProviderMetrics } from "@/hooks/useApi";
+import ChannelMetricCard from "@/components/ChannelMetricCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDashboardMetrics, useProviderMetrics, useChannelMetrics, useQueueMetrics } from "@/hooks/useApi";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   TrendingDown,
@@ -18,8 +20,10 @@ import {
   Zap,
   ShieldCheck,
   TimerReset,
+  BellRing,
+  Signal,
 } from "lucide-react";
-import { DashboardMetrics, ProviderMetric } from "@/types/api";
+import { ChannelMetric, DashboardMetrics, ProviderMetric, QueueMetric } from "@/types/api";
 
 const formatCurrency = (valueMinor: number) => `€${(valueMinor / 100).toFixed(2)}`;
 
@@ -37,6 +41,73 @@ const getFlagEmoji = (countryIso?: string) => {
   return String.fromCodePoint(...codePoints);
 };
 
+const formatChannelName = (channel: string) =>
+  channel
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+interface ChannelSpecificAlert {
+  channel: string;
+  message: string;
+  severity: "warning" | "critical";
+}
+
+const generateChannelAlerts = (metric: ChannelMetric, queueMetric?: QueueMetric): ChannelSpecificAlert[] => {
+  const alerts: ChannelSpecificAlert[] = [];
+  const channelLabel = formatChannelName(metric.channel);
+  const complianceRate = metric.sla.compliance_rate;
+
+  if (complianceRate !== null) {
+    if (complianceRate < 70) {
+      alerts.push({
+        channel: metric.channel,
+        message: `${channelLabel} está com apenas ${complianceRate.toFixed(1)}% dentro do SLA.`,
+        severity: "critical",
+      });
+    } else if (complianceRate < 85) {
+      alerts.push({
+        channel: metric.channel,
+        message: `${channelLabel} apresenta queda de SLA (${complianceRate.toFixed(1)}%).`,
+        severity: "warning",
+      });
+    }
+  }
+
+  const targetSeconds = metric.sla.target_seconds;
+
+  if (
+    metric.first_response.average_seconds !== null &&
+    targetSeconds !== null &&
+    metric.first_response.average_seconds > targetSeconds
+  ) {
+    const roundedTarget = Math.round(targetSeconds);
+    alerts.push({
+      channel: metric.channel,
+      message: `Tempo médio de primeira resposta (${metric.first_response.average_seconds.toFixed(0)}s) excede a meta de ${roundedTarget}s.`,
+      severity: "warning",
+    });
+  }
+
+  const openItems = queueMetric?.backlog.open ?? metric.backlog.open;
+  if (openItems >= 15) {
+    alerts.push({
+      channel: metric.channel,
+      message: `${channelLabel} acumula ${openItems} conversas abertas aguardando atendimento.`,
+      severity: "critical",
+    });
+  } else if (openItems >= 8) {
+    alerts.push({
+      channel: metric.channel,
+      message: `${channelLabel} possui ${openItems} conversas abertas no backlog.`,
+      severity: "warning",
+    });
+  }
+
+  return alerts;
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const {
@@ -50,9 +121,42 @@ const Dashboard = () => {
     isLoading: providersLoading,
     isError: providersError,
   } = useProviderMetrics();
+  const {
+    data: channelMetricsData,
+    isLoading: channelLoading,
+    isError: channelError,
+    error: channelErrorData,
+  } = useChannelMetrics();
+  const {
+    data: queueMetricsData,
+    isLoading: queueLoading,
+    isError: queueError,
+    error: queueErrorData,
+  } = useQueueMetrics();
 
   const dashboard: DashboardMetrics | undefined = metricsData;
   const providers: ProviderMetric[] = providersData ?? [];
+  const channelMetrics: ChannelMetric[] = channelMetricsData ?? [];
+  const queueByChannel = useMemo(() => {
+    const grouped: Record<string, QueueMetric> = {};
+    (queueMetricsData ?? []).forEach((item) => {
+      grouped[item.channel] = item;
+    });
+    return grouped;
+  }, [queueMetricsData]);
+  const channelSpecificAlerts = useMemo(
+    () =>
+      channelMetricsData
+        ? channelMetricsData.flatMap((metric) => generateChannelAlerts(metric, queueByChannel[metric.channel]))
+        : [],
+    [channelMetricsData, queueByChannel],
+  );
+  const channelSectionLoading = channelLoading || queueLoading;
+  const channelSectionError = channelError || queueError;
+  const channelErrorMessage =
+    ((channelErrorData as Error | undefined)?.message ??
+      (queueErrorData as Error | undefined)?.message) ||
+    "Não foi possível carregar métricas por canal.";
 
   if (metricsLoading) {
     return (
@@ -205,6 +309,89 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
+
+      <section className="space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-lg font-semibold">
+            <Signal className="h-5 w-5 text-primary" />
+            <span>Saúde por Canal</span>
+          </div>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            Monitorando {channelMetrics.length} {channelMetrics.length === 1 ? "canal" : "canais"}
+          </span>
+        </div>
+        {channelSectionLoading ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {[...Array(3)].map((_, index) => (
+              <Card key={index}>
+                <CardContent className="space-y-4 p-6">
+                  <Skeleton className="h-5 w-2/3" />
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : channelSectionError ? (
+          <Card className="border-destructive/40 bg-destructive/5">
+            <CardContent className="p-6 text-sm text-destructive">
+              {channelErrorMessage}
+            </CardContent>
+          </Card>
+        ) : channelMetrics.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {channelMetrics.map((metric) => (
+              <ChannelMetricCard
+                key={metric.channel}
+                metric={metric}
+                queueMetric={queueByChannel[metric.channel]}
+              />
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="p-6 text-sm text-muted-foreground">
+              Nenhum canal com métricas registradas no período selecionado.
+            </CardContent>
+          </Card>
+        )}
+      </section>
+
+      {channelSpecificAlerts.length > 0 && (
+        <Card className="border-warning/30 bg-warning/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-warning">
+              <BellRing className="h-5 w-5" />
+              Alertas por canal
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {channelSpecificAlerts.map((alert, index) => (
+                <div
+                  key={`${alert.channel}-${index}`}
+                  className="flex items-start gap-3 rounded-lg border border-warning/30 bg-background/80 p-3"
+                >
+                  <Badge
+                    variant="outline"
+                    className={
+                      alert.severity === "critical"
+                        ? "border-destructive/40 bg-destructive/10 text-destructive"
+                        : "border-warning/40 bg-warning/10 text-warning"
+                    }
+                  >
+                    {alert.severity === "critical" ? "Crítico" : "Atenção"}
+                  </Badge>
+                  <div>
+                    <p className="text-sm font-semibold">{formatChannelName(alert.channel)}</p>
+                    <p className="text-sm text-muted-foreground">{alert.message}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabelas */}
       <div className="grid gap-6 lg:grid-cols-2">
