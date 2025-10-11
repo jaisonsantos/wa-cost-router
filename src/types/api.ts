@@ -88,6 +88,16 @@ export interface QueueMetric {
 export type ChannelMetricsResponse = ChannelMetric[];
 export type QueueMetricsResponse = QueueMetric[];
 
+export interface ChannelMetricsQueryParams {
+  from?: string;
+  to?: string;
+}
+
+export interface QueueMetricsQueryParams {
+  from?: string;
+  to?: string;
+}
+
 export interface MessageJobAttempt {
   id: string;
   attempt_number: number;

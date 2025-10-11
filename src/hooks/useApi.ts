@@ -8,6 +8,8 @@ import {
   DashboardMetrics,
   Event,
   EventsQueryParams,
+  ChannelMetricsResponse,
+  ChannelMetricsQueryParams,
   ImportRatesResponse,
   MessageJobDetail,
   MessageJobSummary,
@@ -17,6 +19,8 @@ import {
   ProviderCredentialInput,
   ProviderHealth,
   ProviderMetric,
+  QueueMetricsResponse,
+  QueueMetricsQueryParams,
   RateEntry,
   Rule,
   RuleCreatePayload,
@@ -293,6 +297,22 @@ export const useProviderMetrics = () => {
   return useQuery<ProviderMetric[], Error>({
     queryKey: ["providerMetrics"],
     queryFn: () => api.getProviderMetrics(),
+  });
+};
+
+export const useChannelMetrics = (params: ChannelMetricsQueryParams = {}) => {
+  const { from, to } = params;
+  return useQuery<ChannelMetricsResponse, Error>({
+    queryKey: ["channelMetrics", from ?? null, to ?? null],
+    queryFn: () => api.getChannelMetrics(params),
+  });
+};
+
+export const useQueueMetrics = (params: QueueMetricsQueryParams = {}) => {
+  const { from, to } = params;
+  return useQuery<QueueMetricsResponse, Error>({
+    queryKey: ["queueMetrics", from ?? null, to ?? null],
+    queryFn: () => api.getQueueMetrics(params),
   });
 };
 
