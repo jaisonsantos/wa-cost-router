@@ -48,6 +48,7 @@ class RoutingEngine:
         channel: Optional[str] = None,
         contact_address: Optional[str] = None,
         send_time: Optional[datetime] = None,
+        enforce_policies: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """
         Seleciona o provedor baseado nas regras ativas e custos
@@ -63,25 +64,26 @@ class RoutingEngine:
 
         normalized_channel = self._normalize_channel(channel)
 
-        try:
-            self._policy_service.validate(
-                template_category=category,
-                channel=normalized_channel,
-                requested_at=send_time or datetime.now(timezone.utc),
-            )
-        except RoutingPolicyViolation as exc:
-            logger.info(
-                "Routing policy violation for org %s: %s",
-                self.org_id,
-                exc.message,
-                extra={
-                    "event": "routing_policy_violation",
-                    "policy_code": exc.code,
-                    "channel": normalized_channel,
-                    "category": category,
-                },
-            )
-            raise
+        if enforce_policies:
+            try:
+                self._policy_service.validate(
+                    template_category=category,
+                    channel=normalized_channel,
+                    requested_at=send_time or datetime.now(timezone.utc),
+                )
+            except RoutingPolicyViolation as exc:
+                logger.info(
+                    "Routing policy violation for org %s: %s",
+                    self.org_id,
+                    exc.message,
+                    extra={
+                        "event": "routing_policy_violation",
+                        "policy_code": exc.code,
+                        "channel": normalized_channel,
+                        "category": category,
+                    },
+                )
+                raise
         preferences: Optional[ContactRoutingPreferences] = None
         if self._consent_resolver and contact_address is not None:
             preferences = self._consent_resolver.resolve(

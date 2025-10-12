@@ -190,7 +190,11 @@ def simulate(
         baseline_cost = engine.calculate_baseline_cost(country, data.category)
         
         # Custo otimizado (com regras)
-        routing = engine.select_provider(country, data.category)
+        routing = engine.select_provider(
+            country,
+            data.category,
+            enforce_policies=False,
+        )
         optimized_cost = routing["estimated_cost"] if routing else baseline_cost
         
         total_baseline += baseline_cost * volume
@@ -270,7 +274,11 @@ def simulate_advanced(
                 ))
         
         # Custo otimizado (com regras ou mais barato)
-        routing = engine.select_provider(country, data.category)
+        routing = engine.select_provider(
+            country,
+            data.category,
+            enforce_policies=False,
+        )
         if routing:
             optimized_cost = routing["estimated_cost"]
             recommended_provider = routing["provider_id"]
