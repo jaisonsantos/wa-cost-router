@@ -258,6 +258,14 @@ Persistem credenciais criptografadas para o provedor.
 - `404 Not Found` – provedor inexistente para a organização.
 - `422 Unprocessable Entity` – payload não atende aos campos obrigatórios/validações listados em `required_fields` ou no `provider_form_schema`.
 
+#### Credenciais específicas — WhatsApp Cloud (Meta)
+
+- `access_token` – token de acesso gerado no [Meta for Developers](https://developers.facebook.com/) com permissão para envio de mensagens WhatsApp Cloud.
+- `phone_id` – identificador numérico do telefone (`phone_number_id`) usado na rota `https://graph.facebook.com/v19.0/{phone_id}/messages`.
+- Opcionalmente é possível preencher defaults via variáveis de ambiente `settings.META_WHATSAPP_CLOUD_ACCESS_TOKEN` e `settings.META_WHATSAPP_CLOUD_PHONE_ID` para automações internas/sandbox.
+
+> **Teste rápido**: após salvar as credenciais utilize `POST /providers/{provider_id}/health` para validar o token. A resposta `200` confirma que o Graph retornou o recurso `phone_id` com sucesso.
+
 #### Campos obrigatórios por conector (sandbox)
 
 - **Twilio (SMS)**
