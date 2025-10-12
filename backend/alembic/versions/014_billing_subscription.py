@@ -28,6 +28,12 @@ def upgrade() -> None:
     )
     status_enum.create(op.get_bind(), checkfirst=True)
 
+    status_column_enum = sa.Enum(
+        *BILLING_STATUS_ENUM,
+        name="billingstatusenum",
+        create_type=False,
+    )
+
     op.create_table(
         "billing_subscription",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
@@ -40,7 +46,12 @@ def upgrade() -> None:
         ),
         sa.Column("stripe_customer_id", sa.String(), nullable=False),
         sa.Column("stripe_subscription_id", sa.String()),
-        sa.Column("status", status_enum, nullable=False, server_default=sa.text("'incomplete'")),
+        sa.Column(
+            "status",
+            status_column_enum,
+            nullable=False,
+            server_default=sa.text("'incomplete'"),
+        ),
         sa.Column("plan_nickname", sa.String()),
         sa.Column("price_id", sa.String()),
         sa.Column("currency", sa.String()),
