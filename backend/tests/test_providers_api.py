@@ -134,6 +134,10 @@ def test_list_providers_includes_form_schema(client, db_session, auth_context):
         "channels": {"email": {"from_address": "noreply@example.com", "sandbox": True}},
         "provider": "sendgrid",
     }
+    whatsapp_meta = {
+        "channels": {"whatsapp": {"sandbox": True}},
+        "provider": "meta",
+    }
 
     twilio = _seed_provider(
         db_session,
@@ -162,6 +166,18 @@ def test_list_providers_includes_form_schema(client, db_session, auth_context):
         },
     )
 
+    meta_provider = _seed_provider(
+        db_session,
+        org_id=org.id,
+        name="Meta WhatsApp",
+        provider_type="whatsapp",
+        metadata=whatsapp_meta,
+        credentials={
+            "access_token": "EAAB" + "1" * 10,
+            "phone_id": "1234567890",
+        },
+    )
+
     response = client.get("/providers")
     assert response.status_code == 200
 
@@ -180,6 +196,12 @@ def test_list_providers_includes_form_schema(client, db_session, auth_context):
         field["key"] == "inbound_signing_secret"
         for field in email_entry["provider_form_schema"]["fields"]
     )
+
+    meta_entry = next(item for item in payload if item["id"] == str(meta_provider.id))
+    assert "access_token" in meta_entry["required_fields"]
+    assert "phone_id" in meta_entry["required_fields"]
+    field_keys = {field["key"] for field in meta_entry["provider_form_schema"]["fields"]}
+    assert {"access_token", "phone_id"}.issubset(field_keys)
 
 
 def test_set_credentials_requires_required_fields(client, db_session, auth_context):
@@ -210,6 +232,34 @@ def test_set_credentials_requires_required_fields(client, db_session, auth_conte
     payload = response.json()
     assert "errors" in payload["detail"]
     assert any("Auth Token" in message for message in payload["detail"]["errors"])
+
+
+def test_set_credentials_requires_phone_id_for_whatsapp_cloud(
+    client, db_session, auth_context
+):
+    org = auth_context
+
+    provider = Provider(
+        org_id=org.id,
+        name="Meta WhatsApp",
+        type="whatsapp",
+        status="active",
+        meta={"provider": "meta"},
+    )
+    db_session.add(provider)
+    db_session.commit()
+
+    response = client.post(
+        "/providers/credentials",
+        json={
+            "provider_id": str(provider.id),
+            "credentials": {"access_token": "EAAB" + "1" * 10},
+        },
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert any("Phone Number ID" in message for message in payload["detail"]["errors"])
 
 
 def test_provider_health_without_credentials_returns_payload(client, db_session, auth_context):

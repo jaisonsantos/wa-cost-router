@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     WA_APP_SECRET: str = "fake"
     WA_VERIFY_TOKEN: str = "my-verify-token"
+    META_WHATSAPP_CLOUD_ACCESS_TOKEN: str = ""
+    META_WHATSAPP_CLOUD_PHONE_ID: str = ""
 
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""

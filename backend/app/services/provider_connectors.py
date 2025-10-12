@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import asyncio
 import hashlib
 import json
@@ -334,6 +334,224 @@ class SandboxProviderConnector(ProviderConnector):
             return 0.0
 
         return min(max(failure_rate, 0.0), 1.0)
+
+
+class WhatsAppCloudConnector(ProviderConnector):
+    """Connector for WhatsApp Cloud API (Graph)."""
+
+    def __init__(
+        self,
+        credentials: Dict[str, Any],
+        base_url: Optional[str] = None,
+        *,
+        transport: Optional[httpx.BaseTransport] = None,
+        http_client: Optional[httpx.AsyncClient] = None,
+    ):
+        default_base_url = base_url or "https://graph.facebook.com/v19.0"
+        super().__init__(credentials, default_base_url)
+        self._transport = transport
+        self._http_client = http_client
+
+    async def send_message(
+        self,
+        to_number: str,
+        template_id: str,
+        variables: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        start = datetime.now()
+        access_token = self._resolve_access_token()
+        phone_id = self._resolve_phone_id()
+        payload = self._build_payload(to_number, template_id, variables or {})
+
+        try:
+            async with self._get_client(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/{phone_id}/messages",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+
+            latency_ms = int((datetime.now() - start).total_seconds() * 1000)
+            if response.status_code in (200, 201):
+                data = response.json()
+                message_id = self._extract_message_id(data)
+                return {
+                    "success": True,
+                    "provider_message_id": message_id,
+                    "latency_ms": latency_ms,
+                    "response": data,
+                }
+
+            error_message = self._extract_error_message(response)
+            return {
+                "success": False,
+                "error_code": str(response.status_code),
+                "error_message": error_message,
+                "latency_ms": latency_ms,
+                "response": self._safe_response_json(response),
+            }
+        except Exception as exc:
+            logger.error("WhatsApp Cloud send error: %s", exc)
+            return {
+                "success": False,
+                "error_code": "CONNECTOR_ERROR",
+                "error_message": str(exc),
+                "latency_ms": int((datetime.now() - start).total_seconds() * 1000),
+            }
+
+    async def health_check(self) -> Dict[str, Any]:
+        start = datetime.now()
+        access_token = self._resolve_access_token()
+        phone_id = self._resolve_phone_id()
+
+        try:
+            async with self._get_client(timeout=10.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/{phone_id}",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params={"fields": "id"},
+                )
+
+            latency_ms = int((datetime.now() - start).total_seconds() * 1000)
+            if response.status_code == 200:
+                return {
+                    "healthy": True,
+                    "status_code": response.status_code,
+                    "latency_ms": latency_ms,
+                    "response": response.json(),
+                }
+
+            return {
+                "healthy": False,
+                "status_code": response.status_code,
+                "latency_ms": latency_ms,
+                "error": self._extract_error_message(response),
+                "response": self._safe_response_json(response),
+            }
+        except Exception as exc:
+            logger.error("WhatsApp Cloud health error: %s", exc)
+            return {
+                "healthy": False,
+                "error": str(exc),
+            }
+
+    def _resolve_access_token(self) -> str:
+        token = self.credentials.get("access_token")
+        if not token:
+            raise ValueError("Missing access_token for WhatsApp Cloud connector")
+        return token
+
+    def _resolve_phone_id(self) -> str:
+        phone_id = self.credentials.get("phone_id") or self.credentials.get(
+            "phone_number_id"
+        )
+        if not phone_id:
+            raise ValueError("Missing phone_id for WhatsApp Cloud connector")
+        return str(phone_id)
+
+    def _build_payload(
+        self, to_number: str, template_id: str, variables: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        language = variables.get("language") or "en_US"
+        if isinstance(language, dict):
+            language_payload = language
+        else:
+            language_payload = {"code": str(language)}
+
+        template_payload: Dict[str, Any] = {
+            "name": template_id,
+            "language": language_payload,
+        }
+
+        components = self._build_components(variables)
+        if components:
+            template_payload["components"] = components
+
+        return {
+            "messaging_product": "whatsapp",
+            "to": to_number,
+            "type": "template",
+            "template": template_payload,
+        }
+
+    def _build_components(self, variables: Dict[str, Any]) -> List[Dict[str, Any]]:
+        components: List[Dict[str, Any]] = []
+        provided_components = variables.get("components")
+        if isinstance(provided_components, list):
+            components.extend(provided_components)
+
+        body_params = variables.get("body_params")
+        if body_params:
+            components.append(
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": str(param)} for param in body_params
+                    ],
+                }
+            )
+
+        header_params = variables.get("header_params")
+        if header_params:
+            components.append(
+                {
+                    "type": "header",
+                    "parameters": [
+                        {"type": "text", "text": str(param)} for param in header_params
+                    ],
+                }
+            )
+
+        button_params = variables.get("button_params")
+        if button_params:
+            components.append(
+                {
+                    "type": "button",
+                    "sub_type": "url",
+                    "index": "0",
+                    "parameters": [
+                        {"type": "text", "text": str(param)} for param in button_params
+                    ],
+                }
+            )
+
+        return components
+
+    def _extract_message_id(self, payload: Dict[str, Any]) -> Optional[str]:
+        messages = payload.get("messages")
+        if isinstance(messages, list) and messages:
+            first = messages[0]
+            if isinstance(first, dict):
+                return first.get("id")
+        return None
+
+    def _extract_error_message(self, response: httpx.Response) -> str:
+        data = self._safe_response_json(response)
+        if isinstance(data, dict):
+            error = data.get("error")
+            if isinstance(error, dict):
+                message = error.get("message")
+                if message:
+                    return str(message)
+        return response.text
+
+    def _safe_response_json(self, response: httpx.Response) -> Any:
+        try:
+            return response.json()
+        except Exception:
+            return None
+
+    @asynccontextmanager
+    async def _get_client(self, timeout: float):
+        if self._http_client is not None:
+            yield self._http_client
+            return
+
+        async with httpx.AsyncClient(timeout=timeout, transport=self._transport) as client:
+            yield client
 
 
 class TwilioConnector(ProviderConnector):
@@ -722,6 +940,8 @@ def get_connector(
         "email": SendGridConnector,
         "twilio": TwilioConnector,
         "sms": TwilioConnector,
+        "whatsapp_cloud": WhatsAppCloudConnector,
+        "meta": WhatsAppCloudConnector,
     }
 
     lookup_keys = []

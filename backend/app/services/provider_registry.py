@@ -349,6 +349,43 @@ WHATSAPP_GUPSHUP = ProviderRegistryEntry(
 )
 
 
+WHATSAPP_CLOUD = ProviderRegistryEntry(
+    required_fields=["access_token", "phone_id"],
+    metadata={"provider": "meta", "channel": "whatsapp"},
+    form_schema={
+        "title": "WhatsApp Cloud API",
+        "fields": [
+            {
+                "key": "access_token",
+                "label": "Access Token",
+                "type": "password",
+                "placeholder": "EAAG...",
+                "required": True,
+                "help_text": "Token gerado no painel Meta for Developers (Business Account).",
+            },
+            {
+                "key": "phone_id",
+                "label": "Phone Number ID",
+                "type": "text",
+                "placeholder": "123456789012345",
+                "required": True,
+                "help_text": "Identificador numérico do telefone configurado na conta WhatsApp Cloud.",
+                "validation": {
+                    "regex": r"^\d{5,32}$",
+                    "message": "Informe um Phone Number ID numérico válido (5 a 32 dígitos).",
+                },
+            },
+        ],
+        "testing_instructions": [
+            "Utilize o Graph API Explorer para enviar mensagem de teste ao salvar as credenciais.",
+        ],
+        "consent_guidance": [
+            "Garanta opt-in ativo antes de enviar templates via WhatsApp Cloud.",
+        ],
+    },
+)
+
+
 PROVIDER_TYPE_REGISTRY: Dict[str, ProviderRegistryEntry] = {
     "sms": SMS_BASE,
     "email": EMAIL_BASE,
@@ -363,6 +400,10 @@ PROVIDER_NAME_OVERRIDES: Dict[ProviderKey, ProviderRegistryEntry] = {
     ("email", "sendgrid sandbox"): EMAIL_SENDGRID,
     ("whatsapp", "gupshup"): WHATSAPP_GUPSHUP,
     ("whatsapp", "gupshup sandbox"): WHATSAPP_GUPSHUP,
+    ("whatsapp", "whatsapp cloud"): WHATSAPP_CLOUD,
+    ("whatsapp", "meta"): WHATSAPP_CLOUD,
+    ("whatsapp", "whatsapp_cloud"): WHATSAPP_CLOUD,
+    ("whatsapp", "meta whatsapp"): WHATSAPP_CLOUD,
 }
 
 
