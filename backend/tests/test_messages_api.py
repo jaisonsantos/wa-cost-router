@@ -47,6 +47,7 @@ from app.models.models import (  # noqa: E402
     CostRecord,
     MessageJob,
     MessageEvent,
+    RoutedAction,
 )
 from app.services.routing_engine import RoutingEngine  # noqa: E402
 import app.services.routing_engine as routing_engine_module  # noqa: E402
@@ -236,6 +237,16 @@ def _create_rule_for_channel(
         providers=providers,
         template_category=template_category,
     )
+
+
+def _fetch_routed_actions(db_session, job_id: uuid.UUID) -> list[RoutedAction]:
+    return [
+        action
+        for action in db_session.query(RoutedAction)
+        .order_by(RoutedAction.created_at.asc())
+        .all()
+        if (action.provider_response or {}).get("job_id") == str(job_id)
+    ]
 
 
 def test_send_message_enforces_rate_limit(client, db_session, monkeypatch):
@@ -580,6 +591,130 @@ def test_send_message_sms_with_fallback(
     assert payload["status"] == "delivered_with_fallback"
     assert payload["provider_used"] == backup_provider.name
     assert attempts == [primary_seed["provider"].name, backup_provider.name]
+
+    job_uuid = uuid.UUID(payload["job_id"])
+    actions = _fetch_routed_actions(db_session, job_uuid)
+    assert len(actions) == 2
+    assert [
+        action.provider_response.get("provider_name") for action in actions
+    ] == [primary_seed["provider"].name, backup_provider.name]
+    assert [
+        action.provider_response.get("attempt_number") for action in actions
+    ] == [1, 2]
+    assert actions[0].status == "failed"
+    assert actions[1].status == "delivered_with_fallback"
+
+    event = (
+        db_session.query(MessageEvent)
+        .filter(MessageEvent.message_job_id == job_uuid)
+        .one()
+    )
+    assert event.attributes["routing_rule_name"].startswith("route-sms-")
+    assert event.attributes["provider_id"] == str(backup_provider.id)
+
+
+def test_get_message_routing_chain_endpoint(
+    client,
+    db_session,
+    monkeypatch,
+    organization_factory,
+    contact_factory,
+    sms_provider_seed,
+    provider_factory,
+    routing_rule_factory,
+):
+    test_client, org_id = client
+    organization_factory(org_id=org_id)
+
+    primary_seed = sms_provider_seed(org_id=org_id, unit_cost_minor=320)
+    fallback_provider = provider_factory(
+        org_id=org_id,
+        name="Fallback Nexmo",
+        provider_type="sms",
+        channel="sms",
+        unit_cost_minor=175,
+        country_iso="BR",
+        meta={"channels": {"sms": {"inbound_numbers": ["+15558673333"]}}},
+        credentials={
+            "api_key": "nexmo",
+            "api_secret": "secret",
+            "from_number": "+15558673333",
+        },
+    )
+
+    rule = _create_rule_for_channel(
+        routing_rule_factory=routing_rule_factory,
+        org_id=org_id,
+        channel="sms",
+        providers=[primary_seed["provider"], fallback_provider],
+    )
+
+    contact = _seed_contact_with_opt_in(
+        contact_factory=contact_factory,
+        org_id=org_id,
+        phone="+15551234567",
+        channel="sms",
+        channel_address="+15551234567",
+    )
+
+    class StubConnector:
+        def __init__(self, provider_name: str):
+            self.provider_name = provider_name
+
+        async def send_message(self, **kwargs):
+            if self.provider_name == primary_seed["provider"].name:
+                return {
+                    "success": False,
+                    "error_code": "500",
+                    "error_message": "primary failure",
+                }
+            return {
+                "success": True,
+                "provider_message_id": "fallback-2",
+                "response": {"status": "ok"},
+            }
+
+    def fake_get_connector(provider_name, credentials, base_url, **kwargs):
+        return StubConnector(provider_name)
+
+    monkeypatch.setattr(messages_module, "get_connector", fake_get_connector)
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "sms-routing-chain",
+            "channel": "sms",
+            "contact_id": str(contact.id),
+            "template_id": "promo",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Promo"]},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    chain_response = test_client.get(f"/messages/jobs/{payload['job_id']}/routing")
+    assert chain_response.status_code == 200
+    chain_payload = chain_response.json()
+    assert chain_payload["job_id"] == payload["job_id"]
+    assert len(chain_payload["actions"]) == 2
+
+    providers = [item["provider_name"] for item in chain_payload["actions"]]
+    assert providers == [primary_seed["provider"].name, fallback_provider.name]
+
+    statuses = [item["status"] for item in chain_payload["actions"]]
+    assert statuses == ["failed", "delivered_with_fallback"]
+
+    attempts = [item["attempt_number"] for item in chain_payload["actions"]]
+    assert attempts == [1, 2]
+
+    rule_ids = [item["rule_id"] for item in chain_payload["actions"]]
+    assert all(rule_ids)
+    assert {str(rule_id) for rule_id in rule_ids} == {str(rule.id)}
+
+    assert chain_payload["actions"][0]["connector_response"] is None
+    assert chain_payload["actions"][1]["connector_response"] == {"status": "ok"}
 
 
 def test_send_message_idempotency_with_contact_id(

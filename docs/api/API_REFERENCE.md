@@ -361,6 +361,7 @@ Agenda envio aplicando roteamento e fallback.
 - `403 Forbidden` – contato com opt-out registrado (gera enfileiramento de reconfirmação e auditoria em `contact_consent_audit`).
 - `429 Too Many Requests` – limite de envios por `org_id` excedido; inclui headers `Retry-After` e `X-RateLimit-Remaining: 0` para orientar o retry.
 - Fluxos bem sucedidos criam `MessageEvent` vinculado ao `MessageJob` com `unit_cost_minor`, `baseline_cost_minor`, `currency`, `country_iso` e `template_name`, garantindo consistência das métricas.
+- Cada tentativa (incluindo fallback) gera um registro em `routed_action` com `rule_id`, provedor selecionado, custo estimado (`cost_minor`), resposta do conector (`provider_response.connector_response`) e status final. Os eventos `MessageEvent` armazenam `attributes.routing_rule_name` e `attributes.provider_id` para auditoria do provedor vencedor.
 
 Quando apenas `contact_id` é informado, o serviço resolve o endereço prioritário considerando opt-ins ativos por canal
 (`MultiChannelConsentResolver`). Caso nenhum endereço elegível seja encontrado o retorno é `422 Unable to resolve channel address`.
@@ -407,6 +408,45 @@ Detalhes de um job e suas tentativas.
 }
 ```
 Erros: `404 Not Found` para jobs inexistentes.
+
+### `GET /messages/jobs/{job_id}/routing`
+Retorna a trilha de decisões (`RoutedAction`) gravada durante o envio, incluindo tentativas de fallback.
+
+**Resposta 200**
+```json
+{
+  "job_id": "<uuid>",
+  "actions": [
+    {
+      "id": "<uuid>",
+      "rule_id": "<uuid>",
+      "rule_name": "route-sms-1a2b3c",
+      "status": "failed",
+      "provider_id": "<uuid>",
+      "provider_name": "Twilio Primary",
+      "attempt_number": 1,
+      "cost_minor": 320,
+      "connector_response": null,
+      "created_at": "2025-10-09T11:21:00+00:00",
+      "message_event_id": null
+    },
+    {
+      "id": "<uuid>",
+      "rule_id": "<uuid>",
+      "rule_name": "route-sms-1a2b3c",
+      "status": "delivered_with_fallback",
+      "provider_id": "<uuid>",
+      "provider_name": "Fallback Nexmo",
+      "attempt_number": 2,
+      "cost_minor": 175,
+      "connector_response": {"status": "ok"},
+      "created_at": "2025-10-09T11:21:02+00:00",
+      "message_event_id": "<uuid>"
+    }
+  ]
+}
+```
+Erros: `404 Not Found` quando o job não pertence à organização autenticada ou não existe.
 
 ## Eventos
 
