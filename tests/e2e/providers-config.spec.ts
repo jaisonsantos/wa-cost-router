@@ -127,8 +127,13 @@ test.describe("Providers configuration", () => {
       providerForm.evaluate((form) => (form as HTMLFormElement).requestSubmit()),
     ]);
 
-    await expect(page.getByText(/Credenciais configuradas com sucesso/)).toBeVisible();
-    await expect(twilioCard.getByText("Configurado")).toBeVisible();
+    await expect(page.getByText(/Credenciais configuradas com sucesso/).first()).toBeVisible();
+    await expect(
+      twilioCard
+        .locator("span.text-green-600")
+        .filter({ hasText: "Configurado" })
+        .first(),
+    ).toBeVisible();
 
     await twilioCard.getByRole("button", { name: "Testar" }).click();
     await expect(page.getByText(/Provider está saudável/)).toBeVisible();
