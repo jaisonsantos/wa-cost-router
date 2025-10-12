@@ -48,11 +48,13 @@ from app.models.models import (  # noqa: E402
     MessageJob,
     MessageEvent,
     RoutedAction,
+    DeliveryAttempt,
 )
 from app.services.routing_engine import RoutingEngine  # noqa: E402
 from app.services.routing.policies import RoutingPolicyViolation  # noqa: E402
 import app.services.routing_engine as routing_engine_module  # noqa: E402
 import app.api.messages as messages_module  # noqa: E402
+from app.core.pii import MASK_TOKEN, mask_email, mask_phone  # noqa: E402
 
 
 TEST_ENGINE = create_engine(
@@ -393,6 +395,93 @@ def test_send_message_returns_success(client, db_session):
         .one()
     )
     assert stored_cost.price_eur == 85
+
+
+def test_message_payloads_are_sanitized(client, db_session):
+    test_client, org_id = client
+    _, contact = _bootstrap_routing_stack(db_session, org_id)
+
+    raw_email = "john.doe@example.com"
+    raw_phone = "+5511987654321"
+    raw_token = "token-1234567890"
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "masking-check",
+            "channel": "whatsapp",
+            "contact_id": str(contact.id),
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {
+                "body_params": ["John"],
+                "contact": {"email": raw_email, "phone": raw_phone},
+                "auth": {"access_token": raw_token},
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    job_id = uuid.UUID(response.json()["job_id"])
+
+    job = (
+        db_session.query(MessageJob)
+        .filter(MessageJob.id == job_id)
+        .one()
+    )
+
+    assert job.variables["body_params"] == ["John"]
+    assert job.variables["contact"]["email"] == mask_email(raw_email)
+    assert job.variables["contact"]["phone"] == mask_phone(raw_phone)
+    assert job.variables["auth"]["access_token"] == MASK_TOKEN
+
+    attempt = (
+        db_session.query(DeliveryAttempt)
+        .filter(DeliveryAttempt.message_job_id == job_id)
+        .one()
+    )
+
+    provider_payload = attempt.provider_response or {}
+    assert provider_payload.get("to") == mask_phone(DEFAULT_NUMBER)
+
+    variables_payload = provider_payload.get("variables") or {}
+    assert variables_payload.get("body_params") == ["John"]
+    assert variables_payload.get("contact", {}).get("email") == mask_email(raw_email)
+    assert variables_payload.get("contact", {}).get("phone") == mask_phone(raw_phone)
+    assert variables_payload.get("auth", {}).get("access_token") == MASK_TOKEN
+
+
+def test_message_job_endpoints_mask_destinations(client, db_session):
+    test_client, org_id = client
+    _, contact = _bootstrap_routing_stack(db_session, org_id)
+
+    send_response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "masking-endpoints",
+            "channel": "whatsapp",
+            "contact_id": str(contact.id),
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["Lia"]},
+        },
+    )
+
+    assert send_response.status_code == 200
+    job_id = send_response.json()["job_id"]
+
+    jobs_response = test_client.get("/messages/jobs")
+    assert jobs_response.status_code == 200
+    jobs_payload = jobs_response.json()
+    matching_job = next(item for item in jobs_payload if item["id"] == job_id)
+    assert matching_job["to_number"] == mask_phone(DEFAULT_NUMBER)
+    assert matching_job["channel_address"] == mask_phone(DEFAULT_NUMBER)
+
+    detail_response = test_client.get(f"/messages/jobs/{job_id}")
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["to_number"] == mask_phone(DEFAULT_NUMBER)
+    assert detail_payload["channel_address"] == mask_phone(DEFAULT_NUMBER)
 
 
 def test_send_message_blocked_by_policy(client, db_session, monkeypatch):
