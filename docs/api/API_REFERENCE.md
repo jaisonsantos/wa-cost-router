@@ -775,6 +775,46 @@ Executa o health check do canal informado (`whatsapp`, `email`, `sms`, ...). Par
 - `400 Bad Request` – canal não suportado ou credenciais ausentes.
 - `404 Not Found` – conexão/provedor não configurado para a organização.
 
+## Integrações CRM
+
+### `POST /integrations/crm/{slug}/webhook`
+Recebe eventos outbound de CRMs suportados (ex.: HubSpot). O tenant é identificado via query `org_id=<uuid>` e o `slug` deve existir no registro (`hubspot`, `pipedrive`, ...).
+
+**Headers obrigatórios**
+
+- `Content-Type: application/json`
+- `X-HubSpot-Signature`: assinatura `hex(hmac_sha256(CRM_WEBHOOK_SECRET, raw_body))`
+
+**Respostas**
+
+- `200 OK` – resumo `SyncResult`:
+
+  ```json
+  {
+    "processed_contacts": 3,
+    "has_more": false,
+    "next_cursor": null,
+    "last_change_at": "2024-12-01T10:15:30+00:00",
+    "origin": "webhook"
+  }
+  ```
+
+- `401 Unauthorized` – assinatura inválida (`detail: "Invalid signature"`).
+- `404 Not Found` – `slug` desconhecido ou provedor não configurado para a organização.
+- `409 Conflict` – credenciais ausentes/ inativas para o provedor CRM.
+- `400 Bad Request` – payload JSON inválido.
+- `502 Bad Gateway` – erro propagado do conector CRM (`ProviderSyncError`).
+
+### `POST /integrations/crm/{slug}/poll`
+Aciona manualmente a sincronização incremental de fallback (`CRMIncrementalSyncService.run_polling_cycle`). O corpo aceita parâmetros opcionais:
+
+| Campo       | Tipo      | Obrigatório | Observações |
+|-------------|-----------|-------------|-------------|
+| `since`     | datetime  | não         | ISO 8601; sobrescreve `last_change_at` salvo em `meta.crm_sync`. |
+| `page_size` | integer   | não         | Tamanho da página solicitado ao provedor (mínimo 1, default `CRM_MAX_PAGE_SIZE`). |
+
+Respostas seguem o mesmo formato de `SyncResult`. Erros `404`/`409`/`502` refletem os mesmos cenários do webhook. Utilize para validação operacional após incidentes ou para monitoramento controlado.
+
 ## Integrações SMS
 ## Integrações SMS
 

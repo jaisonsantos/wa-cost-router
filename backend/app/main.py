@@ -6,6 +6,7 @@ from app.api import (
     auth,
     events,
     integrations,
+    integrations_crm,
     integrations_email,
     integrations_sms,
     messages,
@@ -48,6 +49,11 @@ app.include_router(
     integrations_email.router,
     prefix="/integrations/email",
     tags=["integrations"],
+)
+app.include_router(
+    integrations_crm.router,
+    prefix="/integrations/crm",
+    tags=["integrations:crm"],
 )
 app.include_router(rates.router, prefix="/rates", tags=["rates"])
 app.include_router(events.router, prefix="/events", tags=["events"])
