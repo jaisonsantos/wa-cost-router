@@ -118,7 +118,14 @@ test.describe("Providers configuration", () => {
     await page.getByLabel("Auth Token").fill("A".repeat(32));
     const fromNumber = page.getByLabel("Número remetente (E.164)");
     await fromNumber.fill("15551234567");
-    await page.getByRole("button", { name: "Salvar" }).click();
+
+    const providerForm = page.getByTestId("provider-form");
+    await Promise.all([
+      page.waitForRequest((request) =>
+        request.url().includes("/providers/credentials") && request.method() === "POST",
+      ),
+      providerForm.evaluate((form) => (form as HTMLFormElement).requestSubmit()),
+    ]);
 
     await expect(page.getByText(/Credenciais configuradas com sucesso/)).toBeVisible();
     await expect(twilioCard.getByText("Configurado")).toBeVisible();
