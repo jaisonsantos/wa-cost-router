@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
+from prometheus_client import Counter
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -27,6 +28,19 @@ class SyncResult:
     next_cursor: Optional[str]
     last_change_at: Optional[datetime]
     origin: str
+
+
+CRM_SYNC_PROCESSED_COUNTER = Counter(
+    "crm_sync_processed_total",
+    "Total de contatos processados durante sincronizações CRM",
+    labelnames=["provider_slug", "origin"],
+)
+
+CRM_SYNC_FAILURE_COUNTER = Counter(
+    "crm_sync_failures_total",
+    "Total de falhas durante sincronizações CRM",
+    labelnames=["provider_slug", "origin"],
+)
 
 
 class CRMIncrementalSyncService:
@@ -51,30 +65,43 @@ class CRMIncrementalSyncService:
         provider_slug: str,
         payload: Dict[str, Any],
     ) -> SyncResult:
-        provider_entry, provider_instance = self._resolve_provider(org_id, provider_slug)
-        mapper = self._build_field_mapper(provider_entry, provider_instance)
-        changes = provider_instance.parse_outbound_webhook(payload)
-        last_change = self._determine_last_change(changes)
-        processed = self._apply_changes(
-            org_id=org_id,
-            provider_slug=provider_slug,
-            mapper=mapper,
-            changes=changes,
-        )
+        origin = "webhook"
+        labels = {"provider_slug": provider_slug, "origin": origin}
+        processed = 0
 
-        self._update_sync_state(
-            provider_entry,
-            origin="webhook",
-            last_change_at=last_change,
-            cursor=None,
-        )
+        try:
+            provider_entry, provider_instance = self._resolve_provider(org_id, provider_slug)
+            mapper = self._build_field_mapper(provider_entry, provider_instance)
+            changes = provider_instance.parse_outbound_webhook(payload)
+            last_change = self._determine_last_change(changes)
+            processed = self._apply_changes(
+                org_id=org_id,
+                provider_slug=provider_slug,
+                mapper=mapper,
+                changes=changes,
+            )
+
+            self._update_sync_state(
+                provider_entry,
+                origin=origin,
+                last_change_at=last_change,
+                cursor=None,
+            )
+        except ProviderSyncError:
+            CRM_SYNC_FAILURE_COUNTER.labels(**labels).inc()
+            raise
+        except Exception:
+            CRM_SYNC_FAILURE_COUNTER.labels(**labels).inc()
+            raise
+
+        CRM_SYNC_PROCESSED_COUNTER.labels(**labels).inc(processed)
 
         return SyncResult(
             processed_contacts=processed,
             has_more=False,
             next_cursor=None,
             last_change_at=last_change,
-            origin="webhook",
+            origin=origin,
         )
 
     def run_polling_cycle(
@@ -85,46 +112,56 @@ class CRMIncrementalSyncService:
         since: Optional[datetime] = None,
         page_size: Optional[int] = None,
     ) -> SyncResult:
-        provider_entry, provider_instance = self._resolve_provider(org_id, provider_slug)
-        mapper = self._build_field_mapper(provider_entry, provider_instance)
-
-        state = self._load_sync_state(provider_entry)
-        cursor = state.get("cursor")
-        if since is None:
-            since = state.get("last_change_at")
+        origin = "polling"
+        labels = {"provider_slug": provider_slug, "origin": origin}
+        processed = 0
+        last_change: Optional[datetime] = None
+        result = None
 
         try:
+            provider_entry, provider_instance = self._resolve_provider(org_id, provider_slug)
+            mapper = self._build_field_mapper(provider_entry, provider_instance)
+
+            state = self._load_sync_state(provider_entry)
+            cursor = state.get("cursor")
+            if since is None:
+                since = state.get("last_change_at")
+
             result = provider_instance.fetch_incremental_changes(
                 since=since,
                 cursor=cursor,
                 page_size=page_size or settings.CRM_MAX_PAGE_SIZE,
             )
+
+            processed = self._apply_changes(
+                org_id=org_id,
+                provider_slug=provider_slug,
+                mapper=mapper,
+                changes=result.changes,
+            )
+
+            last_change = self._determine_last_change(result.changes) or since
+            self._update_sync_state(
+                provider_entry,
+                origin=origin,
+                last_change_at=last_change,
+                cursor=result.next_cursor,
+            )
         except ProviderSyncError:
+            CRM_SYNC_FAILURE_COUNTER.labels(**labels).inc()
             raise
         except Exception as exc:  # pragma: no cover - defensivo
+            CRM_SYNC_FAILURE_COUNTER.labels(**labels).inc()
             raise ProviderSyncError(provider_slug, str(exc)) from exc
 
-        processed = self._apply_changes(
-            org_id=org_id,
-            provider_slug=provider_slug,
-            mapper=mapper,
-            changes=result.changes,
-        )
-
-        last_change = self._determine_last_change(result.changes) or since
-        self._update_sync_state(
-            provider_entry,
-            origin="polling",
-            last_change_at=last_change,
-            cursor=result.next_cursor,
-        )
+        CRM_SYNC_PROCESSED_COUNTER.labels(**labels).inc(processed)
 
         return SyncResult(
             processed_contacts=processed,
-            has_more=result.has_more,
-            next_cursor=result.next_cursor,
+            has_more=result.has_more if result else False,
+            next_cursor=result.next_cursor if result else None,
             last_change_at=last_change,
-            origin="polling",
+            origin=origin,
         )
 
     # ------------------------------------------------------------------

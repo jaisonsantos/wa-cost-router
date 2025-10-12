@@ -10,7 +10,7 @@ Este guia descreve como configurar as integrações CRM suportadas no piloto (Hu
 - Worker RQ ativo (`python backend/worker.py`) para processar filas `default` e `crm_sync`.
 - Variáveis de ambiente:
   - `CRM_MAX_PAGE_SIZE` (default 100).
-  - `CRM_SYNC_INTERVAL_SECONDS` (janela de polling para fallback).
+  - `CRM_POLLING_INTERVAL_SECONDS` (janela mínima entre enfileiramentos de polling).
   - `CRM_WEBHOOK_SECRET` (utilizada para validação de webhooks HubSpot).
 
 ## 2. HubSpot
@@ -34,10 +34,11 @@ Este guia descreve como configurar as integrações CRM suportadas no piloto (Hu
    - Eventos válidos respondem com o resumo `SyncResult` (`processed_contacts`, `last_change_at`, `origin`, etc.) utilizado também na telemetria.
 3. **Sincronização incremental**
    - Webhooks ingerem eventos imediatos (`origin=webhook`).
-   - Polling pode ser orquestrado tanto pelo comando `python backend/scripts/run_crm_sync.py --provider hubspot --org-id <uuid>` quanto via API `POST /integrations/crm/hubspot/poll` (útil para fallback manual ou automações). Ambas retornam `SyncResult` e respeitam o estado salvo em `Provider.meta.crm_sync`.
+   - Polling pode ser disparado manualmente via script `python backend/scripts/run_crm_sync.py` (suporte a `--provider`, `--org-id`, `--since`, `--page-size`) ou via API `POST /integrations/crm/hubspot/poll`.
+   - Enfileiramento automático deve usar `enqueue_polling_cycle` em `app/services/crm/worker.py`, que respeita `CRM_POLLING_INTERVAL_SECONDS` e publica jobs na fila `crm_sync`.
    - Estado persistido em `Provider.meta.crm_sync` (`cursor`, `last_change_at`).
 4. **Monitoramento**
-   - Métricas `crm_sync_processed_total`, `crm_sync_failures_total` (labels `provider_slug`, `origin`).
+   - Métricas `crm_sync_processed_total` e `crm_sync_failures_total` (labels `provider_slug`, `origin`) expostas em `/admin/metrics`.
    - Logs estruturados incluem `crm_change_id`, `external_id`, `opt_in_status` resultante.
 
 ## 3. Pipedrive (beta)
@@ -55,7 +56,7 @@ Este guia descreve como configurar as integrações CRM suportadas no piloto (Hu
      }
      ```
 2. **Polling**
-   - Pipedrive não envia webhooks na fase beta. Agendar `python backend/scripts/run_crm_sync.py --provider pipedrive --org-id <uuid>` a cada 15 minutos.
+   - Pipedrive não envia webhooks na fase beta. Agendar `python backend/scripts/run_crm_sync.py --provider pipedrive --org-id <uuid>` ou usar `enqueue_polling_cycle` com intervalo >= `CRM_POLLING_INTERVAL_SECONDS`.
    - O serviço reconcilia contatos por `external_id`/`email` e atualiza opt-ins quando `marketing_status` mudar.
 3. **Limitações conhecidas**
    - Campos customizados devem ser configurados manualmente (`Provider.meta.field_mapping.custom_attributes`).
