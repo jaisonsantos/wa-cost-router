@@ -1,7 +1,8 @@
 .PHONY: help dev build up down restart logs logs-api logs-db logs-redis logs-worker logs-web \
         lint lint-fix lint-backend frontend-dev install migrate seed seed-providers clean \
         shell-api shell-db shell-worker psql stop worker-only makemigration postman-test postman-env \
-        ci ci-backend ci-frontend ci-e2e ci-pipeline test-backend
+        ci ci-backend ci-frontend ci-e2e ci-pipeline test-backend test-backend-multichannel \
+        test-frontend test-e2e
 
 export RATE_LIMIT_MESSAGES_PER_MIN ?= 120
 export RATE_LIMIT_LOGIN_PER_MIN ?= 20
@@ -172,6 +173,9 @@ seed-providers: ## Seed default providers for the current org
 test-backend: ## Run backend test suite (pytest)
 	pytest backend/tests --cov=backend/app --cov=backend/scripts --cov-report=term --cov-report=xml:backend/coverage.xml
 
+test-backend-multichannel: ## Run targeted multi-channel backend tests (email/SMS sandbox flows)
+	scripts/test-backend-multichannel.sh
+
 postman-test: ## Run Newman collection tests against local stack
 	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --verbose
 	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --folder "Multi-Channel Regression" --iteration-data docs/postman/multi_channel_regression.json --verbose
@@ -181,7 +185,7 @@ postman-env: ## Show Postman collection and environment paths
 	@echo "Environment: docs/postman/wa-cost-router.postman_environment.json"
 
 # Aggregator CI target (no recipe) → runs modular steps
-ci: ci-backend ci-frontend ci-e2e ## Run backend, frontend and E2E checks sequentially
+ci: ci-backend test-backend-multichannel ci-frontend test-frontend ci-e2e ## Run backend, frontend and E2E checks sequentially
 
 ci-backend: ## Build backend images and verify migrations
 	$(DC) build api worker
@@ -192,7 +196,10 @@ ci-frontend: ## Lint and build the frontend
 	npm run lint
 	npm run build
 
-ci-e2e: ## Spin up stack and execute Newman tests
+test-frontend: ## Execute frontend unit tests (Vitest)
+	scripts/test-frontend.sh
+
+ci-e2e: ## Spin up stack and execute Newman + Playwright tests
 	@bash -c '\
 	set -euo pipefail; \
 	trap "$(DC) down -v" EXIT; \
@@ -231,11 +238,13 @@ ci-e2e: ## Spin up stack and execute Newman tests
 	echo "API did not become ready in time" >&2; \
 	exit 1; \
 	fi; \
-        npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --reporters cli,junit --reporter-junit-export newman-report.xml; \
-        npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --folder "Multi-Channel Regression" --iteration-data docs/postman/multi_channel_regression.json --reporters cli; \
-        npx playwright install --with-deps; \
-        npm run test:e2e; \
-        '
+	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --reporters cli,junit --reporter-junit-export newman-report.xml; \
+	npx --yes newman run docs/postman/wa-cost-router.postman_collection.json -e docs/postman/wa-cost-router.postman_environment.json --folder "Multi-Channel Regression" --iteration-data docs/postman/multi_channel_regression.json --reporters cli; \
+	E2E_API_BASE_URL=http://localhost:8000 PLAYWRIGHT_INSTALL_ARGS="--with-deps" scripts/test-e2e.sh; \
+	'
+
+test-e2e: ## Run Playwright end-to-end UI regression (requires API stack running)
+	scripts/test-e2e.sh
 
 shell-api: ## Open a shell inside the API container
 	$(DC) exec api bash

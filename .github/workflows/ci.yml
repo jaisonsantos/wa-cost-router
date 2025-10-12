@@ -14,6 +14,16 @@ concurrency:
 env:
   RATE_LIMIT_MESSAGES_PER_MIN: 120
   RATE_LIMIT_LOGIN_PER_MIN: 20
+  SANDBOX_PROVIDERS: "true"
+  SANDBOX_LATENCY_MS: 0
+  SANDBOX_FAILURE_RATE: 0
+  SENDGRID_API_KEY: sandbox-sendgrid-api-key
+  SENDGRID_DEFAULT_SENDER_EMAIL: no-reply+sandbox@example.com
+  SENDGRID_BASE_URL: https://api.sendgrid.com/v3
+  TWILIO_ACCOUNT_SID: AC00000000000000000000000000000000
+  TWILIO_AUTH_TOKEN: sandbox-twilio-auth-token
+  TWILIO_FROM_NUMBER: +15558675309
+  TWILIO_MESSAGING_SERVICE_SID: MG00000000000000000000000000000000
 
 jobs:
   backend:
@@ -52,6 +62,9 @@ jobs:
       - name: Test backend
         run: make test-backend
 
+      - name: Multi-channel regression
+        run: make test-backend-multichannel
+
       - name: Publish summary
         if: ${{ always() }}
         env:
@@ -86,6 +99,9 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Test frontend
+        run: make test-frontend
+
       - name: Publish summary
         if: ${{ always() }}
         env:
@@ -109,6 +125,27 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if compgen -G 'backend/requirements*.txt' > /dev/null; then
+            for requirement_file in backend/requirements*.txt; do
+              pip install -r "$requirement_file"
+            done
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Run end-to-end workflow
         shell: bash
