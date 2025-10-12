@@ -69,18 +69,18 @@ def _merge_form_schema(base: SchemaDict, override: SchemaDict) -> SchemaDict:
     fields_by_key: Dict[str, FieldDict] = {}
     order: List[str] = []
 
-    for field in base_fields:
-        key = field.get("key")
+    for schema_field in base_fields:
+        key = schema_field.get("key")
         if not key:
             continue
-        fields_by_key[key] = deepcopy(field)
+        fields_by_key[key] = deepcopy(schema_field)
         order.append(key)
 
-    for field in override_fields:
-        key = field.get("key")
+    for schema_field in override_fields:
+        key = schema_field.get("key")
         if not key:
             continue
-        merged_field = _merge_dict(fields_by_key.get(key, {}), field)
+        merged_field = _merge_dict(fields_by_key.get(key, {}), schema_field)
         fields_by_key[key] = merged_field
         if key not in order:
             order.append(key)
