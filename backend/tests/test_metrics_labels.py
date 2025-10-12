@@ -11,7 +11,10 @@ BACKEND_DIR = ROOT_DIR / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.api.messages import DELIVERY_ATTEMPTS_COUNTER, MESSAGES_SEND_COUNTER
+from app.services.messages.delivery import (
+    DELIVERY_ATTEMPTS_COUNTER,
+    MESSAGES_SEND_COUNTER,
+)
 from app.metrics import (
     SLA_FIRST_RESPONSE_SECONDS,
     SLA_FIRST_RESPONSE_TARGET_SECONDS,

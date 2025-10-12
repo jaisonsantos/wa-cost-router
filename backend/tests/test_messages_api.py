@@ -7,7 +7,7 @@ import pytest
 import fakeredis
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -44,6 +44,7 @@ from app.models.models import (  # noqa: E402
     OptInRequestStatusEnum,
     RateCard,
     RoutingRule,
+    JobStatusEnum,
     CostRecord,
     MessageJob,
     MessageEvent,
@@ -54,7 +55,9 @@ from app.services.routing_engine import RoutingEngine  # noqa: E402
 from app.services.routing.policies import RoutingPolicyViolation  # noqa: E402
 import app.services.routing_engine as routing_engine_module  # noqa: E402
 import app.api.messages as messages_module  # noqa: E402
+import app.services.messages.delivery as delivery_module  # noqa: E402
 from app.core.pii import MASK_TOKEN, mask_email, mask_phone  # noqa: E402
+from app.workers import message_send as message_worker  # noqa: E402
 
 
 TEST_ENGINE = create_engine(
@@ -121,12 +124,27 @@ def client(db_session, monkeypatch):
     monkeypatch.setattr(messages_module, "get_circuit_breaker_store", override_circuit_breaker_store)
     monkeypatch.setattr(routing_engine_module, "get_circuit_breaker_store", override_circuit_breaker_store)
 
+    enqueued: list[dict] = []
+
+    def immediate_enqueue(payload):
+        enqueued.append(payload)
+        return "test-job"
+
+    monkeypatch.setattr(message_worker, "enqueue_message_delivery", immediate_enqueue)
+    monkeypatch.setattr(
+        message_worker,
+        "get_circuit_breaker_store",
+        override_circuit_breaker_store,
+    )
+
     monkeypatch.setattr(settings, "SANDBOX_PROVIDERS", True)
     monkeypatch.setattr(settings, "SANDBOX_LATENCY_MS", 0)
     monkeypatch.setattr(settings, "SANDBOX_FAILURE_RATE", 0.0)
+    monkeypatch.setattr(settings, "MARKETING_SILENT_HOURS_UTC", [])
 
     with TestClient(app) as test_client:
         test_client.circuit_breaker_store = circuit_store  # type: ignore[attr-defined]
+        test_client.enqueued_message_jobs = enqueued  # type: ignore[attr-defined]
         yield test_client, org_id
 
     app.dependency_overrides.pop(get_db, None)
@@ -252,6 +270,13 @@ def _fetch_routed_actions(db_session, job_id: uuid.UUID) -> list[RoutedAction]:
     ]
 
 
+def _process_enqueued_jobs(test_client: TestClient, db_session: Session) -> None:
+    queue: list[dict] = getattr(test_client, "enqueued_message_jobs", [])  # type: ignore[attr-defined]
+    while queue:
+        payload = queue.pop(0)
+        message_worker.process_message_send(context=payload, db_session=db_session)
+
+
 def test_send_message_enforces_rate_limit(client, db_session, monkeypatch):
     test_client, org_id = client
 
@@ -279,8 +304,9 @@ def test_send_message_enforces_rate_limit(client, db_session, monkeypatch):
                     "variables": {"body_params": ["John"]},
                 },
             )
-            assert response.status_code == 200
+            assert response.status_code == 202
             assert response.headers["X-RateLimit-Remaining"] in {"1", "0"}
+            _process_enqueued_jobs(test_client, db_session)
 
         response = test_client.post(
             "/messages/send",
@@ -356,10 +382,11 @@ def test_send_message_returns_success(client, db_session):
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     payload = response.json()
-    assert payload["status"] in {"delivered", "delivered_with_fallback"}
-    assert payload["provider_used"] == "360dialog"
+    assert payload["status"] == JobStatusEnum.pending.value
+    assert payload["provider_used"] is None
     assert payload["estimated_cost"] == 85
     assert payload["job_id"]
 
@@ -369,6 +396,7 @@ def test_send_message_returns_success(client, db_session):
         .filter(MessageJob.id == job_uuid)
         .one()
     )
+    assert job.status in {JobStatusEnum.delivered, JobStatusEnum.delivered_with_fallback}
     assert job.channel == "whatsapp"
     assert job.channel_address == DEFAULT_NUMBER
     assert job.contact_id == contact.id
@@ -421,7 +449,8 @@ def test_message_payloads_are_sanitized(client, db_session):
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     job_id = uuid.UUID(response.json()["job_id"])
 
     job = (
@@ -467,7 +496,8 @@ def test_message_job_endpoints_mask_destinations(client, db_session):
         },
     )
 
-    assert send_response.status_code == 200
+    assert send_response.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     job_id = send_response.json()["job_id"]
 
     jobs_response = test_client.get("/messages/jobs")
@@ -535,7 +565,7 @@ def test_send_message_handles_routing_engine_error(client, db_session, monkeypat
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 500
     payload = response.json()
     assert payload["status"] == "failed_final"
     assert payload["message"] == "Routing engine error"
@@ -547,10 +577,10 @@ def test_send_message_handles_delivery_exception(client, db_session, monkeypatch
     test_client, org_id = client
     _bootstrap_routing_stack(db_session, org_id)
 
-    async def boom(**kwargs):
+    def boom_enqueue(payload):
         raise RuntimeError("delivery exploded")
 
-    monkeypatch.setattr(messages_module, "_attempt_delivery_with_fallback", boom)
+    monkeypatch.setattr(message_worker, "enqueue_message_delivery", boom_enqueue)
 
     response = test_client.post(
         "/messages/send",
@@ -564,10 +594,10 @@ def test_send_message_handles_delivery_exception(client, db_session, monkeypatch
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 500
     payload = response.json()
     assert payload["status"] == "failed_final"
-    assert payload["message"] == "Delivery orchestration error"
+    assert payload["message"] == "Message enqueue error"
     assert payload["provider_used"] is None
 
 
@@ -610,10 +640,11 @@ def test_send_message_via_email_channel(
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     payload = response.json()
-    assert payload["status"] == "delivered"
-    assert payload["provider_used"] == seed["provider"].name
+    assert payload["status"] == JobStatusEnum.pending.value
+    assert payload["provider_used"] is None
     assert payload["estimated_cost"] == 75
 
     job = (
@@ -621,6 +652,7 @@ def test_send_message_via_email_channel(
         .filter(MessageJob.id == uuid.UUID(payload["job_id"]))
         .one()
     )
+    assert job.status == JobStatusEnum.delivered
     assert job.channel == "email"
     assert job.contact_id == contact.id
 
@@ -692,7 +724,7 @@ def test_send_message_sms_with_fallback(
     def fake_get_connector(provider_name, credentials, base_url, **kwargs):
         return StubConnector(provider_name)
 
-    monkeypatch.setattr(messages_module, "get_connector", fake_get_connector)
+    monkeypatch.setattr(delivery_module, "get_connector", fake_get_connector)
 
     response = test_client.post(
         "/messages/send",
@@ -706,10 +738,11 @@ def test_send_message_sms_with_fallback(
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     payload = response.json()
-    assert payload["status"] == "delivered_with_fallback"
-    assert payload["provider_used"] == backup_provider.name
+    assert payload["status"] == JobStatusEnum.pending.value
+    assert payload["provider_used"] is None
     assert attempts == [primary_seed["provider"].name, backup_provider.name]
 
     job_uuid = uuid.UUID(payload["job_id"])
@@ -723,6 +756,9 @@ def test_send_message_sms_with_fallback(
     ] == [1, 2]
     assert actions[0].status == "failed"
     assert actions[1].status == "delivered_with_fallback"
+
+    job = db_session.get(MessageJob, job_uuid)
+    assert job.status == JobStatusEnum.delivered_with_fallback
 
     event = (
         db_session.query(MessageEvent)
@@ -797,7 +833,7 @@ def test_get_message_routing_chain_endpoint(
     def fake_get_connector(provider_name, credentials, base_url, **kwargs):
         return StubConnector(provider_name)
 
-    monkeypatch.setattr(messages_module, "get_connector", fake_get_connector)
+    monkeypatch.setattr(delivery_module, "get_connector", fake_get_connector)
 
     response = test_client.post(
         "/messages/send",
@@ -811,8 +847,10 @@ def test_get_message_routing_chain_endpoint(
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     payload = response.json()
+    assert payload["status"] == JobStatusEnum.pending.value
 
     chain_response = test_client.get(f"/messages/jobs/{payload['job_id']}/routing")
     assert chain_response.status_code == 200
@@ -874,7 +912,8 @@ def test_send_message_idempotency_with_contact_id(
     }
 
     first = test_client.post("/messages/send", json=payload)
-    assert first.status_code == 200
+    assert first.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     first_job = first.json()["job_id"]
 
     second = test_client.post("/messages/send", json=payload)
@@ -919,7 +958,7 @@ def test_send_message_handles_job_commit_failure(client, db_session, monkeypatch
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 500
     payload = response.json()
     assert payload["status"] == "failed_final"
     assert payload["message"] == "Message job persistence error"
@@ -954,10 +993,11 @@ def test_send_message_handles_non_iterable_fallback_chain(client, db_session, mo
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     payload = response.json()
-    assert payload["status"] in {"delivered", "delivered_with_fallback"}
-    assert payload["provider_used"] == "360dialog"
+    assert payload["status"] == JobStatusEnum.pending.value
+    assert payload["provider_used"] is None
 
     job_uuid = uuid.UUID(payload["job_id"])
     events = (
@@ -995,7 +1035,8 @@ def test_send_message_defaults_invalid_estimated_cost(client, db_session, monkey
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     payload = response.json()
     assert payload["estimated_cost"] == 0
 
@@ -1116,10 +1157,9 @@ def test_send_message_rolls_back_on_commit_error(client, db_session, monkeypatch
         },
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "failed_final"
-    assert payload["message"] == "Delivery orchestration error"
+    assert response.status_code == 202
+    with pytest.raises(RuntimeError, match="commit exploded"):
+        _process_enqueued_jobs(test_client, db_session)
 
 
 def test_circuit_breaker_opens_and_triggers_fallback(client, db_session, monkeypatch):
@@ -1198,7 +1238,7 @@ def test_circuit_breaker_opens_and_triggers_fallback(client, db_session, monkeyp
             return FailingConnector(provider_name, credentials, base_url)
         return SuccessfulConnector(provider_name, credentials, base_url)
 
-    monkeypatch.setattr(messages_module, "get_connector", fake_connector)
+    monkeypatch.setattr(delivery_module, "get_connector", fake_connector)
 
     response = test_client.post(
         "/messages/send",
@@ -1212,10 +1252,11 @@ def test_circuit_breaker_opens_and_triggers_fallback(client, db_session, monkeyp
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     payload = response.json()
-    assert payload["status"] == "delivered_with_fallback"
-    assert payload["provider_used"] == fallback.name
+    assert payload["status"] == JobStatusEnum.pending.value
+    assert payload["provider_used"] is None
 
     primary_state = breaker_store.get_state(str(primary.id))
     assert primary_state.state == "open"
@@ -1240,7 +1281,7 @@ def test_circuit_breaker_resets_on_success(client, db_session, monkeypatch):
                 "response": {},
             }
 
-    monkeypatch.setattr(messages_module, "get_connector", SuccessfulConnector)
+    monkeypatch.setattr(delivery_module, "get_connector", SuccessfulConnector)
 
     response = test_client.post(
         "/messages/send",
@@ -1254,7 +1295,8 @@ def test_circuit_breaker_resets_on_success(client, db_session, monkeypatch):
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
+    _process_enqueued_jobs(test_client, db_session)
     state = breaker_store.get_state(str(provider.id))
     assert state.state == "closed"
     assert state.failure_count == 0
