@@ -46,6 +46,18 @@ class BillingSummaryResponse(BaseModel):
     price_id: str | None = None
 
 
+def _as_dict(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
+    for attr in ("to_dict_recursive", "to_dict"):
+        method = getattr(value, attr, None)
+        if callable(method):
+            result = method()
+            if isinstance(result, dict):
+                return result
+    return None
+
+
 def _parse_uuid(value: Any) -> uuid.UUID | None:
     if value is None:
         return None
@@ -296,16 +308,18 @@ async def handle_webhook(request: Request, db: Session = Depends(get_db)) -> dic
     except (StripeConfigurationError, ValueError, stripe_error.SignatureVerificationError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    event_type = event.get("type")
-    data_object = event.get("data", {}).get("object", {})
-    if not isinstance(data_object, dict):
-        return {"received": "ignored"}
+    event_payload = _as_dict(event) or {}
+    event_type = event_payload.get("type")
 
-    org_id = _parse_uuid(
-        data_object.get("metadata", {}).get("org_id")
-        if isinstance(data_object.get("metadata"), dict)
-        else None
-    )
+    data_payload = event_payload.get("data")
+    data_payload = _as_dict(data_payload) or {}
+
+    data_object = data_payload.get("object")
+    data_object = _as_dict(data_object) or {}
+
+    metadata = _as_dict(data_object.get("metadata")) or {}
+
+    org_id = _parse_uuid(metadata.get("org_id"))
     customer_id = data_object.get("customer") if isinstance(data_object.get("customer"), str) else None
 
     if event_type == "checkout.session.completed":
@@ -315,7 +329,7 @@ async def handle_webhook(request: Request, db: Session = Depends(get_db)) -> dic
             subscription.stripe_subscription_id = subscription_id or subscription.stripe_subscription_id
             if data_object.get("status") == "complete":
                 subscription.status = BillingStatusEnum.active
-            price_id = data_object.get("metadata", {}).get("price_id") if isinstance(data_object.get("metadata"), dict) else None
+            price_id = metadata.get("price_id")
             if isinstance(price_id, str):
                 subscription.price_id = price_id
             db.commit()
