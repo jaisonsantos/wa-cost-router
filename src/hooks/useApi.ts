@@ -20,6 +20,10 @@ import {
   ProviderCredentialInput,
   ProviderHealth,
   ProviderMetric,
+  Template,
+  TemplateCreatePayload,
+  TemplateSyncResponse,
+  TemplateUpdatePayload,
   IntegrationConnection,
   ConnectionTestResult,
   QueueMetricsResponse,
@@ -255,6 +259,77 @@ export const useSetProviderCredentials = () => {
 export const useHealthCheckProvider = () => {
   return useMutation<ProviderHealth, Error, string>({
     mutationFn: (providerId: string) => api.healthCheckProvider(providerId),
+  });
+};
+
+// Templates
+export const useTemplates = (params?: { language?: string; status?: string }) => {
+  const language = params?.language ?? null;
+  const status = params?.status ?? null;
+  return useQuery<Template[], Error>({
+    queryKey: ["templates", language, status],
+    queryFn: () => api.getTemplates(params ?? {}),
+  });
+};
+
+export const useCreateTemplate = () => {
+  const queryClient = useQueryClient();
+  return useMutation<Template, Error, TemplateCreatePayload>({
+    mutationFn: (payload) => api.createTemplate(payload),
+    onSuccess: (template) => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      toast({ title: "Template criado", description: `${template.name} (${template.language})` });
+    },
+    onError: (error) => {
+      toast({ title: "Erro ao criar template", description: error.message, variant: "destructive" });
+    },
+  });
+};
+
+export const useUpdateTemplate = () => {
+  const queryClient = useQueryClient();
+  return useMutation<Template, Error, { templateId: string; updates: TemplateUpdatePayload }>({
+    mutationFn: ({ templateId, updates }) => api.updateTemplate(templateId, updates),
+    onSuccess: (template) => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      toast({ title: "Template atualizado", description: `${template.name} → ${template.status}` });
+    },
+    onError: (error) => {
+      toast({ title: "Erro ao atualizar template", description: error.message, variant: "destructive" });
+    },
+  });
+};
+
+export const useDeleteTemplate = () => {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: (templateId) => api.deleteTemplate(templateId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      toast({ title: "Template removido" });
+    },
+    onError: (error) => {
+      toast({ title: "Erro ao remover template", description: error.message, variant: "destructive" });
+    },
+  });
+};
+
+export const useSyncTemplates = () => {
+  const queryClient = useQueryClient();
+  return useMutation<TemplateSyncResponse, Error, void>({
+    mutationFn: () => api.syncTemplates(),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      toast({
+        title: "Sincronização concluída",
+        description: result.languages.length
+          ? `Idiomas disponíveis: ${result.languages.join(", ")}`
+          : "Nenhum template retornado pelos provedores.",
+      });
+    },
+    onError: (error) => {
+      toast({ title: "Erro ao sincronizar templates", description: error.message, variant: "destructive" });
+    },
   });
 };
 

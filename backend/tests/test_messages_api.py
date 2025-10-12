@@ -50,6 +50,7 @@ from app.models.models import (  # noqa: E402
     RoutedAction,
 )
 from app.services.routing_engine import RoutingEngine  # noqa: E402
+from app.services.routing.policies import RoutingPolicyViolation  # noqa: E402
 import app.services.routing_engine as routing_engine_module  # noqa: E402
 import app.api.messages as messages_module  # noqa: E402
 
@@ -392,6 +393,36 @@ def test_send_message_returns_success(client, db_session):
         .one()
     )
     assert stored_cost.price_eur == 85
+
+
+def test_send_message_blocked_by_policy(client, db_session, monkeypatch):
+    test_client, org_id = client
+    _, contact = _bootstrap_routing_stack(db_session, org_id)
+
+    def _deny_policy(self, *, template_category, channel, requested_at):
+        raise RoutingPolicyViolation("marketing_silent_hours", "Blocked for tests")
+
+    monkeypatch.setattr(
+        "app.services.routing_engine.RoutingPolicyService.validate",
+        _deny_policy,
+    )
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "policy-denied",
+            "channel": "whatsapp",
+            "contact_id": str(contact.id),
+            "template_id": "promo",
+            "template_category": "marketing",
+            "variables": {},
+        },
+    )
+
+    assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert detail["code"] == "marketing_silent_hours"
+    assert "Blocked" in detail["message"]
 
 
 def test_send_message_handles_routing_engine_error(client, db_session, monkeypatch):

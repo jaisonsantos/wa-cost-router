@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Union, Tuple, Any
 from uuid import UUID
 
@@ -5,12 +6,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
 
-from app.models.models import RoutingRule, Provider, RateCard
+from app.models.models import Provider, RateCard, RoutingRule
 from app.schemas.routing_rules import RoutingRuleActions
 from app.services.routing import (
     ContactOptOutError,
     ContactRoutingPreferences,
     MultiChannelConsentResolver,
+    RoutingPolicyService,
+    RoutingPolicyViolation,
 )
 import logging
 
@@ -28,11 +31,13 @@ class RoutingEngine:
         *,
         circuit_breaker: Optional[CircuitBreakerStore] = None,
         consent_resolver: Optional[MultiChannelConsentResolver] = None,
+        policy_service: Optional[RoutingPolicyService] = None,
     ):
         self.db = db
         self.org_id = org_id
         self._circuit_breaker = circuit_breaker or get_circuit_breaker_store()
         self._consent_resolver = consent_resolver or MultiChannelConsentResolver(db, org_id)
+        self._policy_service = policy_service or RoutingPolicyService()
     
     def select_provider(
         self,
@@ -42,6 +47,7 @@ class RoutingEngine:
         *,
         channel: Optional[str] = None,
         contact_address: Optional[str] = None,
+        send_time: Optional[datetime] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Seleciona o provedor baseado nas regras ativas e custos
@@ -56,6 +62,26 @@ class RoutingEngine:
         ).order_by(RoutingRule.priority.asc()).all()
 
         normalized_channel = self._normalize_channel(channel)
+
+        try:
+            self._policy_service.validate(
+                template_category=category,
+                channel=normalized_channel,
+                requested_at=send_time or datetime.now(timezone.utc),
+            )
+        except RoutingPolicyViolation as exc:
+            logger.info(
+                "Routing policy violation for org %s: %s",
+                self.org_id,
+                exc.message,
+                extra={
+                    "event": "routing_policy_violation",
+                    "policy_code": exc.code,
+                    "channel": normalized_channel,
+                    "category": category,
+                },
+            )
+            raise
         preferences: Optional[ContactRoutingPreferences] = None
         if self._consent_resolver and contact_address is not None:
             preferences = self._consent_resolver.resolve(
