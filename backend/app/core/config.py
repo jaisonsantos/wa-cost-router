@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -56,6 +58,14 @@ class Settings(BaseSettings):
     METRICS_AUTH_TOKEN: str | None = None
     METRICS_AUTH_HEADER_NAME: str = "X-Admin-Token"
     METRICS_AUTH_LOCAL_TOKEN: str = "local-admin-metrics-token"
+
+    def model_post_init(self, __context: Any) -> None:  # pragma: no cover - exercised via settings singleton
+        super().model_post_init(__context)
+
+        environment = (self.ENVIRONMENT or "").lower()
+        if environment in {"local", "dev", "development", "test", "testing"}:
+            if "MARKETING_SILENT_HOURS_UTC" not in self.model_fields_set:
+                object.__setattr__(self, "MARKETING_SILENT_HOURS_UTC", [])
 
     def get_metrics_auth_token(self) -> str | None:
         token = self.METRICS_AUTH_TOKEN
