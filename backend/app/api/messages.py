@@ -47,6 +47,11 @@ from app.core.normalization import (
     normalize_international_phone,
     strip_to_none,
 )
+from app.core.pii import (
+    mask_contact_point,
+    sanitize_provider_payload,
+    sanitize_template_variables,
+)
 from app.services.contacts import OptInRequestService
 from app.services.conversations import ConversationLifecycleService
 from app.services.provider_connectors import get_connector
@@ -265,6 +270,8 @@ async def send_message(
 
     # 4. Criar job
     job_identifier = uuid.uuid4()
+    sanitized_variables = sanitize_template_variables(data.variables)
+
     job = MessageJob(
         id=job_identifier,
         org_id=current_user["org_id"],
@@ -275,7 +282,7 @@ async def send_message(
         contact_id=resolved_contact_id,
         template_id=data.template_id,
         template_category=data.template_category,
-        variables=data.variables,
+        variables=sanitized_variables,
         country_iso=country_iso,
         status=JobStatusEnum.processing
     )
@@ -560,13 +567,15 @@ async def _attempt_delivery_with_fallback(
                     message_event_id=None,
                     action="deliver_message",
                     status=JobStatusEnum.failed_final.value,
-                    provider_response={
-                        "job_id": str(job_identifier),
-                        "rule_name": rule_name,
-                        "provider_id": None,
-                        "provider_name": None,
-                        "reason": "invalid_org_context",
-                    },
+                    provider_response=sanitize_provider_payload(
+                        {
+                            "job_id": str(job_identifier),
+                            "rule_name": rule_name,
+                            "provider_id": None,
+                            "provider_name": None,
+                            "reason": "invalid_org_context",
+                        }
+                    ),
                     cost_minor=estimated_cost_minor,
                 )
                 db.add(failure_action)
@@ -703,15 +712,17 @@ async def _attempt_delivery_with_fallback(
                     message_event_id=None,
                     action="deliver_message",
                     status=AttemptStatusEnum.failed.value,
-                    provider_response={
-                        "job_id": str(job_identifier),
-                        "rule_name": rule_name,
-                        "provider_id": str(provider.id),
-                        "provider_name": provider.name,
-                        "attempt_number": attempt_number,
-                        "retry": retry,
-                        "error": str(exc),
-                    },
+                    provider_response=sanitize_provider_payload(
+                        {
+                            "job_id": str(job_identifier),
+                            "rule_name": rule_name,
+                            "provider_id": str(provider.id),
+                            "provider_name": provider.name,
+                            "attempt_number": attempt_number,
+                            "retry": retry,
+                            "error": str(exc),
+                        }
+                    ),
                     cost_minor=attempt_cost_minor,
                 )
                 db.add(exception_action)
@@ -739,6 +750,8 @@ async def _attempt_delivery_with_fallback(
                 break
 
             attempt_status = AttemptStatusEnum.success if result["success"] else AttemptStatusEnum.failed
+            sanitized_provider_payload = sanitize_provider_payload(result.get("response"))
+
             attempt = DeliveryAttempt(
                 message_job_id=job_identifier,
                 provider_id=provider.id,
@@ -748,7 +761,7 @@ async def _attempt_delivery_with_fallback(
                 error_message=result.get("error_message"),
                 latency_ms=result.get("latency_ms"),
                 provider_message_id=result.get("provider_message_id"),
-                provider_response=result.get("response")
+                provider_response=sanitized_provider_payload,
             )
             db.add(attempt)
 
@@ -827,15 +840,17 @@ async def _attempt_delivery_with_fallback(
                     message_event_id=message_event.id,
                     action="deliver_message",
                     status=job.status.value,
-                    provider_response={
-                        "job_id": str(job_identifier),
-                        "rule_name": rule_name,
-                        "provider_id": str(provider.id),
-                        "provider_name": provider.name,
-                        "attempt_number": attempt_number,
-                        "connector_response": result.get("response"),
-                        "provider_message_id": provider_message_id,
-                    },
+                    provider_response=sanitize_provider_payload(
+                        {
+                            "job_id": str(job_identifier),
+                            "rule_name": rule_name,
+                            "provider_id": str(provider.id),
+                            "provider_name": provider.name,
+                            "attempt_number": attempt_number,
+                            "connector_response": result.get("response"),
+                            "provider_message_id": provider_message_id,
+                        }
+                    ),
                     cost_minor=attempt_cost_minor,
                 )
                 db.add(success_action)
@@ -861,16 +876,18 @@ async def _attempt_delivery_with_fallback(
                 message_event_id=None,
                 action="deliver_message",
                 status=attempt_status.value,
-                provider_response={
-                    "job_id": str(job_identifier),
-                    "rule_name": rule_name,
-                    "provider_id": str(provider.id),
-                    "provider_name": provider.name,
-                    "attempt_number": attempt_number,
-                    "connector_response": result.get("response"),
-                    "error_code": result.get("error_code"),
-                    "error_message": result.get("error_message"),
-                },
+                provider_response=sanitize_provider_payload(
+                    {
+                        "job_id": str(job_identifier),
+                        "rule_name": rule_name,
+                        "provider_id": str(provider.id),
+                        "provider_name": provider.name,
+                        "attempt_number": attempt_number,
+                        "connector_response": result.get("response"),
+                        "error_code": result.get("error_code"),
+                        "error_message": result.get("error_message"),
+                    }
+                ),
                 cost_minor=attempt_cost_minor,
             )
             db.add(failure_action)
@@ -911,13 +928,15 @@ async def _attempt_delivery_with_fallback(
         message_event_id=None,
         action="deliver_message",
         status=job.status.value,
-        provider_response={
-            "job_id": str(job_identifier),
-            "rule_name": rule_name,
-            "provider_id": None,
-            "provider_name": None,
-            "reason": "all_providers_failed",
-        },
+        provider_response=sanitize_provider_payload(
+            {
+                "job_id": str(job_identifier),
+                "rule_name": rule_name,
+                "provider_id": None,
+                "provider_name": None,
+                "reason": "all_providers_failed",
+            }
+        ),
         cost_minor=last_attempt_cost_minor,
     )
     db.add(final_action)
@@ -1255,9 +1274,11 @@ def list_message_jobs(
         {
             "id": str(job.id),
             "status": job.status.value,
-            "to_number": job.to_number,
+            "to_number": mask_contact_point(job.to_number, channel=job.channel),
             "channel": job.channel,
-            "channel_address": job.channel_address,
+            "channel_address": mask_contact_point(
+                job.channel_address, channel=job.channel
+            ),
             "contact_id": str(job.contact_id) if job.contact_id else None,
             "template_id": job.template_id,
             "template_category": job.template_category,
@@ -1275,34 +1296,41 @@ def get_job_status(
     db: Session = Depends(get_db)
 ):
     """Consulta status de um job"""
+    try:
+        job_uuid = UUID(str(job_id))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid job identifier")
+
     job = db.query(MessageJob).filter(
-        MessageJob.id == job_id,
+        MessageJob.id == job_uuid,
         MessageJob.org_id == current_user["org_id"]
     ).first()
-    
+
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
+
     attempts = (
         db.query(DeliveryAttempt, Provider)
         .join(Provider, DeliveryAttempt.provider_id == Provider.id)
-        .filter(DeliveryAttempt.message_job_id == job.id)
+        .filter(DeliveryAttempt.message_job_id == job_uuid)
         .order_by(DeliveryAttempt.attempt_number.asc())
         .all()
     )
 
     total_cost = (
         db.query(func.sum(CostRecord.price_eur))
-        .filter(CostRecord.message_job_id == job.id)
+        .filter(CostRecord.message_job_id == job_uuid)
         .scalar()
     )
 
     return {
-        "id": str(job.id),
+        "id": str(job_uuid),
         "status": job.status.value,
-        "to_number": job.to_number,
+        "to_number": mask_contact_point(job.to_number, channel=job.channel),
         "channel": job.channel,
-        "channel_address": job.channel_address,
+        "channel_address": mask_contact_point(
+            job.channel_address, channel=job.channel
+        ),
         "contact_id": str(job.contact_id) if job.contact_id else None,
         "template_id": job.template_id,
         "template_category": job.template_category,

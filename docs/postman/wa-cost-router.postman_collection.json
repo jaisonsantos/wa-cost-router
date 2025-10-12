@@ -843,7 +843,34 @@
                 "jobs"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  pm.test('jobs list masks destination fields', () => {",
+                  "    let body = [];",
+                  "    try { body = pm.response.json(); } catch (err) { body = []; }",
+                  "    if (!Array.isArray(body) || body.length === 0) {",
+                  "      pm.expect(Array.isArray(body), 'response should be an array').to.be.true;",
+                  "      return;",
+                  "    }",
+                  "    const original = pm.environment.get('wa_contact_phone');",
+                  "    const leaks = body.filter(item => item && item.to_number === original);",
+                  "    pm.expect(leaks.length, 'to_number should not expose raw value').to.equal(0);",
+                  "    const leaksAddress = body.filter(item => item && item.channel_address === original);",
+                  "    pm.expect(leaksAddress.length, 'channel_address should not expose raw value').to.equal(0);",
+                  "    const maskedEntries = body.filter(item => item && typeof item.to_number === 'string' && item.to_number.includes('*'));",
+                  "    pm.expect(maskedEntries.length, 'at least one masked destination returned').to.be.at.least(1);",
+                  "  });",
+                  "})();"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Messages - Job Detail",
@@ -860,7 +887,36 @@
                 "{{job_id}}"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  pm.test('job detail masks destination fields', () => {",
+                  "    let body = {};",
+                  "    try { body = pm.response.json(); } catch (err) { body = {}; }",
+                  "    const original = pm.environment.get('wa_contact_phone');",
+                  "    if (!body || typeof body !== 'object') {",
+                  "      pm.expect(false, 'response body should be an object').to.be.true;",
+                  "      return;",
+                  "    }",
+                  "    if (typeof body.to_number === 'string') {",
+                  "      pm.expect(body.to_number, 'to_number should be masked').to.not.equal(original);",
+                  "      pm.expect(body.to_number).to.include('*');",
+                  "    }",
+                  "    if (typeof body.channel_address === 'string') {",
+                  "      pm.expect(body.channel_address, 'channel_address should be masked').to.not.equal(original);",
+                  "      pm.expect(body.channel_address).to.include('*');",
+                  "    }",
+                  "  });",
+                  "})();"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Multi-Channel Regression",

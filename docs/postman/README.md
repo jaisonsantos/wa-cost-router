@@ -11,7 +11,7 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 2. **Organization** – obtém `org_id` via `/orgs/current`.
 3. **Providers** – cria provedores WhatsApp (360dialog), SMS (Twilio) e e-mail (SendGrid), consome o schema dinâmico retornado por `GET /providers` para preencher as credenciais e executa health check.
 4. **Rules** – lista, cria, atualiza e alterna regras, incluindo simulação avançada e regras utilitárias específicas para SMS/e-mail.
-5. **Messages** – envia mensagem, lista jobs, consulta detalhes do job usando `job_id` capturado, executa o cenário opcional **Messages - Rate Limit Demo** para validar respostas `429` e concentra a pasta **Multi-Channel Regression** para validar WhatsApp/SMS/e-mail.
+5. **Messages** – envia mensagem, lista jobs, consulta detalhes do job usando `job_id` capturado, executa o cenário opcional **Messages - Rate Limit Demo** para validar respostas `429` e concentra a pasta **Multi-Channel Regression** para validar WhatsApp/SMS/e-mail. Asserções adicionais garantem que `to_number`/`channel_address` retornem mascarados conforme a política de PII.
 6. **Contacts** – dispara importação assíncrona (`POST /contacts/imports`), lista catálogos, cria contato, edita atributos, alterna status ativo/inativo e consulta histórico de consentimento.
 7. **Contact Segments** – cria segmento, atualiza metadados, associa/desassocia o contato criado e configura política de limites/opt-out.
 8. **Rates** – consulta tarifas e importa CSV de exemplo (`docs/postman/sample_rates.csv`) usando o `provider_name` do provedor criado na etapa Providers.
