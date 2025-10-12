@@ -55,3 +55,8 @@ newman-report.xml
 
 # ---- Docker (opcional)
 *.tar
+
+# ---- Playwright
+test-results/
+playwright-report/
+blob-report/
