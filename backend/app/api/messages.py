@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.circuit_breaker import CircuitBreakerStore, get_circuit_breaker_store
+from app.core.circuit_breaker import get_circuit_breaker_store
 from app.core.rate_limiter import (
     RateLimitExceeded,
     RateLimitStatus,

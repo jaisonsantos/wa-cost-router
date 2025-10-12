@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional, Tuple
 
 from prometheus_client import Counter, Gauge
-from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
