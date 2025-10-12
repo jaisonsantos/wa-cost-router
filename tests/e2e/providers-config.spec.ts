@@ -136,7 +136,9 @@ test.describe("Providers configuration", () => {
     ).toBeVisible();
 
     await twilioCard.getByRole("button", { name: "Testar" }).click();
-    await expect(page.getByText(/Provider está saudável/)).toBeVisible();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Provider está saudável" }).first(),
+    ).toBeVisible();
 
     const sendgridCard = page.getByRole("heading", { name: /SendGrid/i }).locator("../../..");
     await sendgridCard.getByRole("button", { name: "Configurar" }).click();
@@ -146,4 +148,3 @@ test.describe("Providers configuration", () => {
     await page.getByRole("button", { name: "Cancelar" }).click();
   });
 });
-
