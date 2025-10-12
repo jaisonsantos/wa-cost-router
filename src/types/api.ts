@@ -166,6 +166,28 @@ export interface Event {
   currency?: string | null;
 }
 
+export interface ProviderFormField {
+  key: string;
+  label: string;
+  type: "text" | "password" | "tel" | "email" | "select";
+  placeholder?: string;
+  description?: string;
+  required?: boolean;
+  mask?: string;
+  help_text?: string;
+  options?: { label: string; value: string }[];
+  validation?: { regex?: string; message?: string };
+  default_value?: string;
+}
+
+export interface ProviderFormSchema {
+  title?: string;
+  description?: string;
+  fields: ProviderFormField[];
+  consent_guidance?: string[];
+  testing_instructions?: string[];
+}
+
 export interface Provider {
   id: string;
   name: string;
@@ -174,9 +196,12 @@ export interface Provider {
   is_configured: boolean;
   has_credentials: boolean;
   avg_latency_ms?: number | null;
+  metadata: Record<string, unknown>;
+  required_fields: string[];
+  provider_form_schema: ProviderFormSchema;
 }
 
-export type ProviderCredentialInput = Record<string, unknown>;
+export type ProviderCredentialInput = Record<string, string | number | boolean>;
 
 export interface IntegrationHealthSnapshot {
   healthy: boolean;

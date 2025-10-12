@@ -12,6 +12,12 @@ make dev                               # inicia db/redis, migrations, seed e sob
 O `.env` exemplo já habilita o modo sandbox (`SANDBOX_PROVIDERS=true`), que simula chamadas aos provedores WhatsApp e mantém as
 respostas determinísticas para `make dev`, `make ci` e a coleção Postman.
 
+### Sandboxes SMS / E-mail
+
+- **Twilio (SMS)** – use `AC000…` como `account_sid`, um `auth_token` alfanumérico e o número sandbox `+15558675309`. O campo `inbound_verify_token` deve corresponder ao token usado pelos webhooks (seed padrão: `demo-sms-auth-token`). Após salvar, execute o botão "Testar" na página *Providers* para validar a conexão.
+- **SendGrid (E-mail)** – preencha uma `api_key` iniciada em `SG.`, o remetente padrão (`noreply@demo.local` no seed), o `webhook_token` e o `inbound_signing_secret`. O health check disponível na UI confirma se o segredo está sincronizado com o simulador de Event Webhook.
+- Todos os schemas de formulário estão expostos em `GET /providers` via `provider_form_schema`, permitindo automação (ex.: Postman/Newman) sem hardcode de campos.
+
 Comandos úteis:
 
 - `make migrate` – aplica migrations Alembic.

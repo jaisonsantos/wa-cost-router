@@ -22,6 +22,18 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 - `SANDBOX_FAILURE_RATE` aceita valores entre `0` e `1` para testar cenários de falha determinística; `0` garante que Newman termine sempre com sucesso.
 - Ao desativar o sandbox (`false`), forneça credenciais reais de provedores e valide limites de taxa/billing antes de expor em produção.
 
+### Configuração dinâmica de provedores
+
+- **Twilio (SMS)**
+  - Preencha `account_sid`, `auth_token`, `from_number` (E.164) e `inbound_verify_token` na UI. Os campos são validados conforme o schema retornado pelo backend.
+  - Documente campanhas 10DLC e mantenha evidências de opt-in por destinatário. Sem registro, o tráfego pode ser bloqueado pelos carriers.
+  - Após salvar, execute o botão "Testar" na UI ou `POST /providers/{id}/health` para confirmar `healthy=true`. Em sandbox o número padrão é `+15558675309` e o token de webhook deve coincidir com `sms_webhook_auth_token`.
+- **SendGrid (Email)**
+  - Informe `api_key`, `from_email`, `webhook_token` e `inbound_signing_secret`. O schema valida o formato da API key (`SG.*`) e do remetente.
+  - Garanta que SPF e DKIM estejam ativos no domínio antes de enviar em produção e respeite listas de supressão (`unsubscribe`).
+  - Health check (`POST /integrations/email/test` ou botão na UI) usa o segredo para validar a assinatura do Event Webhook; execute sempre após atualizar credenciais.
+- **360dialog / Gupshup (WhatsApp)** continuam aceitando `access_token` (360dialog) ou `api_key`/`app_name` (Gupshup), agora descritos no schema retornado por `GET /providers`.
+
 ### Monitoramento de conexões
 
 - `GET /integrations/connections` expõe o estado agregado por canal (`status`, `connected`, `has_credentials`, `last_health_check`). Utilize-o para verificar rapidamente se a organização possui credenciais válidas antes de iniciar testes ou demonstrações.
