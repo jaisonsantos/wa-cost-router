@@ -1,28 +1,9 @@
 # USE_CASE_GAP — Lacunas para Piloto Multicanal
 
 ## Sumário executivo
-O discovery com as equipes de atendimento e growth apontou que o MVP atual atende apenas ao envio de mensagens outbound no WhatsApp. Os fluxos reais dos clientes dependem de um catálogo de contatos persistente, histórico de atendimentos multicanal e sincronização bidirecional com CRMs já consolidados. Além disso, os parceiros esperam uma experiência white-label para revender o roteador sob a própria marca e portais de gestão com permissões isoladas por tenant.
+O discovery com as equipes de atendimento e growth apontou que o MVP inicial atendia apenas ao envio de mensagens outbound no WhatsApp. Desde então o catálogo multi-tenant, o motor multicanal e os webhooks auditáveis foram concluídos, liberando UC-01 e UC-02 para o piloto externo. Os fluxos reais dos clientes agora dependem de sincronização com CRMs consolidados e de recursos white-label para parceiros.
 
-As lacunas a seguir priorizam o que precisa ser ajustado antes de escalar o piloto externo.
-
-## UC-01 — Gestão de contatos unificada
-- **Status (2025-10-08):** Coberto pelo catálogo multi-tenant, migrations `007-009` e APIs documentadas em [`docs/api/API_REFERENCE.md`](../api/API_REFERENCE.md). Consultar ADR [`20251008-contact-domain`](../current-cycle/adr/20251008-contact-domain.md) para detalhes do modelo e salvaguardas LGPD/GDPR.
-- **Sintomas**: Contatos existem apenas como números avulsos no `MessageJob`, não há deduplicação nem atributos (tags, opt-in, idioma). Importações CSV não vinculam telefone a perfis e não há API para consultas.
-- **Impacto**: Times de atendimento não conseguem reutilizar histórico ou segmentar disparos. Há risco de reenviar mensagens para contatos opt-out.
-- **Requisitos imediatos**:
-  - Esquema de contatos com `org_id`, metadados customizáveis e timestamps de opt-in/out.
-  - APIs de CRUD e importação/exportação com validações de duplicidade e consentimento.
-  - Vincular mensagens e templates ao `contact_id` para construir timeline.
-- **Documentos a atualizar**: [`docs/architecture/DATA_MODEL.md`](../architecture/DATA_MODEL.md), [`docs/api/API_REFERENCE.md`](../api/API_REFERENCE.md), [`docs/postman/README.md`](../postman/README.md).
-
-## UC-02 — Atendimento multicanal orquestrado
-- **Sintomas**: O roteador só envia mensagens outbound via WhatsApp. Não existem conectores inbound, nem suporte a e-mail, SMS ou chat web. Filas de atendimento e SLAs não são monitorados.
-- **Impacto**: Operações que combinam atendimento humano com bots ou trocas em outros canais precisam manter stacks paralelos, perdendo a economia prometida.
-- **Requisitos imediatos**:
-  - Abstração de canais com contratos unificados de envio/recebimento.
-  - Webhooks e filas por canal com roteamento baseado em `contact_id` e preferências.
-  - Painéis de SLA e alertas para filas ativas (tempo de primeira resposta, backlog).
-- **Documentos a atualizar**: [`docs/architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md), [`docs/api/API_REFERENCE.md`](../api/API_REFERENCE.md), [`docs/operations/OPERATIONS.md`](../operations/OPERATIONS.md).
+As lacunas a seguir priorizam o que ainda precisa ser ajustado antes de encerrar o ciclo, concentrando-se em UC-03 e UC-04.
 
 ## UC-03 — CRM e jornada integrada
 - **Sintomas**: Não há sincronização com CRMs (HubSpot, Salesforce, RD Station). Eventos de mensagens não são conciliados com oportunidades e a criação de tickets exige esforço manual.
@@ -41,6 +22,11 @@ As lacunas a seguir priorizam o que precisa ser ajustado antes de escalar o pilo
   - RBAC administrativo (partner admin, org admin, agent) com auditoria.
   - Relatórios exportáveis com carimbo da marca e metadados de plano.
 - **Documentos a atualizar**: [`docs/architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md), [`docs/operations/DEPLOYMENT.md`](../operations/DEPLOYMENT.md), [`docs/security/SECURITY.md`](../security/SECURITY.md).
+
+## Aprendizados recentes (UC-01 e UC-02)
+- **Consentimento multicanal precisa de defaults seguros** — Normalizar endereços (`E.164`, lower-case e-mail) antes da validação evitou falsos negativos na auditoria e garantiu idempotência dos webhooks. Documentamos o fluxo completo em [`docs/api/API_REFERENCE.md`](../api/API_REFERENCE.md) e [`docs/operations/OPERATIONS.md`](../operations/OPERATIONS.md).
+- **SLA em tempo quase real exige rebuild incremental** — O worker de conversas passou a recalcular `sla_snapshot` com janelas configuráveis, permitindo dashboards que combinam custos, backlog e FRT (`/reports/channel-metrics`). O desenho técnico está consolidado em [`docs/architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md).
+- **Evidências padronizadas aceleram aceite** — Os scripts de captura (`scripts/capture-screenshots.mjs`) foram integrados ao checklist operacional, permitindo anexar dashboards e regras simuladas no encerramento do caso de uso.
 
 ## Próximos passos recomendados
 1. Atualizar o [plano de implementação](../current-cycle/NEXT_IMPLEMENTATION_PLAN.md) com épicos e tasks alinhados a estes casos de uso.

@@ -10,6 +10,23 @@ Todas as rotas utilizam JSON e, salvo indicação contrária, exigem o header `A
 - Datas são serializadas em ISO 8601 com timezone UTC (`2025-10-09T11:30:00+00:00`).
 - O Postman injeta automaticamente o token JWT ativo nas requisições por meio de script de pré-requisição.
 
+## Fluxos multicanal, SLA e consentimento
+
+- **Fluxo outbound** — `POST /messages/send` resolve o canal (`whatsapp`, `sms`, `email`*) a partir do payload, aplica o `RoutingEngine`
+  com circuito de provedores por `org_id` e valida consentimento ativo antes de persistir o job. Endereços podem ser inferidos a
+  partir do `contact_id` e preferências cadastradas. Jobs negados por consentimento retornam `403` e são auditados em
+  `contact_consent_audit`.
+- **Fluxo inbound multicanal** — os webhooks de WhatsApp e SMS mapeiam `phone_id`/`From` → `org_id`, verificam assinatura do
+  provedor, mascaram PII e registram eventos apenas quando o contato possui opt-in ativo. Eventos negados disparam follow-up via
+  `OptInRequestService`.
+- **Medição de SLA** — Conversas inbound alimentam `sla_snapshot` e `queue_entry` por canal. Os endpoints
+  `/reports/channel-metrics` e `/reports/queues` consolidam tempo médio de primeira resposta, backlog e taxa de cumprimento por
+  canal, enquanto `/reports/dashboard-metrics` agrega custos, economia e alertas.
+- **Consentimento** — `POST /opt-in/webhook` registra opt-ins versionados (com `proof_hash`/`evidence_uri`) e atualiza o estado em
+  `contact_channel_opt_in`. O histórico completo pode ser consultado em `GET /contacts/{id}/consents/history`.
+
+> *Suporte a `email` está em piloto fechado; usar apenas quando o tenant estiver habilitado nas configurações internas.
+
 ## Autenticação
 
 ### `POST /auth/register`
@@ -250,18 +267,23 @@ Agenda envio aplicando roteamento e fallback.
 | Campo                | Tipo     | Obrigatório | Observações |
 |----------------------|----------|-------------|-------------|
 | `idempotency_key`    | string   | sim         | Requisições repetidas retornam o mesmo job. |
-| `to_number`          | string   | sim         | Normalizado para E.164. |
+| `channel`            | string   | sim         | `whatsapp`, `sms` ou `email` (pilot). Normalizado automaticamente. |
 | `template_id`        | string   | sim         | Identificador do template. |
 | `template_category`  | string   | não         | Default `marketing`. |
 | `variables`          | objeto   | não         | Valores aplicados ao template. |
-| `country_iso`        | string   | não         | Inferido pelo número quando omitido. |
+| `contact_id`         | UUID     | condicional | Obrigatório quando `channel_address` estiver vazio; permite inferir endereço preferencial. |
+| `channel_address`    | string   | condicional | Telefone (E.164) ou e-mail normalizado. Validado conforme o canal. |
+| `country_iso`        | string   | não         | Inferido a partir do contato/endereço quando omitido. |
 
 **Respostas principais**
 - `200 OK` – `{ "job_id": "<uuid>", "status": "processing", "provider_used": "360dialog", "estimated_cost": 35, "message": "Message delivered successfully" }` (mensagem entregue ou em andamento).
 - `400 Bad Request` – nenhum provedor disponível ou erro de roteamento persistido.
-- `403 Forbidden` – contato com opt-out registrado (gera enfileiramento de reconfirmação).
+- `403 Forbidden` – contato com opt-out registrado (gera enfileiramento de reconfirmação e auditoria em `contact_consent_audit`).
 - `429 Too Many Requests` – limite de envios por `org_id` excedido; inclui headers `Retry-After` e `X-RateLimit-Remaining: 0` para orientar o retry.
 - Fluxos bem sucedidos criam `MessageEvent` vinculado ao `MessageJob` com `unit_cost_minor`, `baseline_cost_minor`, `currency`, `country_iso` e `template_name`, garantindo consistência das métricas.
+
+Quando apenas `contact_id` é informado, o serviço resolve o endereço prioritário considerando opt-ins ativos por canal
+(`MultiChannelConsentResolver`). Caso nenhum endereço elegível seja encontrado o retorno é `422 Unable to resolve channel address`.
 
 **Circuit breaker & métricas**
 - Falhas consecutivas por provedor são persistidas em Redis (`circuit:{provider_id}`) com limiar configurável via `CIRCUIT_BREAKER_THRESHOLD` e cooldown `CIRCUIT_BREAKER_COOLDOWN_SECONDS`.
@@ -487,6 +509,23 @@ O endpoint é idempotente por `provider_event_id`: eventos repetidos não criam 
 
 ### `POST /integrations/wa/test`
 Retorna `{ "status": "ok", "message": "Test endpoint - no actual send" }` para verificações locais.
+
+## Integrações SMS
+
+### `POST /integrations/sms/webhook`
+Recebe callbacks do Twilio (`application/x-www-form-urlencoded`). Valida assinatura `X-Twilio-Signature` usando o `auth_token`
+armazenado nas credenciais do provedor e identifica o tenant pelo número de destino (`To`) ou `MessagingServiceSid`.
+
+**Fluxo padrão**
+
+- Eventos sem `MessageSid` ou com assinatura inválida retornam `403`.
+- Quando o contato associado não possui opt-in ativo para SMS, a resposta é `{ "status": "denied" }`, o payload é mascarado e um
+  follow-up é enfileirado em `OptInRequestService`.
+- Mensagens aceitas geram `MessageEvent` com `channel="sms"`, `direction="inbound"`, `delivery_status` herdado do payload e
+  campos sensíveis mascarados (`body`, `from`, `to`). A resposta inclui `{ "status": "ok", "processed": 1 }`.
+
+**Headers de resposta** — `X-Webhook-Channel: sms` indica o canal que processou o evento. Falhas internas retornam `500` com log
+`event=sms_webhook_failure`.
 
 ## Opt-in
 
