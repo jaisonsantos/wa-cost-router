@@ -30,7 +30,7 @@ def upgrade() -> None:
     status_enum.create(op.get_bind(), checkfirst=True)
 
     # 2) Tipo a ser usado na coluna (não recria o tipo)
-    status_column_enum = sa.Enum(
+    status_column_enum = postgresql.ENUM(
         *BILLING_STATUS_ENUM,
         name="billingstatusenum",
         create_type=False,
