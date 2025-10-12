@@ -56,9 +56,42 @@ def test_validate_credentials_accepts_valid_payload():
     assert errors == []
 
 
+def test_validate_credentials_accepts_sms_without_plus_prefix():
+    credentials = {
+        "account_sid": "AC" + "0" * 32,
+        "auth_token": "sandbox-twilio-auth-token",
+        "from_number": "15558675309",
+    }
+
+    errors = validate_provider_credentials(
+        "sms",
+        credentials,
+        provider_name="Twilio",
+    )
+
+    assert errors == []
+
+
 def test_validate_credentials_accepts_demo_sendgrid_payload():
     credentials = {
         "api_key": "SG.demo-api-key",
+        "from_email": "no-reply+sandbox@example.com",
+        "webhook_token": "demo-email-webhook-token",
+        "inbound_signing_secret": "demo-email-webhook-secret",
+    }
+
+    errors = validate_provider_credentials(
+        "email",
+        credentials,
+        provider_name="SendGrid",
+    )
+
+    assert errors == []
+
+
+def test_validate_credentials_accepts_sandbox_sendgrid_token():
+    credentials = {
+        "api_key": "sandbox-sendgrid-api-key",
         "from_email": "no-reply+sandbox@example.com",
         "webhook_token": "demo-email-webhook-token",
         "inbound_signing_secret": "demo-email-webhook-secret",

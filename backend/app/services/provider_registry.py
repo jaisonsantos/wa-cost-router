@@ -120,10 +120,10 @@ SMS_BASE = ProviderRegistryEntry(
                 "placeholder": "+15558675309",
                 "mask": "+###############",
                 "required": True,
-                "help_text": "O número deve estar habilitado no sandbox e registrado em 10DLC quando aplicável.",
+                "help_text": "O número deve estar habilitado no sandbox e registrado em 10DLC quando aplicável (aceitamos formatos com ou sem '+').",
                 "validation": {
-                    "regex": r"^\+[1-9]\d{7,14}$",
-                    "message": "Informe um telefone em formato E.164 (ex.: +15558675309).",
+                    "regex": r"^\+?[1-9]\d{7,14}$",
+                    "message": "Informe um telefone em formato E.164 com ou sem o prefixo '+' (ex.: +15558675309).",
                 },
             },
         ],
@@ -258,10 +258,10 @@ EMAIL_SENDGRID = ProviderRegistryEntry(
                 "type": "password",
                 "placeholder": "SG.xxxxx",
                 "required": True,
-                "help_text": "Chave de API com permissões para envio e gerenciamento de webhooks.",
+                "help_text": "Chave de API com permissões para envio e gerenciamento de webhooks (chaves sandbox sem prefixo 'SG.' também são aceitas).",
                 "validation": {
-                    "regex": r"^SG\.[A-Za-z0-9._\-]{8,128}$",
-                    "message": "A API Key deve iniciar com 'SG.' e conter letras, números, '.', '_' ou '-'.",
+                    "regex": r"^(SG\.[A-Za-z0-9._\-]{8,128}|[A-Za-z0-9._\-]{12,128})$",
+                    "message": "Informe uma API Key válida (aceitamos chaves SendGrid iniciando com 'SG.' ou tokens sandbox alfanuméricos).",
                 },
             },
             {
