@@ -1,4 +1,7 @@
 import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,14 +12,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import SimpleLayout from "@/components/SimpleLayout";
-import { useRates, useImportRatesCSV, useCurrentOrg, useCreateWAConnection } from "@/hooks/useApi";
+import ConnectionStatusBadge from "@/components/ConnectionStatusBadge";
+import ConnectionActions from "@/components/ConnectionActions";
+import {
+  useRates,
+  useImportRatesCSV,
+  useCurrentOrg,
+  useCreateWAConnection,
+  useConnections,
+  useTestConnection,
+} from "@/hooks/useApi";
+import type { IntegrationConnection } from "@/types/api";
 import {
   MessageSquare,
   Globe,
   Mail,
   Smartphone,
   Send,
-  CheckCircle,
   AlertCircle,
   Upload,
   Download,
@@ -35,48 +47,19 @@ interface WaConnectionForm {
   webhook_secret: string;
 }
 
-type ConnectionStatus = "healthy" | "warning" | "disconnected";
-
-interface WhatsAppConnection {
-  connected: boolean;
-  businessId: string;
-  phoneId: string;
-  lastSync: string;
-  status: ConnectionStatus;
-}
-
-interface EmailConnection {
-  connected: boolean;
-  provider: string;
-  endpoint: string;
-  status: ConnectionStatus;
-}
-
-interface SmsConnection {
-  connected: boolean;
-  provider: string;
-  status: ConnectionStatus;
-}
-
-interface TelegramConnection {
-  connected: boolean;
-  botToken: string;
-  status: ConnectionStatus;
-}
-
-interface ConnectionsState {
-  whatsapp: WhatsAppConnection;
-  email: EmailConnection;
-  sms: SmsConnection;
-  telegram: TelegramConnection;
-}
-
 const Settings = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: ratesData, isLoading: ratesLoading } = useRates();
   const { data: orgData, isLoading: orgLoading } = useCurrentOrg();
   const importRates = useImportRatesCSV();
   const createWAConnection = useCreateWAConnection();
+  const navigate = useNavigate();
+  const {
+    data: connectionsData,
+    isLoading: connectionsLoading,
+    error: connectionsError,
+  } = useConnections();
+  const testConnection = useTestConnection();
 
   const [waForm, setWaForm] = useState<WaConnectionForm>({
     business_id: "",
@@ -118,58 +101,45 @@ const Settings = () => {
     await createWAConnection.mutateAsync(payload);
   };
 
-  const [connections] = useState<ConnectionsState>({
-    whatsapp: {
-      connected: true,
-      businessId: "1234567890123456",
-      phoneId: "987654321098765",
-      lastSync: "2 horas atrás",
-      status: "healthy",
-    },
-    email: {
-      connected: true,
-      provider: "SMTP",
-      endpoint: "smtp.empresa.com",
-      status: "healthy",
-    },
-    sms: {
-      connected: false,
-      provider: "Twilio",
-      status: "disconnected",
-    },
-    telegram: {
-      connected: true,
-      botToken: "123456789:ABC...XYZ",
-      status: "healthy",
-    },
+  const connectionMap = new Map<string, IntegrationConnection>();
+  connectionsData?.forEach((connection) => {
+    connectionMap.set(connection.channel, connection);
   });
 
+  const getConnection = (channel: string): IntegrationConnection | undefined =>
+    connectionMap.get(channel);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "healthy":
-        return "bg-success/10 text-success border-success/20";
-      case "warning":
-        return "bg-warning/10 text-warning border-warning/20";
-      case "disconnected":
-        return "bg-destructive/10 text-destructive border-destructive/20";
-      default:
-        return "bg-muted/10 text-muted-foreground border-border";
+  const getMetadataString = (
+    connection: IntegrationConnection | undefined,
+    key: string,
+  ): string | undefined => {
+    const value = connection?.metadata?.[key];
+    return typeof value === "string" ? value : undefined;
+  };
+
+  const formatLastHealthCheck = (connection: IntegrationConnection | undefined): string => {
+    const timestamp = connection?.last_health_check?.checked_at;
+    if (!timestamp) {
+      return "Nunca testado";
+    }
+    try {
+      return formatDistanceToNow(new Date(timestamp), { addSuffix: true, locale: ptBR });
+    } catch (error) {
+      return new Date(timestamp).toLocaleString();
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "healthy":
-        return <CheckCircle className="h-4 w-4 text-success" />;
-      case "warning":
-        return <AlertCircle className="h-4 w-4 text-warning" />;
-      case "disconnected":
-        return <AlertCircle className="h-4 w-4 text-destructive" />;
-      default:
-        return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
-    }
+  const handleTestConnection = (channel: string, providerId?: string) => {
+    testConnection.mutate({ channel, providerId });
   };
+
+  const testingChannel = testConnection.variables?.channel;
+  const connectionsErrorMessage = connectionsError?.message ?? null;
+
+  const whatsappConnection = getConnection("whatsapp");
+  const emailConnection = getConnection("email");
+  const smsConnection = getConnection("sms");
+  const telegramConnection = getConnection("telegram");
 
   return (
     <SimpleLayout>
@@ -203,20 +173,26 @@ const Settings = () => {
 
         {/* Conexões */}
         <TabsContent value="connections" className="space-y-6">
+          {connectionsErrorMessage && (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4" />
+              <span>{connectionsErrorMessage}</span>
+            </div>
+          )}
           {/* WhatsApp Business */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <MessageSquare className="mr-2 h-5 w-5 text-primary" />
-                  WhatsApp Business Cloud API
-                </div>
-                <Badge className={getStatusColor(connections.whatsapp.status)}>
-                  {getStatusIcon(connections.whatsapp.status)}
-                  Conectado
-                </Badge>
-              </CardTitle>
-            </CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center">
+                <MessageSquare className="mr-2 h-5 w-5 text-primary" />
+                WhatsApp Business Cloud API
+              </div>
+              <ConnectionStatusBadge
+                status={whatsappConnection?.status ?? "disconnected"}
+                isLoading={connectionsLoading}
+              />
+            </CardTitle>
+          </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
@@ -317,14 +293,25 @@ const Settings = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-success/10 rounded-lg">
+              <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3 text-sm md:flex-row md:items-center md:justify-between">
                 <div>
-                  <p className="text-sm font-medium text-success">Conexão ativa</p>
-                  <p className="text-xs text-muted-foreground">Última sincronização: {connections.whatsapp.lastSync}</p>
+                  <p className="text-sm font-medium">
+                    {whatsappConnection?.connected ? "Conexão ativa" : "Conexão não configurada"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Último teste: {connectionsLoading ? "Carregando..." : formatLastHealthCheck(whatsappConnection)}
+                  </p>
+                  {whatsappConnection?.last_health_check?.error && (
+                    <p className="mt-1 text-xs text-destructive">
+                      Erro: {whatsappConnection.last_health_check.error}
+                    </p>
+                  )}
                 </div>
-                <Button variant="outline" size="sm">
-                  Testar Conexão
-                </Button>
+                <ConnectionActions
+                  onTest={() => handleTestConnection("whatsapp")}
+                  isTesting={testConnection.isPending && testingChannel === "whatsapp"}
+                  disableTest={connectionsLoading || testConnection.isPending}
+                />
               </div>
 
               <div className="flex space-x-2">
@@ -341,108 +328,152 @@ const Settings = () => {
 
           {/* Email */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <Mail className="mr-2 h-5 w-5 text-primary" />
-                  Email (SMTP)
-                </div>
-                <Badge className={getStatusColor(connections.email.status)}>
-                  {getStatusIcon(connections.email.status)}
-                  Conectado
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Provedor</Label>
-                  <Input value={connections.email.provider} readOnly />
-                </div>
-                <div>
-                  <Label>Endpoint SMTP</Label>
-                  <Input value={connections.email.endpoint} readOnly />
-                </div>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Mail className="mr-2 h-5 w-5 text-primary" />
+                Email (SMTP)
               </div>
-              
-              <div className="flex space-x-2">
-                <Button variant="outline">
-                  <Send className="mr-2 h-4 w-4" />
-                  Testar Email
-                </Button>
-                <Button variant="outline">
-                  Reconfigurar
-                </Button>
+              <ConnectionStatusBadge
+                status={emailConnection?.status ?? "disconnected"}
+                isLoading={connectionsLoading}
+              />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <Label>Provedor</Label>
+                {connectionsLoading ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <Input value={getMetadataString(emailConnection, "provider_name") ?? "Não configurado"} readOnly />
+                )}
               </div>
-            </CardContent>
-          </Card>
+              <div>
+                <Label>Endpoint / Base URL</Label>
+                {connectionsLoading ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <Input value={getMetadataString(emailConnection, "base_url") ?? "-"} readOnly />
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Último teste: {connectionsLoading ? "Carregando..." : formatLastHealthCheck(emailConnection)}
+              </p>
+              {emailConnection?.last_health_check?.error && (
+                <p className="text-xs text-destructive">
+                  Erro: {emailConnection.last_health_check.error}
+                </p>
+              )}
+              {!emailConnection?.has_credentials && !connectionsLoading && (
+                <p className="text-xs text-muted-foreground">
+                  Credenciais não configuradas. Atualize os dados em Provedores &gt; SendGrid.
+                </p>
+              )}
+              <ConnectionActions
+                onTest={emailConnection ? () => handleTestConnection("email", getMetadataString(emailConnection, "provider_id")) : undefined}
+                onConfigure={() => navigate("/providers")}
+                isTesting={testConnection.isPending && testingChannel === "email"}
+                disableTest={
+                  connectionsLoading || !emailConnection?.has_credentials || testConnection.isPending
+                }
+                disableConfigure={connectionsLoading}
+                testLabel="Testar Email"
+                configureLabel="Reconfigurar"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
           {/* SMS */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <Smartphone className="mr-2 h-5 w-5 text-primary" />
-                  SMS (Twilio)
-                </div>
-                <Badge className={getStatusColor(connections.sms.status)}>
-                  {getStatusIcon(connections.sms.status)}
-                  Desconectado
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Configure sua conta Twilio para habilitar fallback por SMS
-              </p>
-              
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Account SID</Label>
-                  <Input placeholder="AC..." />
-                </div>
-                <div>
-                  <Label>Auth Token</Label>
-                  <Input type="password" placeholder="Inserir token..." />
-                </div>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Smartphone className="mr-2 h-5 w-5 text-primary" />
+                SMS (Twilio)
               </div>
-              
-              <Button className="bg-gradient-to-r from-primary to-primary/80">
-                Conectar Twilio
-              </Button>
-            </CardContent>
-          </Card>
+              <ConnectionStatusBadge
+                status={smsConnection?.status ?? "disconnected"}
+                isLoading={connectionsLoading}
+              />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Configure sua conta Twilio para habilitar fallback por SMS
+            </p>
 
-          {/* Telegram */}
-          <Card>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <Label>Provedor</Label>
+                {connectionsLoading ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <Input value={getMetadataString(smsConnection, "provider_name") ?? "Twilio"} readOnly />
+                )}
+              </div>
+              <div>
+                <Label>Status</Label>
+                {connectionsLoading ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <Input value={getMetadataString(smsConnection, "status") ?? smsConnection?.status ?? "desconectado"} readOnly />
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Último teste: {connectionsLoading ? "Carregando..." : formatLastHealthCheck(smsConnection)}
+              </p>
+              {smsConnection?.last_health_check?.error && (
+                <p className="text-xs text-destructive">Erro: {smsConnection.last_health_check.error}</p>
+              )}
+              {!smsConnection?.has_credentials && !connectionsLoading && (
+                <p className="text-xs text-muted-foreground">
+                  Credenciais não configuradas. Atualize os dados em Provedores &gt; Twilio.
+                </p>
+              )}
+              <ConnectionActions
+                onTest={smsConnection ? () => handleTestConnection("sms", getMetadataString(smsConnection, "provider_id")) : undefined}
+                onConfigure={() => navigate("/providers")}
+                isTesting={testConnection.isPending && testingChannel === "sms"}
+                disableTest={connectionsLoading || !smsConnection?.has_credentials || testConnection.isPending}
+                disableConfigure={connectionsLoading}
+                testLabel="Testar SMS"
+                configureLabel="Reconfigurar"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Telegram */}
+        <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <Send className="mr-2 h-5 w-5 text-primary" />
-                  Telegram Bot
-                </div>
-                <Badge className={getStatusColor(connections.telegram.status)}>
-                  {getStatusIcon(connections.telegram.status)}
-                  Conectado
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label>Bot Token</Label>
-                <Input value={connections.telegram.botToken} type="password" readOnly />
+              <div className="flex items-center">
+                <Send className="mr-2 h-5 w-5 text-primary" />
+                Telegram Bot
               </div>
-              
-              <div className="flex space-x-2">
-                <Button variant="outline">
-                  Testar Bot
-                </Button>
-                <Button variant="outline">
-                  Reconfigurar
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              <ConnectionStatusBadge
+                status={telegramConnection?.status ?? "disconnected"}
+                isLoading={connectionsLoading}
+              />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Integração planejada. Entre em contato com o time de operações para priorizar este canal.
+            </p>
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <p>Último teste: {connectionsLoading ? "Carregando..." : formatLastHealthCheck(telegramConnection)}</p>
+              <p>Reconfiguração disponível via módulo de provedores.</p>
+            </div>
+          </CardContent>
+        </Card>
         </TabsContent>
 
         {/* Tarifas */}

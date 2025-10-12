@@ -178,6 +178,37 @@ export interface Provider {
 
 export type ProviderCredentialInput = Record<string, unknown>;
 
+export interface IntegrationHealthSnapshot {
+  healthy: boolean;
+  status_code?: string | number | null;
+  latency_ms?: number | null;
+  error?: string | null;
+  checked_at?: string | null;
+  details?: Record<string, unknown>;
+}
+
+export interface IntegrationConnection {
+  id: string;
+  channel: string;
+  display_name: string;
+  status: string;
+  connected: boolean;
+  has_credentials: boolean;
+  metadata: Record<string, unknown>;
+  last_health_check: IntegrationHealthSnapshot | null;
+}
+
+export interface ConnectionTestResult {
+  channel: string;
+  status: string;
+  healthy: boolean;
+  status_code?: string | number | null;
+  latency_ms?: number | null;
+  error?: string | null;
+  checked_at: string;
+  metadata: Record<string, unknown>;
+}
+
 export type ContactStatus = "active" | "inactive" | "archived";
 
 export type OptInStatus = "granted" | "revoked" | "pending";

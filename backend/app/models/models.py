@@ -347,6 +347,28 @@ class ProviderCredential(Base):
 
     __table_args__ = (UniqueConstraint('org_id', 'provider_id', name='_org_provider_uc'),)
 
+
+class IntegrationHealthStatus(Base):
+    __tablename__ = "integration_health_status"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
+    channel = Column(String, nullable=False)
+    target_type = Column(String, nullable=False)
+    target_id = Column(UUID(as_uuid=True), nullable=False)
+    status = Column(String, nullable=False)
+    healthy = Column(Boolean, nullable=False, default=False)
+    status_code = Column(String)
+    latency_ms = Column(Integer)
+    error = Column(Text)
+    details = Column(JSON)
+    checked_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("target_type", "target_id", name="uq_integration_health_target"),
+        Index("ix_integration_health_org_channel", "org_id", "channel"),
+    )
+
 class MessageJob(Base):
     __tablename__ = "message_job"
 

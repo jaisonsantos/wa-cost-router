@@ -22,6 +22,15 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 - `SANDBOX_FAILURE_RATE` aceita valores entre `0` e `1` para testar cenários de falha determinística; `0` garante que Newman termine sempre com sucesso.
 - Ao desativar o sandbox (`false`), forneça credenciais reais de provedores e valide limites de taxa/billing antes de expor em produção.
 
+### Monitoramento de conexões
+
+- `GET /integrations/connections` expõe o estado agregado por canal (`status`, `connected`, `has_credentials`, `last_health_check`). Utilize-o para verificar rapidamente se a organização possui credenciais válidas antes de iniciar testes ou demonstrações.
+- Estados possíveis: `healthy` (último health check bem-sucedido), `warning` (conectado mas com códigos ≠2xx), `error` (falha ou exceção), `disconnected` (sem credenciais ativas), `unknown` (nunca testado).
+- `POST /integrations/{channel}/test` executa o health check no ato usando o conector apropriado (`whatsapp`, `email`, `sms`). Para canais com múltiplos provedores informe `provider_id` no corpo.
+- Resultados são persistidos em `integration_health_status` e reaproveitados pelo endpoint de listagem. Em caso de erro, o campo `error` traz a mensagem retornada pelo conector (ex.: `Unauthorized`, `Timeout`).
+- Rotina recomendada no plantão: consultar `/integrations/connections` após cada deploy e executar `POST /integrations/{channel}/test` quando houver alerta `warning`/`error`, registrando ações no playbook de incidentes.
+- Cenários automatizados: `tests/e2e/settings-connections.spec.ts` usa o sandbox para validar tanto o fluxo saudável quanto uma simulação de falha (badge "Falha") pressionando os botões "Testar Email/SMS" na UI.
+
 ## Circuit breaker de provedores
 
 - Estados são persistidos em Redis (`circuit:{provider_id}`) e controlados por `CIRCUIT_BREAKER_THRESHOLD` (falhas consecutivas antes de abrir) e `CIRCUIT_BREAKER_COOLDOWN_SECONDS` (tempo mínimo até a transição para `half-open`).

@@ -507,9 +507,85 @@ Processa eventos assinados (`X-Hub-Signature-256: sha256=<hex>`). Regras atuais:
 
 O endpoint é idempotente por `provider_event_id`: eventos repetidos não criam duplicatas e reutilizam o mesmo hash de auditoria para negações.
 
-### `POST /integrations/wa/test`
-Retorna `{ "status": "ok", "message": "Test endpoint - no actual send" }` para verificações locais.
+## Integrações multicanal
 
+### `GET /integrations/connections`
+Consolida o status das conexões configuradas para a organização autenticada. Retorna uma lista de objetos com os campos:
+
+| Campo | Tipo | Descrição |
+| --- | --- | --- |
+| `id` | string | Identificador da conexão (UUID do `wa_connection` ou `provider`). Pode ser vazio quando o canal ainda não foi provisionado. |
+| `channel` | string | Canal (`whatsapp`, `email`, `sms`, `telegram`, ...). |
+| `display_name` | string | Rótulo amigável apresentado na UI. |
+| `status` | string | Estado agregado (`healthy`, `warning`, `error`, `disconnected`, `unknown`). |
+| `connected` | boolean | Indica se há configuração ativa/credenciais válidas para o canal. |
+| `has_credentials` | boolean | `true` quando credenciais criptografadas estão ativas. |
+| `metadata` | objeto | Metadados não sensíveis (ex.: `business_id`, `provider_name`, `provider_id`, `base_url`). |
+| `last_health_check` | objeto ou `null` | Último snapshot persistido pelo teste de saúde: `{ healthy, status_code, latency_ms, error, checked_at, details }`. |
+
+Exemplo de resposta:
+
+```json
+[
+  {
+    "id": "d7344f26-7a04-4f3f-8f3f-1234567890ab",
+    "channel": "whatsapp",
+    "display_name": "WhatsApp Business Cloud API",
+    "status": "healthy",
+    "connected": true,
+    "has_credentials": true,
+    "metadata": {
+      "business_id": "1234567890",
+      "phone_id": "9876543210",
+      "connection_id": "d7344f26-7a04-4f3f-8f3f-1234567890ab"
+    },
+    "last_health_check": {
+      "healthy": true,
+      "status_code": "200",
+      "latency_ms": 84,
+      "checked_at": "2024-10-18T12:34:56+00:00",
+      "details": {
+        "status": "active"
+      }
+    }
+  },
+  {
+    "id": "b10221a4-1dbe-49da-93e1-abcdefabcdef",
+    "channel": "email",
+    "display_name": "Email (SendGrid)",
+    "status": "warning",
+    "connected": true,
+    "has_credentials": true,
+    "metadata": {
+      "provider_name": "SendGrid",
+      "provider_type": "email",
+      "provider_id": "b10221a4-1dbe-49da-93e1-abcdefabcdef"
+    },
+    "last_health_check": {
+      "healthy": true,
+      "status_code": 299,
+      "latency_ms": 125,
+      "checked_at": "2024-10-18T12:35:02+00:00"
+    }
+  }
+]
+```
+
+### `POST /integrations/{channel}/test`
+Executa o health check do canal informado (`whatsapp`, `email`, `sms`, ...). Para canais baseados em provedores é possível informar o `provider_id` explicitamente no corpo.
+
+| Campo | Local | Tipo | Obrigatório | Descrição |
+| --- | --- | --- | --- | --- |
+| `channel` | path | string | sim | Canal alvo (`whatsapp`, `email`, `sms`). |
+| `provider_id` | body | string | opcional | UUID do provedor (necessário quando existem múltiplos provedores por canal). |
+
+**Respostas**
+
+- `200 OK` – Snapshot de saúde: `{ "channel": "email", "status": "error", "healthy": false, "status_code": 503, "latency_ms": 910, "error": "Timeout", "checked_at": "2024-10-18T12:36:10+00:00", "metadata": { "provider_id": "...", "provider_name": "SendGrid" } }`.
+- `400 Bad Request` – canal não suportado ou credenciais ausentes.
+- `404 Not Found` – conexão/provedor não configurado para a organização.
+
+## Integrações SMS
 ## Integrações SMS
 
 ### `POST /integrations/sms/webhook`

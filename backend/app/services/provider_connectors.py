@@ -736,3 +736,23 @@ def get_connector(
             return connector_class(credentials, base_url)
 
     raise ValueError(f"Unknown provider: {provider_name}")
+
+
+async def run_health_check(
+    provider_name: str,
+    credentials: Dict[str, Any],
+    base_url: Optional[str] = None,
+    *,
+    provider_type: Optional[str] = None,
+    sandbox_options: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Helper to execute connector health checks with factory resolution."""
+
+    connector = get_connector(
+        provider_name,
+        credentials,
+        base_url,
+        provider_type=provider_type,
+        sandbox_options=sandbox_options,
+    )
+    return await connector.health_check()
