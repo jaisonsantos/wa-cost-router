@@ -118,6 +118,69 @@ class ApiClient {
     return data;
   }
 
+  private async downloadFile(
+    endpoint: string,
+    {
+      params,
+      requiresAuth = true,
+      fallbackFilename,
+    }: { params?: URLSearchParams; requiresAuth?: boolean; fallbackFilename: string },
+  ): Promise<void> {
+    const url = new URL(`${API_BASE_URL}${endpoint}`);
+    if (params) {
+      params.forEach((value, key) => {
+        url.searchParams.append(key, value);
+      });
+    }
+
+    const headers = { ...(this.getHeaders(requiresAuth) as Record<string, string>) };
+    delete headers["Content-Type"];
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers,
+    });
+
+    if (!response.ok) {
+      const contentType = response.headers.get("content-type") ?? "";
+      let detailMessage: string | undefined;
+      if (contentType.includes("application/json")) {
+        const errorPayload = await response.json().catch(() => undefined);
+        const detail = errorPayload?.detail;
+        if (typeof detail === "string") {
+          detailMessage = detail;
+        } else if (Array.isArray(detail)) {
+          detailMessage = detail.join("; ");
+        }
+      }
+      throw new Error(detailMessage || `HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    let filename = fallbackFilename;
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    if (match) {
+      const encoded = match[1] ?? match[2];
+      if (encoded) {
+        try {
+          filename = decodeURIComponent(encoded);
+        } catch (err) {
+          filename = encoded;
+        }
+      }
+    }
+
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+  }
+
   // Auth
   async login(email: string, password: string): Promise<TokenResponse> {
     return this.request<TokenResponse>("/auth/login", {
@@ -503,6 +566,70 @@ class ApiClient {
     }
     const query = searchParams.toString();
     return this.request<QueueMetricsResponse>(`/reports/queues${query ? `?${query}` : ""}`);
+  }
+
+  async downloadSummary(
+    format: "csv" | "json" = "csv",
+    params: { from?: string; to?: string } = {},
+  ): Promise<void> {
+    const searchParams = new URLSearchParams();
+    if (params.from) {
+      searchParams.append("from", params.from);
+    }
+    if (params.to) {
+      searchParams.append("to", params.to);
+    }
+    searchParams.append("format", format);
+    await this.downloadFile("/reports/summary/export", {
+      params: searchParams,
+      fallbackFilename: `summary-report.${format}`,
+    });
+  }
+
+  async downloadProviderMetrics(format: "csv" | "json" = "csv", days: number = 7): Promise<void> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("days", days.toString());
+    searchParams.append("format", format);
+    await this.downloadFile("/reports/provider-metrics/export", {
+      params: searchParams,
+      fallbackFilename: `provider-metrics-report.${format}`,
+    });
+  }
+
+  async downloadChannelMetrics(
+    format: "csv" | "json" = "csv",
+    params: { from?: string; to?: string } = {},
+  ): Promise<void> {
+    const searchParams = new URLSearchParams();
+    if (params.from) {
+      searchParams.append("from", params.from);
+    }
+    if (params.to) {
+      searchParams.append("to", params.to);
+    }
+    searchParams.append("format", format);
+    await this.downloadFile("/reports/channel-metrics/export", {
+      params: searchParams,
+      fallbackFilename: `channel-metrics-report.${format}`,
+    });
+  }
+
+  async downloadQueueMetrics(
+    format: "csv" | "json" = "csv",
+    params: { from?: string; to?: string } = {},
+  ): Promise<void> {
+    const searchParams = new URLSearchParams();
+    if (params.from) {
+      searchParams.append("from", params.from);
+    }
+    if (params.to) {
+      searchParams.append("to", params.to);
+    }
+    searchParams.append("format", format);
+    await this.downloadFile("/reports/queues/export", {
+      params: searchParams,
+      fallbackFilename: `queue-metrics-report.${format}`,
+    });
   }
 
   // Advanced Simulator
