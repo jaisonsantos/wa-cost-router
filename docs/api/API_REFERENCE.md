@@ -166,7 +166,70 @@ Jobs finalizados expõem `processed_rows`, `error_rows` e `error_report_uri`. Co
 ### `GET /providers`
 Lista provedores disponíveis para a organização autenticada.
 
-**Resposta 200** – array de objetos `ProviderResponse` com os campos `id`, `name`, `type`, `status`, `is_configured`, `has_credentials` e `avg_latency_ms` (opcional).
+**Resposta 200** – array de objetos `ProviderResponse` com os campos abaixo:
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `id` | string | UUID do provedor. |
+| `name` | string | Nome lógico configurado pela organização. |
+| `type` | string | Canal (`whatsapp`, `sms`, `email`, etc.). |
+| `status` | string | `active`, `inactive` ou outros estados operacionais. |
+| `is_configured` / `has_credentials` | boolean | Indicam se há credenciais ativas. |
+| `avg_latency_ms` | number \| null | Média de latência coletada pelos health checks (opcional). |
+| `metadata` | objeto | Metadados persistidos no cadastro (`channels`, notas de compliance, defaults). |
+| `required_fields` | string[] | Lista de campos obrigatórios para `POST /providers/credentials`. |
+| `provider_form_schema` | objeto | Esquema dinâmico utilizado pelo frontend/automação para renderizar formulários. |
+
+Exemplo de item retornado:
+
+```json
+{
+  "id": "ac9935b4-9a33-4aab-9ce4-3c9d9a5bd934",
+  "name": "Twilio Sandbox",
+  "type": "sms",
+  "status": "active",
+  "is_configured": true,
+  "has_credentials": true,
+  "metadata": {
+    "provider": "twilio",
+    "channels": {
+      "sms": {
+        "inbound_numbers": ["+15558675309"],
+        "sandbox": true
+      }
+    },
+    "compliance": {
+      "registrations": ["Para produção, registre campanhas 10DLC."],
+      "opt_in": "Exige consentimento explícito." 
+    }
+  },
+  "required_fields": ["account_sid", "auth_token", "from_number"],
+  "provider_form_schema": {
+    "title": "Twilio SMS Sandbox",
+    "fields": [
+      { "key": "account_sid", "label": "Account SID", "type": "text", "required": true },
+      { "key": "auth_token", "label": "Auth Token", "type": "password", "required": true },
+      { "key": "from_number", "label": "Número remetente (E.164)", "type": "tel", "mask": "+###############" },
+      { "key": "inbound_verify_token", "label": "Token de verificação inbound", "type": "text" }
+    ],
+    "consent_guidance": ["Certifique-se de que o opt-in foi documentado."],
+    "testing_instructions": ["Execute o health check após salvar as credenciais."]
+  }
+}
+```
+
+O campo `provider_form_schema.fields` descreve cada input aceito pelo backend. Chaves comuns:
+
+| Atributo | Significado |
+|----------|-------------|
+| `key` | Nome do campo enviado em `credentials`. |
+| `label` | Texto exibido na UI. |
+| `type` | `text`, `password`, `tel`, `email` ou `select`. |
+| `mask` | Máscara opcional (ex.: `+###############` para números E.164). |
+| `required` | Indica obrigatoriedade. |
+| `validation.regex` | Expressão regular aplicada antes de persistir as credenciais. |
+| `validation.message` | Mensagem amigável retornada em caso de formato inválido. |
+| `help_text` / `consent_guidance` / `testing_instructions` | Notas operacionais exibidas no frontend. |
 
 ### `POST /providers`
 Cadastra um provedor.
@@ -192,20 +255,29 @@ Persistem credenciais criptografadas para o provedor.
 
 **Respostas**
 - `200 OK` – `{ "status": "credentials_saved" }`.
-- `400 Bad Request` – `Invalid provider_id` ou sem credenciais para health check.
 - `404 Not Found` – provedor inexistente para a organização.
+- `422 Unprocessable Entity` – payload não atende aos campos obrigatórios/validações listados em `required_fields` ou no `provider_form_schema`.
 
-#### Credenciais suportadas
+#### Campos obrigatórios por conector (sandbox)
 
 - **Twilio (SMS)**
-  - `account_sid` (string, obrigatório) – SID da conta principal Twilio.
-  - `auth_token` (string, obrigatório) – token de autenticação REST.
-  - `from_number` (string, obrigatório caso `messaging_service_sid` não seja enviado) – número habilitado para SMS.
-  - `messaging_service_sid` (string, opcional) – use quando preferir um Messaging Service ao invés do número remetente.
-  - `status_callback` (string, opcional) – URL para receber atualizações de entrega.
-  - `body`/`text`/`message` (string, obrigatório no envio) – conteúdo da mensagem SMS.
+  - `account_sid` – `AC` + 32 caracteres hexadecimais. Ex.: `AC00000000000000000000000000000000`.
+  - `auth_token` – string alfanumérica (16–64 caracteres) utilizada para assinar webhooks e autenticar REST.
+  - `from_number` – número em formato E.164 habilitado no sandbox (ex.: `+15558675309`).
+  - `inbound_verify_token` – token opcional para validar webhooks inbound (use o mesmo valor configurado no console Twilio).
+  - **Notas regulatórias**: campanhas 10DLC exigem registro prévio e evidência de consentimento. Utilize o opt-in explícito e mantenha o inventário de números sandbox atualizado.
+  - **Teste manual**: após salvar credenciais, execute `POST /providers/{provider_id}/health` ou o botão "Testar" na UI para confirmar `healthy=true`.
 
-> ℹ️ Em ambientes com `SANDBOX_PROVIDERS=true`, o conector de sandbox aceita os mesmos parâmetros e permite simular latência e falhas ajustando `SANDBOX_LATENCY_MS`, `SANDBOX_FAILURE_RATE` ou informando `sandbox_options` no factory interno (`get_connector`).
+- **SendGrid (Email)**
+  - `api_key` – chave iniciando em `SG.` com 16–128 caracteres permitidos (`[A-Za-z0-9_-]`).
+  - `from_email` – remetente padrão validado (recomenda-se domínio autenticado em SPF/DKIM).
+  - `webhook_token` – token utilizado pelo Event Webhook/Inbound Parse.
+  - `inbound_signing_secret` – segredo para validar `X-Twilio-Email-Event-Webhook-Signature`/Parse (16–128 caracteres).
+  - **Notas regulatórias**: habilite DKIM/SPF antes de sair do sandbox e respeite listas de supressão (`unsubscribe`). Mantenha provas de opt-in/double opt-in.
+  - **Teste manual**: use `POST /integrations/email/test` ou dispare o request Postman correspondente após salvar as credenciais.
+
+- **360dialog / Gupshup (WhatsApp)**
+  - `access_token` (360dialog) ou (`api_key`, `app_name` para Gupshup) seguem inalterados, agora descritos via `provider_form_schema`.
 
 ### `POST /providers/{provider_id}/health`
 Executa o `health_check` do conector usando as credenciais ativas.

@@ -209,7 +209,22 @@ def seed():
                     "from_address": DEFAULT_EMAIL_FROM_ADDRESS,
                     "sandbox": True,
                 }
-            }
+            },
+            "provider": "sendgrid",
+            "required_fields": [
+                "api_key",
+                "from_email",
+                "inbound_signing_secret",
+                "webhook_token",
+            ],
+            "defaults": {
+                "from_email": DEFAULT_EMAIL_FROM_ADDRESS,
+                "webhook_token": DEFAULT_EMAIL_WEBHOOK_TOKEN,
+            },
+            "compliance": {
+                "dns": ["Configure SPF e DKIM antes de enviar e-mails reais."],
+                "consent": ["Respeite cancelamentos (unsubscribe) em até 24 horas."],
+            },
         }
 
         if not email_provider:
@@ -296,7 +311,22 @@ def seed():
                     "inbound_numbers": [DEFAULT_SMS_FROM_NUMBER],
                     "sandbox": True,
                 }
-            }
+            },
+            "provider": "twilio",
+            "required_fields": [
+                "account_sid",
+                "auth_token",
+                "from_number",
+            ],
+            "defaults": {
+                "from_number": DEFAULT_SMS_FROM_NUMBER,
+                "account_sid": DEFAULT_SMS_ACCOUNT_SID,
+            },
+            "compliance": {
+                "registrations": [
+                    "Para produção, registre campanhas 10DLC associadas a este remetente.",
+                ],
+            },
         }
 
         if not sms_provider:
