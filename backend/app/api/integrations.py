@@ -27,7 +27,7 @@ from app.models.models import (
 from app.services.contacts import ContactRepository, OptInRequestService
 from app.services.conversations import ConversationLifecycleService
 from app.services.routing.preferences import ContactPreferenceResolver
-from app.services.provider_connectors import get_connector, run_health_check
+from app.services.provider_connectors import run_health_check
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
