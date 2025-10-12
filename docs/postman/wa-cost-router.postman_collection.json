@@ -809,8 +809,7 @@
               {
                 "key": "Authorization",
                 "value": "{{access_token}}",
-                "type": "text",
-                "disabled": true
+                "type": "text"
               }
             ],
             "url": {
@@ -3059,6 +3058,11 @@
           "  pm.request.headers.upsert({ key: 'Authorization', value: `Bearer ${token}` });",
           "} else {",
           "  pm.request.headers.remove('Authorization');",
+          "}",
+          "const orgId = pm.environment.get('org_id');",
+          "const crmOrgId = pm.environment.get('crm_org_id');",
+          "if (orgId && !crmOrgId) {",
+          "  pm.environment.set('crm_org_id', orgId);",
           "}"
         ]
       }
