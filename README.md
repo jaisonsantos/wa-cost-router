@@ -64,6 +64,24 @@ Ele é dividido em três jobs principais:
 
 Use `make ci` para replicar localmente a sequência de checks descrita em [Operações › Pipeline CI](docs/operations/OPERATIONS.md#pipeline-ci).
 
+### Auto-fix do Codex após falhas
+
+Quando o workflow `CI` termina com status `failure`, o arquivo
+[`codex-autofix.yml`](.github/workflows/codex-autofix.yml) é disparado. Ele só
+executa se o segredo `OPENAI_API_KEY` estiver configurado no repositório e se a
+falha tiver ocorrido **após** o merge dessa automação na `main`.
+
+- Branches que já tinham falhas antes do merge precisam ser reexecutadas (por
+  exemplo, via _Re-run jobs_ ou push de novos commits) para que o evento
+  `workflow_run` dispare novamente já com o auto-fix disponível.
+- Branches criadas a partir da `main` atual já carregam o workflow e, se
+  apresentarem falhas na `CI`, terão o auto-fix executado automaticamente na
+  mesma tentativa que resultar em `failure`.
+
+O auto-fix baixa a branch que falhou, roda o Codex com o prompt guardrail, tenta
+aplicar um patch mínimo, reexecuta os testes e, em caso de sucesso, abre um PR
+temporário com as correções para revisão humana.
+
 ## Documentação
 
 - [Ciclo atual (roadmap, plano e governança)](docs/current-cycle/README.md)
