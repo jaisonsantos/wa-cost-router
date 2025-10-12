@@ -48,5 +48,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_MESSAGES_PER_MIN: int = 120
     RATE_LIMIT_LOGIN_PER_MIN: int = 20
 
+    MARKETING_SILENT_HOURS_UTC: list[str] = Field(default_factory=lambda: ["22:00-06:00"])
+
 
 settings = Settings()

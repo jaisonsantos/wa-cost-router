@@ -5,6 +5,7 @@ import { Button } from "./ui/button";
 import { Sheet, SheetClose, SheetContent, SheetTrigger } from "./ui/sheet";
 import {
   LayoutDashboard,
+  FileSpreadsheet,
   FileText,
   Settings,
   Activity,

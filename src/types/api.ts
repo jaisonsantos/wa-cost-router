@@ -203,6 +203,40 @@ export interface Provider {
 
 export type ProviderCredentialInput = Record<string, string | number | boolean>;
 
+export interface Template {
+  id: string;
+  name: string;
+  category: string;
+  language: string;
+  status: string;
+  meta: Record<string, unknown>;
+}
+
+export interface TemplateCreatePayload {
+  name: string;
+  category: string;
+  language: string;
+  status: string;
+  meta?: Record<string, unknown>;
+}
+
+export type TemplateUpdatePayload = Partial<TemplateCreatePayload>;
+
+export interface TemplateSyncProviderSummary {
+  provider: string;
+  total_templates: number;
+  languages: string[];
+  statuses: string[];
+  error?: string | null;
+}
+
+export interface TemplateSyncResponse {
+  synced: number;
+  providers: TemplateSyncProviderSummary[];
+  languages: string[];
+  statuses: string[];
+}
+
 export interface IntegrationHealthSnapshot {
   healthy: boolean;
   status_code?: string | number | null;
