@@ -152,6 +152,31 @@ export interface MessageJobDetail extends MessageJobSummary {
   conversation_history?: MessageJobConversationHistory[];
 }
 
+export interface BillingSummary {
+  plan_name: string | null;
+  plan_status: string;
+  price_amount_minor: number | null;
+  price_currency: string | null;
+  next_billing_at: string | null;
+  cancel_at_period_end: boolean;
+  payment_method_brand: string | null;
+  payment_method_last4: string | null;
+  message_quota: number | null;
+  message_usage: number | null;
+  latest_invoice_url: string | null;
+  price_id: string | null;
+}
+
+export interface BillingCheckoutRequest {
+  price_id: string;
+  success_url: string;
+  cancel_url: string;
+}
+
+export interface BillingCheckoutResponse {
+  checkout_url: string;
+}
+
 export interface Event {
   id: string;
   direction: string;

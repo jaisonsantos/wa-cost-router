@@ -43,6 +43,14 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 - Rotina recomendada no plantão: consultar `/integrations/connections` após cada deploy e executar `POST /integrations/{channel}/test` quando houver alerta `warning`/`error`, registrando ações no playbook de incidentes.
 - Cenários automatizados: `tests/e2e/settings-connections.spec.ts` usa o sandbox para validar tanto o fluxo saudável quanto uma simulação de falha (badge "Falha") pressionando os botões "Testar Email/SMS" na UI.
 
+## Billing & Stripe
+
+- Defina `STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` no `.env` do backend antes de habilitar o checkout. Sem esses valores a API responde `503` ao iniciar um fluxo de assinatura.
+- `POST /billing/checkout` cria uma sessão de assinatura no Stripe. Informe `price_id`, `success_url` e `cancel_url`. O backend garante idempotência por `org_id` reaproveitando o `customer` existente.
+- `POST /billing/webhook` processa eventos `checkout.session.completed`, `customer.subscription.updated/deleted` e `invoice.paid`. O payload precisa carregar `metadata.org_id` para vincular a organização.
+- `GET /billing/summary` expõe o plano atual, limites de mensagens e status de pagamento. A aba *Billing* em `Settings` consome esse endpoint para exibir preço, próxima fatura e método de pagamento mascarado.
+- Para testes locais use os fixtures do Stripe (`backend/tests/test_billing_api.py`) ou sobrescreva `verify_webhook_event` via monkeypatch. As assinaturas simuladas atualizam a tabela `billing_subscription` sem necessidade de chamadas externas.
+
 ## Circuit breaker de provedores
 
 - Estados são persistidos em Redis (`circuit:{provider_id}`) e controlados por `CIRCUIT_BREAKER_THRESHOLD` (falhas consecutivas antes de abrir) e `CIRCUIT_BREAKER_COOLDOWN_SECONDS` (tempo mínimo até a transição para `half-open`).
