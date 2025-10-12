@@ -321,7 +321,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"provider_id\": \"{{sms_provider_id}}\",\n  \"credentials\": {\n    \"account_sid\": \"{{sms_account_sid}}\",\n    \"auth_token\": \"{{sms_auth_token}}\",\n    \"from_number\": \"{{sms_from_number}}\",\n    \"messaging_service_sid\": \"{{sms_messaging_service_sid}}\"\n  }\n}"
+              "raw": "{\n  \"provider_id\": \"{{sms_provider_id}}\",\n  \"credentials\": {\n    \"account_sid\": \"{{sms_account_sid}}\",\n    \"auth_token\": \"{{sms_auth_token}}\",\n    \"from_number\": \"{{sms_from_number}}\",\n    \"inbound_verify_token\": \"{{sms_webhook_auth_token}}\"\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/providers/credentials",
@@ -421,7 +421,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"provider_id\": \"{{email_provider_id}}\",\n  \"credentials\": {\n    \"api_key\": \"{{email_api_key}}\",\n    \"from_email\": \"{{email_from_address}}\"\n  }\n}"
+              "raw": "{\n  \"provider_id\": \"{{email_provider_id}}\",\n  \"credentials\": {\n    \"api_key\": \"{{email_api_key}}\",\n    \"from_email\": \"{{email_from_address}}\",\n    \"webhook_token\": \"{{email_webhook_token}}\",\n    \"inbound_signing_secret\": \"{{email_webhook_secret}}\"\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/providers/credentials",

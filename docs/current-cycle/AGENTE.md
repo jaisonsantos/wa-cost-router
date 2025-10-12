@@ -77,7 +77,7 @@
 | `POST /rules/simulate-advanced` | Calcula estimativas `total_baseline/total_optimized` alinhadas aos tipos consumidos pela SPA. | Falta auditoria de mudanças. |
 | `GET /reports/dashboard-metrics` | Disponibiliza métricas agregadas (`total_messages`, `saved_minor`, etc.). | Requer `MessageEvent` externo; sem baseline real sem ingestão automática. |
 | `GET /reports/provider-metrics` | Exibe performance por provedor. | Falta particionamento por org quando novos providers forem inseridos. |
-| `GET /providers` / `POST /providers/credentials` | Lista providers e salva credenciais criptografadas (Fernet). | Health-checks ainda dependem de credenciais hardcoded para demo. |
+| `GET /providers` / `POST /providers/credentials` | Lista providers, expõe `metadata`/`provider_form_schema` dinâmicos e salva credenciais criptografadas (Fernet). | Health-checks continuam usando credenciais seed em sandbox; avaliar rotações periódicas em produção. |
 | `GET /rates` | Autenticação obrigatória e ordenação por `effective_from`. | Tarifas ainda globais, sem `org_id`. |
 | `POST /integrations/wa/connections` | Persiste tokens WA criptografados. | Sem rotação/expiração automática. |
 
@@ -97,7 +97,7 @@
 | Login / Register | Fluxos básicos prontos com consumo das APIs de autenticação. | Falta hardening de UX (tratamento de erro, políticas de senha). |
 | Dashboard | Exibe cards de métricas conforme `GET /reports/dashboard-metrics`. | Indicadores multicanal ainda mockados. |
 | Messages | Lista jobs e detalhes usando `GET /messages/jobs` e `GET /messages/jobs/{job_id}`. | Faltam filtros avançados e timeline de eventos em tempo real. |
-| Providers | CRUD completo para cadastro e health-check. | Tela ainda assume um único tenant. |
+| Providers | CRUD completo para cadastro e health-check. | UI agora consome schema dinâmico (Twilio/SendGrid) com validação e guidance de compliance. |
 | Rules | Editor de regras com fallback chain. | Não registra histórico de alterações nem simulações persistidas. |
 | Reports | Consome métricas agregadas dos endpoints de relatórios. | Gráficos não refletem dados multicanal reais. |
 | Settings | Ajustes gerais e tokens. | RBAC e branding white-label não estão expostos. |
