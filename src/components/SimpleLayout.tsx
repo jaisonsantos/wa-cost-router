@@ -103,7 +103,7 @@ export default function SimpleLayout({ children }: SimpleLayoutProps) {
               </div>
             </div>
 
-            <div className="hidden w-full overflow-x-auto md:flex md:w-auto md:items-center md:justify-end md:gap-2 lg:gap-3">
+            <div className="hidden w-full md:flex md:w-auto md:flex-wrap md:items-center md:justify-end md:gap-2 lg:gap-3">
               <NavigationMenu className="max-w-none">
                 <NavigationMenuList>
                   {navigationItems.map((item) => {
