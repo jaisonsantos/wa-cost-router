@@ -2,7 +2,7 @@
   "info": {
     "name": "WA Cost Router",
     "_postman_id": "4f6d5d8b-1d2c-4a8d-9b1e-0c1234567890",
-    "description": "Coleção completa da API WA Cost Router para desenvolvimento local.",
+    "description": "Cole\u00e7\u00e3o completa da API WA Cost Router para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -2766,6 +2766,131 @@
                   "  pm.expect(payload.channel).to.eql('sms');",
                   "  pm.expect(payload).to.have.property(\"healthy\");",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CRM - Webhook Receive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"events\": [\n    {\n      \"objectType\": \"contact.propertyChange\",\n      \"objectId\": \"12345\",\n      \"occurredAt\": \"{{isoTimestamp}}\",\n      \"properties\": {\n        \"firstname\": \"Webhook\",\n        \"lastname\": \"Example\",\n        \"email\": \"webhook.crm+{{timestamp}}@example.com\"\n      },\n      \"eventId\": \"evt-{{timestamp}}\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/integrations/crm/{{crm_provider_slug}}/webhook?org_id={{crm_org_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "integrations",
+                "crm",
+                "{{crm_provider_slug}}",
+                "webhook"
+              ],
+              "query": [
+                {
+                  "key": "org_id",
+                  "value": "{{crm_org_id}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  const cryptoLib = typeof CryptoJS !== 'undefined' ? CryptoJS : null;",
+                  "  const secret = pm.environment.get('crm_webhook_secret') || '';",
+                  "  const body = pm.request.body && pm.request.body.raw ? pm.variables.replaceIn(pm.request.body.raw) : '';",
+                  "  let signature = '';",
+                  "  if (secret && cryptoLib) {",
+                  "    const hmac = cryptoLib.HmacSHA256(body, secret);",
+                  "    signature = hmac.toString(cryptoLib.enc.Hex);",
+                  "  }",
+                  "  pm.request.headers.upsert({ key: 'X-HubSpot-Signature', value: signature });",
+                  "})();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  pm.test('CRM webhook processed or rejected with detail', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 401, 404, 409]);",
+                  "    if (pm.response.code === 200) {",
+                  "      const body = pm.response.json();",
+                  "      pm.expect(body).to.have.property('processed_contacts');",
+                  "      pm.expect(body).to.have.property('origin');",
+                  "    }",
+                  "  });",
+                  "})();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CRM - Trigger Poll",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"page_size\": 100\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/integrations/crm/{{crm_provider_slug}}/poll?org_id={{crm_org_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "integrations",
+                "crm",
+                "{{crm_provider_slug}}",
+                "poll"
+              ],
+              "query": [
+                {
+                  "key": "org_id",
+                  "value": "{{crm_org_id}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  pm.test('CRM poll returns SyncResult payload', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('processed_contacts');",
+                  "    pm.expect(body).to.have.property('origin');",
+                  "  });",
+                  "})();"
                 ]
               }
             }

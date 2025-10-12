@@ -30,10 +30,11 @@ Este guia descreve como configurar as integrações CRM suportadas no piloto (Hu
      ```
 2. **Webhooks**
    - Configurar callback via `HubSpotProvider.configure_webhook` (script `python backend/scripts/configure_hubspot_webhook.py`).
-   - O endpoint FastAPI deve aceitar `POST /integrations/crm/hubspot/webhook` com assinatura HMAC usando `CRM_WEBHOOK_SECRET`.
+   - O endpoint FastAPI `POST /integrations/crm/hubspot/webhook` agora valida `X-HubSpot-Signature` calculando `hex(hmac_sha256(secret, raw_body))` com `CRM_WEBHOOK_SECRET`. Requisições rejeitadas retornam `401` e são logadas com `provider_slug`/`org_id`.
+   - Eventos válidos respondem com o resumo `SyncResult` (`processed_contacts`, `last_change_at`, `origin`, etc.) utilizado também na telemetria.
 3. **Sincronização incremental**
    - Webhooks ingerem eventos imediatos (`origin=webhook`).
-   - Polling é acionado pelo comando `python backend/scripts/run_crm_sync.py --provider hubspot --org-id <uuid>` (ou scheduler).
+   - Polling pode ser orquestrado tanto pelo comando `python backend/scripts/run_crm_sync.py --provider hubspot --org-id <uuid>` quanto via API `POST /integrations/crm/hubspot/poll` (útil para fallback manual ou automações). Ambas retornam `SyncResult` e respeitam o estado salvo em `Provider.meta.crm_sync`.
    - Estado persistido em `Provider.meta.crm_sync` (`cursor`, `last_change_at`).
 4. **Monitoramento**
    - Métricas `crm_sync_processed_total`, `crm_sync_failures_total` (labels `provider_slug`, `origin`).
