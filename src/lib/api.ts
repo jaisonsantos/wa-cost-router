@@ -14,6 +14,8 @@ import {
   ProviderCredentialInput,
   ProviderHealth,
   ProviderMetric,
+  IntegrationConnection,
+  ConnectionTestResult,
   RateEntry,
   ContactListResponse,
   ContactConsentHistoryResponse,
@@ -234,6 +236,22 @@ class ApiClient {
   async healthCheckProvider(providerId: string): Promise<ProviderHealth> {
     return this.request<ProviderHealth>(`/providers/${providerId}/health`, {
       method: "POST",
+    });
+  }
+
+  // Integrations
+  async getIntegrationConnections(): Promise<IntegrationConnection[]> {
+    return this.request<IntegrationConnection[]>("/integrations/connections");
+  }
+
+  async testIntegrationConnection(
+    channel: string,
+    payload?: { provider_id?: string },
+  ): Promise<ConnectionTestResult> {
+    const body = payload ? JSON.stringify(payload) : undefined;
+    return this.request<ConnectionTestResult>(`/integrations/${channel}/test`, {
+      method: "POST",
+      body,
     });
   }
 

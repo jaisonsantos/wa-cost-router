@@ -20,6 +20,8 @@ import {
   ProviderCredentialInput,
   ProviderHealth,
   ProviderMetric,
+  IntegrationConnection,
+  ConnectionTestResult,
   QueueMetricsResponse,
   QueueMetricsQueryParams,
   RateEntry,
@@ -253,6 +255,41 @@ export const useSetProviderCredentials = () => {
 export const useHealthCheckProvider = () => {
   return useMutation<ProviderHealth, Error, string>({
     mutationFn: (providerId: string) => api.healthCheckProvider(providerId),
+  });
+};
+
+// Integrations
+export const useConnections = () => {
+  return useQuery<IntegrationConnection[], Error>({
+    queryKey: ["integrationConnections"],
+    queryFn: () => api.getIntegrationConnections(),
+  });
+};
+
+export const useTestConnection = () => {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ConnectionTestResult,
+    Error,
+    { channel: string; providerId?: string }
+  >({
+    mutationFn: ({ channel, providerId }) =>
+      api.testIntegrationConnection(channel, providerId ? { provider_id: providerId } : undefined),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["integrationConnections"] });
+      toast({
+        title: data.healthy ? "Conexão saudável" : "Falha no teste da conexão",
+        description: data.healthy ? undefined : data.error ?? "Verifique as credenciais e tente novamente.",
+        variant: data.healthy ? "default" : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro ao testar conexão",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 };
 

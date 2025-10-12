@@ -47,6 +47,7 @@
 3. **UAT com parceiros:** Executar checklist de consentimento com dois parceiros piloto entre 04/11 e 08/11, registrando evidências.
 4. **Observabilidade:** Dashboards de opt-ins ativos por `org_id` publicados no Grafana interno.
 5. **Go/No-Go:** Reunião 08/11 com PM, Tech Lead e Security para liberar o piloto externo.
+6. **Health check multicanal:** Validar que `GET /integrations/connections` reflete o estado das credenciais (sem tokens exibidos) e que `POST /integrations/{channel}/test` grava snapshots em `integration_health_status`, incluindo cenários de sucesso e falha para WhatsApp, email (SendGrid) e SMS (Twilio sandbox).
 
 ## 6. Comunicação e governança
 - Atualizar o status diário no canal `#proj-wa-optin` destacando progresso dos P0 e riscos.

@@ -2214,6 +2214,44 @@
       "name": "Integrations",
       "item": [
         {
+          "name": "Connections - List Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/integrations/connections",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "integrations",
+                "connections"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Connections endpoint responded with list', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(Array.isArray(payload)).to.eql(true);",
+                  "  pm.expect(payload.length).to.be.greaterThan(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "WA - Create Connection",
           "request": {
             "method": "POST",
@@ -2585,6 +2623,92 @@
                 "exec": [
                   "pm.test('Webhook accepted payload', () => {",
                   "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Connections - Test Email Health",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/integrations/email/test",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "integrations",
+                "email",
+                "test"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Email health check returns status', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.channel).to.eql('email');",
+                  "  pm.expect(payload).to.have.property(\"healthy\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Connections - Test SMS Health",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/integrations/sms/test",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "integrations",
+                "sms",
+                "test"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('SMS health check returns status', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.channel).to.eql('sms');",
+                  "  pm.expect(payload).to.have.property(\"healthy\");",
                   "});"
                 ]
               }

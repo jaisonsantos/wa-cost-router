@@ -16,7 +16,10 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 7. **Contact Segments** – cria segmento, atualiza metadados, associa/desassocia o contato criado e configura política de limites/opt-out.
 8. **Rates** – consulta tarifas e importa CSV de exemplo (`docs/postman/sample_rates.csv`) usando o `provider_name` do provedor criado na etapa Providers.
 9. **Reports** – consome métricas de dashboard, resumo, métricas por provedor e valida que `/events` retorna `unit_cost_minor`/`baseline_cost_minor`.
-10. **Integrations** – cria conexão WA, valida webhook (`hub.verify_token`) e envia payload de webhook (repetir a criação com o mesmo `phone_id` apenas atualiza o registro).
+10. **Integrations** – cria conexão WA, valida webhook (`hub.verify_token`) e envia payload de webhook. Também expõe
+    `GET /integrations/connections` para acompanhar status, metadados e último health check consolidado e disponibiliza
+    `POST /integrations/{channel}/test` (e-mail/SMS) para validar as credenciais sandbox de forma rápida sem sair da
+    coleção (repetir a criação com o mesmo `phone_id` apenas atualiza o registro).
 11. **Admin** – checa `/admin/health` e `/admin/metrics`.
 12. **Cleanup** – remove credenciais do provedor criado durante o fluxo.
 
@@ -43,9 +46,9 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 | `sms_inbound_number` | Número curto/long code configurado como destino nos webhooks SMS. |
 | `sms_messaging_service_sid` | SID opcional do Messaging Service (Twilio) para validar roteamento inbound. |
 | `sms_webhook_auth_token` | Token de autenticação (Twilio Auth Token) utilizado para assinar o webhook SMS. |
-| `sms_account_sid` / `sms_auth_token` | Credenciais usadas para salvar o provedor Twilio e simular autenticação nos testes. |
+| `sms_account_sid` / `sms_auth_token` | Credenciais usadas para salvar o provedor Twilio sandbox nos testes de health check. |
 | `email_provider_id` | ID persistido após criar o provedor SendGrid. |
-| `email_api_key` | API key fictícia utilizada para autenticar o conector SendGrid durante os testes. |
+| `email_api_key` | API key fictícia utilizada para autenticar o conector SendGrid durante os testes (inclusive `POST /integrations/email/test`). |
 | `email_from_address` | Remetente padrão associado ao provedor de e-mail; pode ser sobrescrito por cenário. |
 | `email_default_country_iso` | Código ISO alfa-2 usado como fallback para e-mails quando o dataset enviar `GLOBAL` ou deixar `country_iso` vazio (default `US`). |
 | `email_webhook_token` | Token utilizado para autenticar as rotas `/integrations/email/webhook`. |
