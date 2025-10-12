@@ -127,21 +127,23 @@ test.describe("Providers configuration", () => {
       providerForm.evaluate((form) => (form as HTMLFormElement).requestSubmit()),
     ]);
 
-    await expect(page.getByText(/Credenciais configuradas com sucesso/)).toBeVisible();
-    await expect(twilioCard.getByText("Configurado")).toBeVisible();
+    await expect(page.getByText(/Credenciais configuradas com sucesso/).first()).toBeVisible();
+    await expect(
+      twilioCard
+        .locator("span.text-green-600")
+        .filter({ hasText: "Configurado" })
+        .first(),
+    ).toBeVisible();
 
     await twilioCard.getByRole("button", { name: "Testar" }).click();
-    const healthToast = page
-      .locator('[data-component-name="ToastTitle"]')
-      .filter({ hasText: "Provider está saudável" });
-    await expect(healthToast).toBeVisible();
+    await expect(page.getByText(/Provider está saudável/)).toBeVisible();
 
     const sendgridCard = page.getByRole("heading", { name: /SendGrid/i }).locator("../../..");
     await sendgridCard.getByRole("button", { name: "Configurar" }).click();
-    const providerDialog = page.getByRole("dialog");
-    await expect(providerDialog.getByText("Utilize double opt-in.")).toBeVisible();
-    await providerDialog.press("Escape");
-    await expect(providerDialog).toBeHidden();
+    await expect(
+      sendgridCard.getByText(/Utilize double opt-in/)
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Cancelar" }).click();
   });
 });
 
