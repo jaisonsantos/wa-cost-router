@@ -84,7 +84,16 @@ class ApiClient {
         window.location.href = "/login";
       }
       const error = await response.json().catch(() => ({ detail: "Request failed" }));
-      throw new Error(error.detail || `HTTP ${response.status}`);
+      let detailMessage: string | undefined;
+      const detail = error.detail;
+      if (typeof detail === "string") {
+        detailMessage = detail;
+      } else if (Array.isArray(detail)) {
+        detailMessage = detail.join("; ");
+      } else if (detail && typeof detail === "object" && Array.isArray(detail.errors)) {
+        detailMessage = detail.errors.join("; ");
+      }
+      throw new Error(detailMessage || `HTTP ${response.status}`);
     }
 
     if (response.status === 204) {

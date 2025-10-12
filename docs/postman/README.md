@@ -9,7 +9,7 @@ A coleção `WA Cost Router` cobre 100% dos endpoints do backend com variáveis 
 
 1. **Auth** – registra usuário aleatório (`postman+timestamp`) com senha forte gerada no runtime e efetua login (token salvo automaticamente).
 2. **Organization** – obtém `org_id` via `/orgs/current`.
-3. **Providers** – cria provedores WhatsApp (360dialog), SMS (Twilio) e e-mail (SendGrid), persiste credenciais fake e executa health check.
+3. **Providers** – cria provedores WhatsApp (360dialog), SMS (Twilio) e e-mail (SendGrid), consome o schema dinâmico retornado por `GET /providers` para preencher as credenciais e executa health check.
 4. **Rules** – lista, cria, atualiza e alterna regras, incluindo simulação avançada e regras utilitárias específicas para SMS/e-mail.
 5. **Messages** – envia mensagem, lista jobs, consulta detalhes do job usando `job_id` capturado, executa o cenário opcional **Messages - Rate Limit Demo** para validar respostas `429` e concentra a pasta **Multi-Channel Regression** para validar WhatsApp/SMS/e-mail.
 6. **Contacts** – dispara importação assíncrona (`POST /contacts/imports`), lista catálogos, cria contato, edita atributos, alterna status ativo/inativo e consulta histórico de consentimento.
@@ -44,15 +44,15 @@ Arquivo: [`wa-cost-router.postman_environment.json`](./wa-cost-router.postman_en
 | `sms_contact_phone` | Número E.164 usado como originador das mensagens SMS (reaproveitado nos testes multi-canal). |
 | `sms_from_number` | Número remetente configurado nas credenciais Twilio (utilizado ao enviar SMS). |
 | `sms_inbound_number` | Número curto/long code configurado como destino nos webhooks SMS. |
-| `sms_messaging_service_sid` | SID opcional do Messaging Service (Twilio) para validar roteamento inbound. |
-| `sms_webhook_auth_token` | Token de autenticação (Twilio Auth Token) utilizado para assinar o webhook SMS. |
+| `sms_messaging_service_sid` | SID opcional do Messaging Service (Twilio) para cenários onde o sandbox representa múltiplos números. |
+| `sms_webhook_auth_token` | Token de autenticação (Twilio Auth Token) utilizado para assinar o webhook SMS e preenchido como `inbound_verify_token` ao salvar credenciais. |
 | `sms_account_sid` / `sms_auth_token` | Credenciais usadas para salvar o provedor Twilio sandbox nos testes de health check. |
 | `email_provider_id` | ID persistido após criar o provedor SendGrid. |
 | `email_api_key` | API key fictícia utilizada para autenticar o conector SendGrid durante os testes (inclusive `POST /integrations/email/test`). |
 | `email_from_address` | Remetente padrão associado ao provedor de e-mail; pode ser sobrescrito por cenário. |
 | `email_default_country_iso` | Código ISO alfa-2 usado como fallback para e-mails quando o dataset enviar `GLOBAL` ou deixar `country_iso` vazio (default `US`). |
 | `email_webhook_token` | Token utilizado para autenticar as rotas `/integrations/email/webhook`. |
-| `email_webhook_secret` | Secret usado para assinar o header `X-Email-Signature` nas requisições inbound de e-mail. |
+| `email_webhook_secret` | Secret usado para assinar o header `X-Email-Signature` nas requisições inbound de e-mail e preenchido como `inbound_signing_secret`. |
 
 ### Assinatura do webhook
 

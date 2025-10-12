@@ -8,6 +8,10 @@ from app.core.database import get_db
 from app.api.dependencies import get_current_user
 from app.models.models import Provider, ProviderCredential
 from app.services.provider_connectors import get_connector
+from app.services.provider_registry import (
+    get_provider_profile,
+    validate_provider_credentials,
+)
 from app.core.security import encrypt_credentials, decrypt_credentials
 import logging
 
@@ -32,6 +36,9 @@ class ProviderResponse(BaseModel):
     is_configured: bool
     has_credentials: bool
     avg_latency_ms: Optional[float] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    required_fields: List[str] = Field(default_factory=list)
+    provider_form_schema: Dict[str, Any] = Field(default_factory=dict)
 
 @router.get("/", response_model=List[ProviderResponse])
 def list_providers(
@@ -51,7 +58,13 @@ def list_providers(
             ProviderCredential.provider_id == p.id,
             ProviderCredential.is_active.is_(True)
         ).first() is not None
-        
+
+        profile = get_provider_profile(
+            p.type,
+            p.name,
+            provider_meta=p.meta or {},
+        )
+
         result.append(ProviderResponse(
             id=str(p.id),
             name=p.name,
@@ -59,8 +72,11 @@ def list_providers(
             status=p.status,
             has_credentials=has_creds,
             is_configured=has_creds,
+            metadata=profile.metadata,
+            required_fields=profile.required_fields,
+            provider_form_schema=profile.form_schema,
         ))
-    
+
     return result
 
 @router.post("/", response_model=ProviderResponse)
@@ -107,6 +123,12 @@ def create_provider(
         is not None
     )
 
+    profile = get_provider_profile(
+        provider.type,
+        provider.name,
+        provider_meta=provider.meta or {},
+    )
+
     return ProviderResponse(
         id=str(provider.id),
         name=provider.name,
@@ -115,6 +137,9 @@ def create_provider(
         has_credentials=has_creds,
         is_configured=has_creds,
         avg_latency_ms=None,
+        metadata=profile.metadata,
+        required_fields=profile.required_fields,
+        provider_form_schema=profile.form_schema,
     )
 
 @router.post("/credentials")
@@ -142,6 +167,15 @@ def set_provider_credentials(
         ProviderCredential.org_id == current_user["org_id"],
         ProviderCredential.provider_id == provider_uuid
     ).first()
+
+    validation_errors = validate_provider_credentials(
+        provider.type,
+        data.credentials,
+        provider_name=provider.name,
+        provider_meta=provider.meta or {},
+    )
+    if validation_errors:
+        raise HTTPException(status_code=422, detail={"errors": validation_errors})
 
     if existing:
         # Atualizar
@@ -185,7 +219,13 @@ async def check_provider_health(
     ).first()
     
     if not credential:
-        raise HTTPException(status_code=400, detail="No credentials configured")
+        return {
+            "provider_id": str(provider.id),
+            "provider_name": provider.name,
+            "healthy": False,
+            "status_code": None,
+            "error": "No credentials configured",
+        }
     
     try:
         connector = get_connector(

@@ -133,7 +133,7 @@ test.describe("Settings connections", () => {
     );
 
     await Promise.all([waitForEmailTestResponse(page), emailTestButton.click()]);
-    await expect(page.getByText("Falha no teste da conexão")).toBeVisible();
+    await expect(page.getByText("Falha no teste da conexão", { exact: true }).first()).toBeVisible();
     await expect(emailCardHeader.getByText("Falha")).toBeVisible();
     await page.keyboard.press("Escape");
   });

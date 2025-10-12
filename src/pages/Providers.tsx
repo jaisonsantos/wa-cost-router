@@ -1,15 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useProviders, useSetProviderCredentials, useHealthCheckProvider } from "@/hooks/useApi";
 import SimpleLayout from "@/components/SimpleLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Activity, CheckCircle, XCircle, Settings } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Provider, ProviderHealth } from "@/types/api";
+import ProviderForm from "@/components/providers/ProviderForm";
 
 type ProviderSummary = Provider;
 type ProviderHealthCheck = ProviderHealth;
@@ -20,19 +19,17 @@ export default function Providers() {
   const healthCheck = useHealthCheckProvider();
 
   const [selectedProvider, setSelectedProvider] = useState<ProviderSummary | null>(null);
-  const [credentialsForm, setCredentialsForm] = useState<Record<string, string>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const handleSetCredentials = async () => {
+  const handleSubmitCredentials = async (formValues: Record<string, string>) => {
     if (!selectedProvider) return;
 
     try {
       await setCredentialsMutation.mutateAsync({
         providerId: selectedProvider.id,
-        credentials: credentialsForm,
+        credentials: formValues,
       });
       setDialogOpen(false);
-      setCredentialsForm({});
       toast({ title: "Credenciais configuradas com sucesso" });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Erro inesperado";
@@ -41,6 +38,7 @@ export default function Providers() {
         description: message,
         variant: "destructive",
       });
+      throw new Error(message);
     }
   };
 
@@ -71,6 +69,33 @@ export default function Providers() {
     setDialogOpen(true);
   };
 
+  const handleDialogChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      setSelectedProvider(null);
+    }
+  };
+
+  const complianceHighlights = useMemo(() => {
+    if (!selectedProvider) return [] as string[];
+    const metadata = selectedProvider.metadata ?? {};
+    const compliance = metadata.compliance as Record<string, unknown> | undefined;
+    if (!compliance) return [] as string[];
+    const notes: string[] = [];
+    Object.values(compliance).forEach((value) => {
+      if (Array.isArray(value)) {
+        value.forEach((item) => {
+          if (typeof item === "string") {
+            notes.push(item);
+          }
+        });
+      } else if (typeof value === "string") {
+        notes.push(value);
+      }
+    });
+    return notes;
+  }, [selectedProvider]);
+
   const providersList: ProviderSummary[] = providers ?? [];
 
   if (isLoading) {
@@ -89,13 +114,21 @@ export default function Providers() {
         <div>
           <h1 className="text-3xl font-bold">Provedores</h1>
           <p className="text-muted-foreground mt-2">
-            Gerencie conexões com provedores de mensagens WhatsApp
+            Gerencie conexões com provedores de mensagens WhatsApp, SMS e Email com validação dinâmica de credenciais.
           </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {providersList.map((provider) => (
-            <Card key={provider.id}>
+          {providersList.map((provider) => {
+            const complianceMeta = provider.metadata?.compliance as Record<string, unknown> | undefined;
+            const registrationNotes = Array.isArray(complianceMeta?.registrations)
+              ? (complianceMeta!.registrations as unknown[]).filter(
+                  (item): item is string => typeof item === "string",
+                )
+              : [];
+
+            return (
+              <Card key={provider.id}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">{provider.name}</CardTitle>
@@ -127,6 +160,17 @@ export default function Providers() {
                   </div>
                 )}
 
+                {registrationNotes.length > 0 && (
+                  <div className="rounded-md border border-muted p-3 text-xs text-muted-foreground">
+                    {registrationNotes.slice(0, 2).map((note) => (
+                      <div key={note} className="flex gap-2">
+                        <span className="text-primary">•</span>
+                        <span>{note}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -150,65 +194,44 @@ export default function Providers() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
 
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Configurar {selectedProvider?.name}</DialogTitle>
               <DialogDescription>
-                Configure as credenciais para conectar ao provedor
+                Configure as credenciais e siga as recomendações de consentimento para habilitar o canal.
               </DialogDescription>
             </DialogHeader>
-            
-            <div className="space-y-4 py-4">
-              {selectedProvider?.name === "360dialog" && (
-                <div className="space-y-2">
-                  <Label htmlFor="access_token">Access Token</Label>
-                  <Input
-                    id="access_token"
-                    type="password"
-                    placeholder="Seu token de acesso 360dialog"
-                    value={credentialsForm.access_token || ""}
-                    onChange={(e) => setCredentialsForm({ ...credentialsForm, access_token: e.target.value })}
-                  />
-                </div>
-              )}
-              
-              {selectedProvider?.name === "Gupshup" && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="api_key">API Key</Label>
-                    <Input
-                      id="api_key"
-                      type="password"
-                      placeholder="Sua API key Gupshup"
-                      value={credentialsForm.api_key || ""}
-                      onChange={(e) => setCredentialsForm({ ...credentialsForm, api_key: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="app_name">App Name</Label>
-                    <Input
-                      id="app_name"
-                      placeholder="Nome do seu app Gupshup"
-                      value={credentialsForm.app_name || ""}
-                      onChange={(e) => setCredentialsForm({ ...credentialsForm, app_name: e.target.value })}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
 
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSetCredentials} disabled={setCredentialsMutation.isPending}>
-                {setCredentialsMutation.isPending ? "Salvando..." : "Salvar"}
-              </Button>
-            </div>
+            {selectedProvider && selectedProvider.provider_form_schema.fields.length > 0 ? (
+              <ProviderForm
+                schema={selectedProvider.provider_form_schema}
+                requiredFields={selectedProvider.required_fields}
+                metadata={selectedProvider.metadata}
+                isSubmitting={setCredentialsMutation.isPending}
+                onSubmit={handleSubmitCredentials}
+                onCancel={() => handleDialogChange(false)}
+              />
+            ) : (
+              <div className="py-6 text-sm text-muted-foreground">
+                Nenhum esquema de formulário foi definido para este provedor. Contate o suporte para concluir a configuração.
+              </div>
+            )}
+
+            {complianceHighlights.length > 0 && (
+              <div className="mt-4 rounded-md border border-muted bg-muted/30 p-3 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">Notas de compliance</p>
+                <ul className="mt-2 list-disc space-y-1 pl-4">
+                  {complianceHighlights.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
