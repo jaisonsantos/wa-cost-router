@@ -7,7 +7,7 @@
 - **Criptografia**: tokens WhatsApp via Fernet (`APP_SECRET_KEY`). Credenciais de provedores criptografadas (migration 002).
 - **Multi-tenancy**: filtros `org_id` ativos em providers, routing e mensagens; webhook mapeia `phone_number_id` → `WAConnection` e registra assinaturas HMAC ausentes/inválidas antes de descartar eventos.
 - **Logs**: erros do webhook expõem apenas `provider_event_id`/`message_event_id`; provider responses ainda persistem dados completos.
-- **Endpoints sensíveis**: `/admin/metrics` público; `GET /rates` agora requer auth.
+- **Endpoints sensíveis**: `/admin/metrics` requer header `X-Admin-Token`; configure `METRICS_AUTH_TOKEN` (ou use o fallback local) antes de expor o endpoint. `GET /rates` requer auth.
 - **Rate limiting**: Redis limita `POST /messages/send` e `POST /auth/login` por `org_id` com logging estruturado e headers `Retry-After`/`X-RateLimit-Remaining`.
 
 ## Ações Recomendadas (Prioridade Alta)
@@ -20,7 +20,7 @@
    - Biblioteca `phonenumbers` para E.164.
    - Sanitização de logs (evitar números completos).
 4. **Proteção de métricas/admin**
-   - Autenticação (basic auth ou token) em `/admin/metrics`.
+   - ✅ Token dedicado (`X-Admin-Token`) aplicado em `/admin/metrics` com fallback apenas em ambientes `ENVIRONMENT=local/test`.
    - Mover endpoints admin para rede interna.
 5. ~~**Rate limiting**~~ ✅
    - Expandir monitoramento (Prometheus/alertas) usando as métricas registradas nos logs estruturados.

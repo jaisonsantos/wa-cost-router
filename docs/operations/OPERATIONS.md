@@ -55,7 +55,7 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 
 - Estados são persistidos em Redis (`circuit:{provider_id}`) e controlados por `CIRCUIT_BREAKER_THRESHOLD` (falhas consecutivas antes de abrir) e `CIRCUIT_BREAKER_COOLDOWN_SECONDS` (tempo mínimo até a transição para `half-open`).
 - Quando um circuito está `open` ou `half-open`, o `RoutingEngine` ignora o provedor e utiliza a cadeia de fallback; logs incluem `event=circuit_breaker_skip` e métricas `messages_delivery_attempts_total{outcome="skipped_circuit"}`.
-- Para simular em sandbox, aumente `SANDBOX_FAILURE_RATE` ou force respostas de erro no conector desejado. Após atingir o limiar, verifique `admin_circuit_breakers_open_total` e `messages_circuit_breaker_state{provider_id}` em `/admin/metrics`.
+- Para simular em sandbox, aumente `SANDBOX_FAILURE_RATE` ou force respostas de erro no conector desejado. Após atingir o limiar, verifique `admin_circuit_breakers_open_total` e `messages_circuit_breaker_state{provider_id}` em `/admin/metrics` enviando o header `X-Admin-Token`.
 - Reset manual: `docker compose exec redis redis-cli DEL circuit:<provider_uuid>` (ou `FLUSHDB` para limpar todos). Fechamentos bem-sucedidos também ocorrem automaticamente quando o provedor processa uma mensagem com sucesso.
 - Monitore gauges `admin_circuit_breakers_open_total` / `admin_circuit_breakers_half_open_total` e logs para planejar reativações ou ajustes de threshold.
 
@@ -76,7 +76,7 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
   ```
 
   Isso agenda a tarefa no worker RQ. Para forçar a execução síncrona (debug), use `docker compose exec api python -c "from app.services.conversations.worker import rebuild_sla_snapshots; rebuild_sla_snapshots(org_id='${ORG_ID}', sla_target_seconds=60)"`.
-- Dashboards externos podem coletar os indicadores diretamente do Prometheus exportado em `/admin/metrics` (`sla_first_response_seconds`, `sla_first_response_within_target_total`, `messages_delivery_attempts_total{channel=...}`).
+- Dashboards externos podem coletar os indicadores diretamente do Prometheus exportado em `/admin/metrics` (`sla_first_response_seconds`, `sla_first_response_within_target_total`, `messages_delivery_attempts_total{channel=...}`) desde que enviem o header `X-Admin-Token` com o token configurado.
 - Configure alertas de SLA acompanhando a razão `sla_first_response_within_target_total / sla_first_response_tracked_total` nos canais críticos (`whatsapp`, `sms`).
 
 ## Segredos do webhook WhatsApp
@@ -122,8 +122,27 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 
 - **Readiness**: `GET /admin/health` (proteção necessária antes de produção).
 - **Workers**: monitorar filas Redis (`rq info`) e eventos de falha via logs.
-- **Métricas Prometheus**: endpoint `/admin/metrics` publica contadores (`messages_send_total{status,provider,channel}`, `messages_delivery_attempts_total{provider_id,provider,outcome,channel}`, `admin_metrics_scrapes_total`, `sla_first_response_tracked_total{channel}`, `sla_first_response_within_target_total{channel}`), histograma (`sla_first_response_seconds{channel}`) e gauges (`messages_circuit_breaker_state{provider_id}`, `admin_circuit_breakers_open_total`, `admin_circuit_breakers_half_open_total`, `sla_first_response_target_seconds{channel}`). Mantenha protegido por rede privada ou auth (ver backlog P1 "proteger-admin-metrics").
+- **Métricas Prometheus**: endpoint `/admin/metrics` publica contadores (`messages_send_total{status,provider,channel}`, `messages_delivery_attempts_total{provider_id,provider,outcome,channel}`, `admin_metrics_scrapes_total`, `sla_first_response_tracked_total{channel}`, `sla_first_response_within_target_total{channel}`), histograma (`sla_first_response_seconds{channel}`) e gauges (`messages_circuit_breaker_state{provider_id}`, `admin_circuit_breakers_open_total`, `admin_circuit_breakers_half_open_total`, `sla_first_response_target_seconds{channel}`). Mantenha protegido por rede privada e envie `X-Admin-Token` com o valor de `METRICS_AUTH_TOKEN` (ou fallback local).
 - **Logs**: `make logs` segue a API com `--tail=200`. Para outros serviços use `docker-compose logs -f <service>`.
+
+### Autenticação de `/admin/metrics`
+
+- Defina `METRICS_AUTH_TOKEN` com um segredo forte em ambientes `ENVIRONMENT=staging|production`. O header padrão esperado é `X-Admin-Token` (`METRICS_AUTH_HEADER_NAME`).
+- Em `ENVIRONMENT=local`/`test`, o backend usa `METRICS_AUTH_LOCAL_TOKEN` como fallback para evitar bloqueios em desenvolvimento.
+- Atualize os scrapers Prometheus (ou clientes HTTP) para enviar o header configurado. Exemplo:
+
+  ```yaml
+  - job_name: wa-cost-router
+    scheme: https
+    metrics_path: /admin/metrics
+    authorization:
+      type: Bearer
+      credentials: ${WA_COST_ROUTER_METRICS_TOKEN}
+    headers:
+      X-Admin-Token: ${WA_COST_ROUTER_METRICS_TOKEN}
+  ```
+
+- Gere tokens distintos por ambiente e rotacione via secrets manager. Falhas de autenticação retornam `401` (ausente) ou `403` (inválido) e são logadas com `event=admin_metrics_auth_missing`/`admin_metrics_scrape`.
 
 ## Backup & restore
 
