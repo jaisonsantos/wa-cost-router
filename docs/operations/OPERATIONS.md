@@ -36,6 +36,20 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 - Ajuste temporariamente os limites para testes de carga ou demonstração (`RATE_LIMIT_MESSAGES_PER_MIN=2 make test-backend`).
 - Eventos de estouro são registrados com `event=rate_limit_exceeded` nos logs da API, permitindo integração futura com Prometheus/Alertmanager.
 
+## Monitoramento de SLA multicanal
+
+- `ConversationLifecycleService` atualiza as filas em `queue_entry` sempre que um webhook inbound cria/encerra conversas. Use `GET /reports/queues` para acompanhar backlog e tempo médio de primeira resposta por canal.
+- `GET /reports/channel-metrics` fornece a mesma visão agregada, incluindo `sla.target_seconds` e `sla.compliance_rate` alinhados ao Prometheus (`sla_first_response_*`).
+- Para recalcular snapshots em lote, execute no container da API:
+
+  ```bash
+  docker compose exec api python -c "from app.services.conversations.worker import enqueue_sla_snapshot_rebuild; enqueue_sla_snapshot_rebuild(org_id='${ORG_ID}', sla_target_seconds=60)"
+  ```
+
+  Isso agenda a tarefa no worker RQ. Para forçar a execução síncrona (debug), use `docker compose exec api python -c "from app.services.conversations.worker import rebuild_sla_snapshots; rebuild_sla_snapshots(org_id='${ORG_ID}', sla_target_seconds=60)"`.
+- Dashboards externos podem coletar os indicadores diretamente do Prometheus exportado em `/admin/metrics` (`sla_first_response_seconds`, `sla_first_response_within_target_total`, `messages_delivery_attempts_total{channel=...}`).
+- Configure alertas de SLA acompanhando a razão `sla_first_response_within_target_total / sla_first_response_tracked_total` nos canais críticos (`whatsapp`, `sms`).
+
 ## Segredos do webhook WhatsApp
 
 - O secret usado para validar `X-Hub-Signature-256` fica armazenado criptografado em `wa_connection.webhook_secret_enc` (Fernet derivado de `APP_SECRET_KEY`).
@@ -45,10 +59,10 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 
 ## Consentimento inbound e auditoria
 
-- Cada mensagem inbound com campo `from` passa por verificação de opt-in (`contact_channel_opt_in`). Quando o consentimento está ausente, o webhook responde `{"status": "denied"}` e registra uma ocorrência em `contact_consent_audit` (`status=revoked`, `source="webhook"`, `proof_hash=sha256("denied:<provider_event_id>")`).
-- As negações não criam `message_event` nem alteram métricas de tráfego. Consulte a tabela `contact_consent_audit` para auditar tentativas (filtre por `agent="wa_webhook"`).
-- O serviço `OptInRequestService` é acionado para re-enfileirar solicitações de opt-in por e-mail. Verifique `contact_opt_in_request` para acompanhar follow-ups e reenvios.
-- Para reprocessar um evento depois de concedido o consentimento, reenvie a notificação do Meta (o endpoint é idempotente por `provider_event_id`; remova o hash correspondente em `contact_consent_audit` se precisar liberar uma nova tentativa).
+- `MultiChannelConsentResolver` consulta `contact_channel_opt_in` e preferências derivadas antes de aceitar webhooks (`whatsapp`, `sms`). Sem consentimento ativo o retorno é `{ "status": "denied" }` e uma ocorrência é gravada em `contact_consent_audit` (`status=revoked`, `source="webhook"`, `proof_hash=sha256("denied:<provider_event_id>")`).
+- As negações não criam `message_event` nem alteram métricas de tráfego. Consulte a tabela `contact_consent_audit` para auditar tentativas (filtre por `agent` = `wa_webhook` ou `sms_webhook`).
+- O serviço `OptInRequestService` é acionado para re-enfileirar solicitações de opt-in por e-mail/SMS. Verifique `contact_opt_in_request` para acompanhar follow-ups, data de expiração e resultado do reenvio.
+- Para reprocessar um evento depois de concedido o consentimento, reenvie a notificação do provedor. Os endpoints são idempotentes por `provider_event_id`/`MessageSid`; se necessário exclua o hash correspondente em `contact_consent_audit` para liberar a nova tentativa.
 
 ## Webhook SMS (Twilio)
 
