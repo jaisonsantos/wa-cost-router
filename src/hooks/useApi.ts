@@ -43,6 +43,9 @@ import {
   SimulateRulesResult,
   SummaryResponse,
   WAConnectionResponse,
+  BillingSummary,
+  BillingCheckoutRequest,
+  BillingCheckoutResponse,
 } from "@/types/api";
 
 // Summary
@@ -50,6 +53,26 @@ export const useSummary = (from?: string, to?: string) => {
   return useQuery<SummaryResponse, Error>({
     queryKey: ["summary", from, to],
     queryFn: () => api.getSummary(from, to),
+  });
+};
+
+export const useBillingSummary = () => {
+  return useQuery<BillingSummary, Error>({
+    queryKey: ["billingSummary"],
+    queryFn: () => api.getBillingSummary(),
+  });
+};
+
+export const useCreateBillingCheckout = () => {
+  return useMutation<BillingCheckoutResponse, Error, BillingCheckoutRequest>({
+    mutationFn: (payload) => api.createBillingCheckout(payload),
+    onError: (error: Error) => {
+      toast({
+        title: "Erro ao iniciar checkout",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 };
 

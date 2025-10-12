@@ -47,6 +47,9 @@ import {
   QueueMetricsResponse,
   QueueMetricsQueryParams,
   MessageJobDetailsQueryParams,
+  BillingSummary,
+  BillingCheckoutRequest,
+  BillingCheckoutResponse,
 } from "@/types/api";
 
 export const API_BASE_URL = "http://localhost:8000";
@@ -195,6 +198,17 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify({ email, password, org_name }),
       requiresAuth: false,
+    });
+  }
+
+  async getBillingSummary(): Promise<BillingSummary> {
+    return this.request<BillingSummary>("/billing/summary");
+  }
+
+  async createBillingCheckout(payload: BillingCheckoutRequest): Promise<BillingCheckoutResponse> {
+    return this.request<BillingCheckoutResponse>("/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify(payload),
     });
   }
 

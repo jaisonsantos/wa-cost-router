@@ -9,6 +9,8 @@ const useImportRatesCSVMock = vi.fn();
 const useCreateWAConnectionMock = vi.fn();
 const useConnectionsMock = vi.fn();
 const useTestConnectionMock = vi.fn();
+const useBillingSummaryMock = vi.fn();
+const useCreateBillingCheckoutMock = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
@@ -25,6 +27,8 @@ vi.mock("@/hooks/useApi", () => ({
   useCreateWAConnection: () => useCreateWAConnectionMock(),
   useConnections: () => useConnectionsMock(),
   useTestConnection: () => useTestConnectionMock(),
+  useBillingSummary: () => useBillingSummaryMock(),
+  useCreateBillingCheckout: () => useCreateBillingCheckoutMock(),
 }));
 
 const renderSettings = () =>
@@ -44,6 +48,10 @@ describe("Settings connections", () => {
     useImportRatesCSVMock.mockReturnValue({ mutateAsync: vi.fn() });
     useCreateWAConnectionMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     useTestConnectionMock.mockReturnValue({ mutate: vi.fn(), isPending: false, variables: undefined });
+    useBillingSummaryMock.mockReset();
+    useCreateBillingCheckoutMock.mockReset();
+    useBillingSummaryMock.mockReturnValue({ data: null, isLoading: false });
+    useCreateBillingCheckoutMock.mockReturnValue({ mutate: vi.fn(), isPending: false });
     useConnectionsMock.mockReset();
   });
 

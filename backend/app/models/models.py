@@ -18,6 +18,16 @@ import uuid
 import enum
 from app.core.database import Base
 
+
+class BillingStatusEnum(str, enum.Enum):
+    active = "active"
+    trialing = "trialing"
+    past_due = "past_due"
+    canceled = "canceled"
+    incomplete = "incomplete"
+    incomplete_expired = "incomplete_expired"
+    unpaid = "unpaid"
+
 class RoleEnum(str, enum.Enum):
     owner = "owner"
     member = "member"
@@ -32,6 +42,33 @@ class Organization(Base):
     contacts = relationship("Contact", back_populates="organization")
     contact_segments = relationship("ContactSegment", back_populates="organization")
     segment_policies = relationship("ContactSegmentPolicy", back_populates="organization")
+
+
+class BillingSubscription(Base):
+    __tablename__ = "billing_subscription"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    stripe_customer_id = Column(String, nullable=False)
+    stripe_subscription_id = Column(String)
+    status = Column(Enum(BillingStatusEnum), nullable=False, default=BillingStatusEnum.incomplete)
+    plan_nickname = Column(String)
+    price_id = Column(String)
+    currency = Column(String)
+    amount_minor = Column(Integer)
+    message_quota = Column(Integer)
+    message_usage = Column(Integer, default=0)
+    cancel_at_period_end = Column(Boolean, default=False)
+    current_period_end = Column(DateTime(timezone=True))
+    latest_invoice_url = Column(String)
+    default_payment_method = Column(JSON)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class User(Base):
     __tablename__ = "user"

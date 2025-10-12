@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import (
     admin,
+    billing,
     auth,
     events,
     integrations,
@@ -63,6 +64,7 @@ app.include_router(
     tags=["contact_segments"],
 )
 app.include_router(opt_in.router, prefix="/opt-in", tags=["opt_in"])
+app.include_router(billing.router, prefix="/billing", tags=["billing"])
 
 @app.get("/")
 def read_root():
