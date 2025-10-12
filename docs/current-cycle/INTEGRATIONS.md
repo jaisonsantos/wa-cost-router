@@ -27,8 +27,11 @@ no conector CRM priorizado (HubSpot) e na sincronização incremental do catálo
 4. **Habilitar sincronização incremental**
    - Chamar `CRMIncrementalSyncService.handle_webhook_event` a partir do endpoint inbound para
      processar notificações.
-   - Agendar `CRMIncrementalSyncService.run_polling_cycle` usando `CRM_POLLING_INTERVAL_SECONDS`
-     como intervalo base para fallback.
+   - Utilizar o script `python backend/scripts/run_crm_sync.py --provider hubspot --org-id <uuid>`
+     para execuções manuais (suporte a `--since` e `--page-size`).
+   - Automatizar fallback com `enqueue_polling_cycle` (`app/services/crm/worker.py`), que respeita
+     `CRM_POLLING_INTERVAL_SECONDS` antes de publicar jobs na fila `crm_sync` consumida pelo worker
+     RQ (`backend/worker.py`).
 
 ### Mapeamento de Campos
 
@@ -67,7 +70,16 @@ O módulo persiste o progresso incremental em `Provider.meta.crm_sync`:
 ```
 
 Esse estado é usado para retomar polling a partir do último cursor válido e para auditar a
-origem do último lote processado.
+origem do último lote processado. O script CLI e o worker retornam/resgatam `SyncResult` já
+serializado com essas informações (`processed_contacts`, `has_more`, `last_change_at`).
+
+### Monitoramento e Operação
+
+- Métricas Prometheus `crm_sync_processed_total` e `crm_sync_failures_total` expostas em
+  `/admin/metrics` (labels `provider_slug`, `origin`).
+- Logs do enfileiramento (`crm_sync_enqueued`, `crm_sync_enqueue_skipped`) ajudam a verificar
+  se o intervalo mínimo está sendo respeitado.
+- Para validação manual, o script CLI imprime o `SyncResult` em JSON.
 
 ## Variáveis de Ambiente
 
@@ -84,5 +96,6 @@ origem do último lote processado.
 - Implementar endpoints públicos para acionar `CRMIncrementalSyncService` e expor métricas de
   sincronização por tenant.
 - Ampliar o registry (`CRMProviderRegistry`) com outros CRMs priorizados (Salesforce, RD Station).
-- Instrumentar monitoramento para reconciliar divergências entre webhooks e polling.
+- Consolidar dashboards que correlacionem métricas de sucesso/falha (Prometheus) com eventos de
+  webhook para detectar divergências entre webhooks e polling.
 
