@@ -34,6 +34,7 @@ from app.models.models import (
     Provider,
     ProviderCredential,
     MessageEvent,
+    RoutedAction,
     RateCard,
     JobStatusEnum,
     AttemptStatusEnum,
@@ -191,6 +192,25 @@ class SendMessageResponse(BaseModel):
     provider_used: Optional[str] = None
     estimated_cost: Optional[int] = None
     message: str
+
+
+class RoutedActionItem(BaseModel):
+    id: UUID
+    rule_id: Optional[UUID]
+    rule_name: Optional[str]
+    status: str
+    provider_id: Optional[UUID]
+    provider_name: Optional[str]
+    attempt_number: Optional[int]
+    cost_minor: Optional[int]
+    connector_response: Optional[Dict[str, Any]]
+    created_at: datetime
+    message_event_id: Optional[UUID]
+
+
+class RoutedActionChainResponse(BaseModel):
+    job_id: UUID
+    actions: list[RoutedActionItem]
 
 @router.post("/send", response_model=SendMessageResponse)
 async def send_message(
@@ -439,6 +459,55 @@ async def send_message(
         message=result.get("message", "Message sent successfully")
     )
 
+
+@router.get("/jobs/{job_id}/routing", response_model=RoutedActionChainResponse)
+def get_message_routing_chain(
+    job_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = (
+        db.query(MessageJob)
+        .filter(
+            MessageJob.id == job_id,
+            MessageJob.org_id == current_user["org_id"],
+        )
+        .first()
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail="Message job not found")
+
+    actions = (
+        db.query(RoutedAction)
+        .filter(RoutedAction.org_id == job.org_id)
+        .order_by(RoutedAction.created_at.asc())
+        .all()
+    )
+
+    filtered: list[RoutedActionItem] = []
+    for action in actions:
+        payload = action.provider_response or {}
+        if payload.get("job_id") != str(job_id):
+            continue
+
+        filtered.append(
+            RoutedActionItem(
+                id=action.id,
+                rule_id=action.rule_id,
+                rule_name=payload.get("rule_name"),
+                status=action.status,
+                provider_id=_coerce_uuid(payload.get("provider_id")),
+                provider_name=payload.get("provider_name"),
+                attempt_number=payload.get("attempt_number"),
+                cost_minor=action.cost_minor,
+                connector_response=payload.get("connector_response"),
+                created_at=action.created_at,
+                message_event_id=action.message_event_id,
+            )
+        )
+
+    return RoutedActionChainResponse(job_id=job_id, actions=filtered)
+
 async def _attempt_delivery_with_fallback(
     db: Session,
     job: MessageJob,
@@ -452,11 +521,32 @@ async def _attempt_delivery_with_fallback(
 ) -> Dict[str, Any]:
     """Tenta entrega com retry e fallback"""
 
+    job_org_uuid = _coerce_uuid(job.org_id)
     org_uuid = _coerce_uuid(org_id)
+    rule_id = _coerce_uuid(routing_decision.get("rule_id"))
+    rule_name = routing_decision.get("rule_name")
+
     if org_uuid is None:
         logger.error("Invalid organization identifier %r for job %s", org_id, job_identifier)
         job.status = JobStatusEnum.failed_final
         try:
+            if job_org_uuid is not None:
+                failure_action = RoutedAction(
+                    org_id=job_org_uuid,
+                    rule_id=rule_id,
+                    message_event_id=None,
+                    action="deliver_message",
+                    status=JobStatusEnum.failed_final.value,
+                    provider_response={
+                        "job_id": str(job_identifier),
+                        "rule_name": rule_name,
+                        "provider_id": None,
+                        "provider_name": None,
+                        "reason": "invalid_org_context",
+                    },
+                    cost_minor=estimated_cost_minor,
+                )
+                db.add(failure_action)
             _commit_or_raise(db)
         except Exception:
             logger.exception("Failed to persist invalid organization failure for job %s", job_identifier)
@@ -572,6 +662,26 @@ async def _attempt_delivery_with_fallback(
                     error_message=str(exc)
                 )
                 db.add(attempt)
+
+                exception_action = RoutedAction(
+                    org_id=job_org_uuid or provider.org_id,
+                    rule_id=rule_id,
+                    message_event_id=None,
+                    action="deliver_message",
+                    status=AttemptStatusEnum.failed.value,
+                    provider_response={
+                        "job_id": str(job_identifier),
+                        "rule_name": rule_name,
+                        "provider_id": str(provider.id),
+                        "provider_name": provider.name,
+                        "attempt_number": attempt_number,
+                        "retry": retry,
+                        "error": str(exc),
+                    },
+                    cost_minor=estimated_cost_minor,
+                )
+                db.add(exception_action)
+
                 try:
                     _commit_or_raise(db)
                 except Exception:
@@ -594,11 +704,12 @@ async def _attempt_delivery_with_fallback(
                 ).inc()
                 break
 
+            attempt_status = AttemptStatusEnum.success if result["success"] else AttemptStatusEnum.failed
             attempt = DeliveryAttempt(
                 message_job_id=job_identifier,
                 provider_id=provider.id,
                 attempt_number=attempt_number,
-                status=AttemptStatusEnum.success if result["success"] else AttemptStatusEnum.failed,
+                status=attempt_status,
                 error_code=result.get("error_code"),
                 error_message=result.get("error_message"),
                 latency_ms=result.get("latency_ms"),
@@ -639,7 +750,15 @@ async def _attempt_delivery_with_fallback(
                 if not provider_message_id:
                     provider_message_id = f"job-{job_identifier}-attempt-{attempt_number}"
 
+                event_attributes = {
+                    "routing_rule_id": str(rule_id) if rule_id else None,
+                    "routing_rule_name": rule_name,
+                    "provider_id": str(provider.id),
+                }
+                event_attributes = {k: v for k, v in event_attributes.items() if v is not None}
+
                 message_event = MessageEvent(
+                    id=uuid.uuid4(),
                     org_id=job.org_id,
                     message_job_id=job_identifier,
                     connection_id=None,
@@ -657,6 +776,7 @@ async def _attempt_delivery_with_fallback(
                     unit_cost_minor=unit_cost_minor,
                     baseline_cost_minor=baseline_cost_minor,
                     currency=currency,
+                    attributes=event_attributes or None,
                 )
                 db.add(message_event)
 
@@ -674,6 +794,26 @@ async def _attempt_delivery_with_fallback(
                     if attempt_number == 1
                     else JobStatusEnum.delivered_with_fallback
                 )
+
+                success_action = RoutedAction(
+                    org_id=job_org_uuid or provider.org_id,
+                    rule_id=rule_id,
+                    message_event_id=message_event.id,
+                    action="deliver_message",
+                    status=job.status.value,
+                    provider_response={
+                        "job_id": str(job_identifier),
+                        "rule_name": rule_name,
+                        "provider_id": str(provider.id),
+                        "provider_name": provider.name,
+                        "attempt_number": attempt_number,
+                        "connector_response": result.get("response"),
+                        "provider_message_id": provider_message_id,
+                    },
+                    cost_minor=estimated_cost_minor,
+                )
+                db.add(success_action)
+
                 _commit_or_raise(db)
 
                 DELIVERY_ATTEMPTS_COUNTER.labels(
@@ -688,6 +828,32 @@ async def _attempt_delivery_with_fallback(
                     "provider_name": provider.name,
                     "message": "Message delivered successfully"
                 }
+
+            failure_action = RoutedAction(
+                org_id=job_org_uuid or provider.org_id,
+                rule_id=rule_id,
+                message_event_id=None,
+                action="deliver_message",
+                status=attempt_status.value,
+                provider_response={
+                    "job_id": str(job_identifier),
+                    "rule_name": rule_name,
+                    "provider_id": str(provider.id),
+                    "provider_name": provider.name,
+                    "attempt_number": attempt_number,
+                    "connector_response": result.get("response"),
+                    "error_code": result.get("error_code"),
+                    "error_message": result.get("error_message"),
+                },
+                cost_minor=estimated_cost_minor,
+            )
+            db.add(failure_action)
+
+            try:
+                _commit_or_raise(db)
+            except Exception:
+                logger.exception("Failed to record failed attempt for provider %s", provider.id)
+                raise
 
             if result.get("error_code") in ["429", "timeout"]:
                 await asyncio.sleep(2 ** retry)
@@ -712,6 +878,24 @@ async def _attempt_delivery_with_fallback(
 
     # Todos os providers falharam
     job.status = JobStatusEnum.failed_final
+
+    final_action = RoutedAction(
+        org_id=job_org_uuid or job.org_id,
+        rule_id=rule_id,
+        message_event_id=None,
+        action="deliver_message",
+        status=job.status.value,
+        provider_response={
+            "job_id": str(job_identifier),
+            "rule_name": rule_name,
+            "provider_id": None,
+            "provider_name": None,
+            "reason": "all_providers_failed",
+        },
+        cost_minor=estimated_cost_minor,
+    )
+    db.add(final_action)
+
     _commit_or_raise(db)
 
     return {
