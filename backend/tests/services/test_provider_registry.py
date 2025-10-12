@@ -41,8 +41,8 @@ def test_validate_credentials_flags_missing_and_invalid_values():
 
 def test_validate_credentials_accepts_valid_payload():
     credentials = {
-        "account_sid": "AC" + "1" * 32,
-        "auth_token": "A" * 32,
+        "account_sid": "AC" + "X" * 31,
+        "auth_token": "demo-sms-auth-token",
         "from_number": "+15558675309",
         "inbound_verify_token": "sandbox-token",
     }
@@ -51,6 +51,23 @@ def test_validate_credentials_accepts_valid_payload():
         "sms",
         credentials,
         provider_name="Twilio",
+    )
+
+    assert errors == []
+
+
+def test_validate_credentials_accepts_demo_sendgrid_payload():
+    credentials = {
+        "api_key": "SG.demo-api-key",
+        "from_email": "no-reply+sandbox@example.com",
+        "webhook_token": "demo-email-webhook-token",
+        "inbound_signing_secret": "demo-email-webhook-secret",
+    }
+
+    errors = validate_provider_credentials(
+        "email",
+        credentials,
+        provider_name="SendGrid",
     )
 
     assert errors == []

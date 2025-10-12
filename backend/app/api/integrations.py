@@ -454,8 +454,40 @@ async def test_connection(
         )
         .first()
     )
+    metadata: Dict[str, Any] = {
+        "provider_id": str(target_provider.id),
+        "provider_name": target_provider.name,
+        "provider_type": target_provider.type,
+        "base_url": target_provider.base_url,
+    }
+
     if not credential:
-        raise HTTPException(status_code=400, detail="Provider credentials not configured")
+        record = _upsert_health_status(
+            db,
+            org_id=org_id,
+            channel=normalized_channel,
+            target_type="provider",
+            target_id=target_provider.id,
+            status="error",
+            healthy=False,
+            status_code="missing_credentials",
+            latency_ms=None,
+            error="Provider credentials not configured",
+            details={"reason": "missing_credentials", **metadata},
+        )
+        db.commit()
+        db.refresh(record)
+
+        return ConnectionTestResponse(
+            channel=normalized_channel,
+            status=record.status,
+            healthy=record.healthy,
+            status_code=record.status_code,
+            latency_ms=record.latency_ms,
+            error=record.error,
+            checked_at=record.checked_at or datetime.now(timezone.utc),
+            metadata=metadata,
+        )
 
     try:
         credentials = decrypt_credentials(credential.credentials_encrypted)
@@ -499,13 +531,6 @@ async def test_connection(
     )
     db.commit()
     db.refresh(record)
-
-    metadata: Dict[str, Any] = {
-        "provider_id": str(target_provider.id),
-        "provider_name": target_provider.name,
-        "provider_type": target_provider.type,
-        "base_url": target_provider.base_url,
-    }
 
     return ConnectionTestResponse(
         channel=normalized_channel,

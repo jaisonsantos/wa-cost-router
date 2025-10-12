@@ -211,3 +211,51 @@ def test_set_credentials_requires_required_fields(client, db_session, auth_conte
     assert "errors" in payload["detail"]
     assert any("Auth Token" in message for message in payload["detail"]["errors"])
 
+
+def test_provider_health_without_credentials_returns_payload(client, db_session, auth_context):
+    org = auth_context
+
+    provider = Provider(
+        org_id=org.id,
+        name="Twilio Sandbox",
+        type="sms",
+        status="active",
+        meta={"provider": "twilio"},
+    )
+    db_session.add(provider)
+    db_session.commit()
+
+    response = client.post(f"/providers/{provider.id}/health")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["provider_id"] == str(provider.id)
+    assert payload["healthy"] is False
+    assert payload["error"] == "No credentials configured"
+
+
+def test_connection_test_without_credentials_returns_error(client, db_session, auth_context):
+    org = auth_context
+
+    provider = Provider(
+        org_id=org.id,
+        name="SendGrid",
+        type="email",
+        status="active",
+        meta={"provider": "sendgrid"},
+    )
+    db_session.add(provider)
+    db_session.commit()
+
+    response = client.post(
+        "/integrations/email/test",
+        json={"provider_id": str(provider.id)},
+    )
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["metadata"]["provider_id"] == str(provider.id)
+    assert payload["healthy"] is False
+    assert payload["status"] == "error"
+    assert payload["error"] == "Provider credentials not configured"
+

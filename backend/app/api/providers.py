@@ -219,7 +219,13 @@ async def check_provider_health(
     ).first()
     
     if not credential:
-        raise HTTPException(status_code=400, detail="No credentials configured")
+        return {
+            "provider_id": str(provider.id),
+            "provider_name": provider.name,
+            "healthy": False,
+            "status_code": None,
+            "error": "No credentials configured",
+        }
     
     try:
         connector = get_connector(

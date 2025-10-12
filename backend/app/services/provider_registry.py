@@ -156,9 +156,9 @@ SMS_TWILIO = ProviderRegistryEntry(
                 "type": "text",
                 "placeholder": "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
                 "required": True,
-                "help_text": "Identificador principal da conta Twilio (32 caracteres).",
+                "help_text": "Identificador principal da conta Twilio (prefixo 'AC' seguido por identificador alfanumérico).",
                 "validation": {
-                    "regex": r"^AC[a-fA-F0-9]{32}$",
+                    "regex": r"^AC[A-Za-z0-9]{24,34}$",
                     "message": "Use um Account SID válido iniciando com 'AC'.",
                 },
             },
@@ -170,8 +170,8 @@ SMS_TWILIO = ProviderRegistryEntry(
                 "required": True,
                 "help_text": "Token secreto usado para assinar webhooks e autenticar requisições.",
                 "validation": {
-                    "regex": r"^[A-Za-z0-9]{16,64}$",
-                    "message": "O Auth Token deve conter apenas letras e números (16-64 caracteres).",
+                    "regex": r"^[A-Za-z0-9._\-]{12,128}$",
+                    "message": "O Auth Token deve conter entre 12 e 128 caracteres (letras, números, hífen, '_' ou '.').",
                 },
             },
             {
@@ -260,8 +260,8 @@ EMAIL_SENDGRID = ProviderRegistryEntry(
                 "required": True,
                 "help_text": "Chave de API com permissões para envio e gerenciamento de webhooks.",
                 "validation": {
-                    "regex": r"^SG\.[A-Za-z0-9_-]{16,128}$",
-                    "message": "A API Key deve iniciar com 'SG.' e conter letras, números, '_' ou '-'.",
+                    "regex": r"^SG\.[A-Za-z0-9._\-]{8,128}$",
+                    "message": "A API Key deve iniciar com 'SG.' e conter letras, números, '.', '_' ou '-'.",
                 },
             },
             {
@@ -287,8 +287,8 @@ EMAIL_SENDGRID = ProviderRegistryEntry(
                 "required": True,
                 "help_text": "Segredo usado para validar eventos de inbound Parse ou Event Webhook.",
                 "validation": {
-                    "regex": r"^[A-Za-z0-9]{16,128}$",
-                    "message": "O segredo deve ter entre 16 e 128 caracteres alfanuméricos.",
+                    "regex": r"^[A-Za-z0-9._\-]{12,128}$",
+                    "message": "O segredo deve ter entre 12 e 128 caracteres (letras, números, hífen, '_' ou '.').",
                 },
             },
         ],
