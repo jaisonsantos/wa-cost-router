@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import SimpleLayout from "@/components/SimpleLayout";
 import ConnectionStatusBadge from "@/components/ConnectionStatusBadge";
 import ConnectionActions from "@/components/ConnectionActions";
@@ -21,7 +22,10 @@ import {
   useCreateWAConnection,
   useConnections,
   useTestConnection,
+  useBillingSummary,
+  useCreateBillingCheckout,
 } from "@/hooks/useApi";
+import { toast } from "@/hooks/use-toast";
 import type { IntegrationConnection } from "@/types/api";
 import {
   MessageSquare,
@@ -60,6 +64,8 @@ const Settings = () => {
     error: connectionsError,
   } = useConnections();
   const testConnection = useTestConnection();
+  const { data: billingSummary, isLoading: billingLoading } = useBillingSummary();
+  const createBillingCheckout = useCreateBillingCheckout();
 
   const [waForm, setWaForm] = useState<WaConnectionForm>({
     business_id: "",
@@ -135,6 +141,98 @@ const Settings = () => {
 
   const testingChannel = testConnection.variables?.channel;
   const connectionsErrorMessage = connectionsError?.message ?? null;
+
+  const billing = billingSummary ?? null;
+
+  const formatCurrency = (amountMinor?: number | null, currency?: string | null) => {
+    if (amountMinor === null || amountMinor === undefined || !currency) {
+      return "—";
+    }
+    try {
+      return new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: 2,
+      }).format(amountMinor / 100);
+    } catch (error) {
+      return `${(amountMinor / 100).toFixed(2)} ${currency.toUpperCase()}`;
+    }
+  };
+
+  const formatNextBilling = (isoDate?: string | null) => {
+    if (!isoDate) return "—";
+    try {
+      return new Date(isoDate).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } catch (error) {
+      return isoDate;
+    }
+  };
+
+  const planStatus = billing?.plan_status ?? "inactive";
+  const planName = billing?.plan_name ?? "Sem plano ativo";
+  const statusLabelMap: Record<string, string> = {
+    active: "Ativo",
+    trialing: "Período de testes",
+    past_due: "Pagamento em atraso",
+    unpaid: "Não pago",
+    canceled: "Cancelado",
+    incomplete: "Incompleto",
+    incomplete_expired: "Checkout expirado",
+  };
+  const planStatusLabel =
+    statusLabelMap[planStatus] ??
+    planStatus
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  const planBadgeClass = () => {
+    switch (planStatus) {
+      case "active":
+      case "trialing":
+        return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+      case "past_due":
+      case "unpaid":
+        return "bg-amber-100 text-amber-800 border border-amber-200";
+      case "canceled":
+        return "bg-slate-200 text-slate-700 border border-slate-300";
+      default:
+        return "bg-muted text-muted-foreground border border-muted";
+    }
+  };
+
+  const messageUsage = billing?.message_usage ?? 0;
+  const messageQuota = billing?.message_quota ?? 0;
+  const usagePercent = messageQuota > 0 ? Math.min(100, Math.round((messageUsage / messageQuota) * 100)) : 0;
+
+  const handleManagePlan = () => {
+    const priceId = billing?.price_id;
+    if (!priceId) {
+      toast({
+        title: "Plano não configurado",
+        description: "Nenhum preço padrão disponível para esta organização.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const origin = window.location.origin;
+    createBillingCheckout.mutate(
+      {
+        price_id: priceId,
+        success_url: `${origin}/settings?tab=billing&checkout=success`,
+        cancel_url: `${origin}/settings?tab=billing&checkout=cancel`,
+      },
+      {
+        onSuccess: (data) => {
+          window.location.href = data.checkout_url;
+        },
+      },
+    );
+  };
 
   const whatsappConnection = getConnection("whatsapp");
   const emailConnection = getConnection("email");
@@ -666,59 +764,102 @@ const Settings = () => {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <CreditCard className="mr-2 h-5 w-5 text-primary" />
-                  Plano Atual
+                <div className="space-y-1">
+                  <div className="flex items-center">
+                    <CreditCard className="mr-2 h-5 w-5 text-primary" />
+                    <span className="text-lg font-semibold">{planName}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {billing
+                      ? `Status: ${planStatusLabel}`
+                      : "Ative um plano para habilitar billing e limites de uso."}
+                  </p>
                 </div>
-                <Badge className="bg-primary/10 text-primary border-primary/20">
-                  Professional
-                </Badge>
+                <Badge className={planBadgeClass()}>{planStatusLabel}</Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="p-4 border rounded-lg">
-                  <h4 className="font-semibold text-primary">€79/mês</h4>
-                  <p className="text-sm text-muted-foreground">Plano Professional</p>
-                  <p className="text-xs text-muted-foreground mt-2">Até 5 usuários</p>
+            <CardContent className="space-y-6">
+              {billingLoading ? (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Skeleton className="h-24 rounded-lg" />
+                  <Skeleton className="h-24 rounded-lg" />
+                  <Skeleton className="h-24 rounded-lg" />
                 </div>
-                
-                <div className="p-4 border rounded-lg">
-                  <h4 className="font-semibold">€2.847</h4>
-                  <p className="text-sm text-muted-foreground">Economizado este mês</p>
-                  <p className="text-xs text-success mt-2">ROI: 3.604%</p>
-                </div>
-                
-                <div className="p-4 border rounded-lg">
-                  <h4 className="font-semibold">23 de Nov</h4>
-                  <p className="text-sm text-muted-foreground">Próxima cobrança</p>
-                  <p className="text-xs text-muted-foreground mt-2">Auto-renovação ativa</p>
-                </div>
-              </div>
-              
-              <Separator />
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Método de pagamento</p>
-                  <p className="text-sm text-muted-foreground">**** **** **** 1234 (Visa)</p>
-                </div>
-                <Button variant="outline">
-                  Atualizar
-                </Button>
-              </div>
-              
-              <div className="flex space-x-2">
-                <Button variant="outline">
-                  Histórico de Faturas
-                </Button>
-                <Button variant="outline">
-                  Alterar Plano
-                </Button>
-                <Button variant="destructive">
-                  Cancelar Assinatura
-                </Button>
-              </div>
+              ) : (
+                <>
+                  <div className="grid gap-6 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Valor recorrente</p>
+                      <p className="text-2xl font-semibold">
+                        {formatCurrency(billing?.price_amount_minor, billing?.price_currency)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {billing?.cancel_at_period_end
+                          ? "Cancelamento programado ao fim do ciclo atual."
+                          : "Renovação automática ativa."}
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm font-medium">
+                        <span>Uso de mensagens</span>
+                        <span>
+                          {messageQuota > 0
+                            ? `${messageUsage.toLocaleString()} / ${messageQuota.toLocaleString()}`
+                            : `${messageUsage.toLocaleString()} mensagens`}
+                        </span>
+                      </div>
+                      <Progress value={usagePercent} className="h-2" />
+                      <p className="text-xs text-muted-foreground">
+                        {messageQuota > 0
+                          ? `${usagePercent}% da franquia utilizada`
+                          : "Defina uma franquia no preço configurado."}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Próxima cobrança</p>
+                      <p className="text-lg font-semibold">
+                        {formatNextBilling(billing?.next_billing_at)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Método de pagamento:
+                        {billing?.payment_method_brand && billing?.payment_method_last4 ? (
+                          <span className="ml-1 font-medium">
+                            {billing.payment_method_brand.toUpperCase()} •••• {billing.payment_method_last4}
+                          </span>
+                        ) : (
+                          <span className="ml-1">configure no portal de cobrança.</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex flex-wrap gap-2">
+                    {billing?.latest_invoice_url ? (
+                      <Button variant="outline" asChild>
+                        <a href={billing.latest_invoice_url} target="_blank" rel="noopener noreferrer">
+                          Última fatura
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button variant="outline" disabled>
+                        Última fatura
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      onClick={handleManagePlan}
+                      disabled={billingLoading || createBillingCheckout.isPending}
+                    >
+                      {createBillingCheckout.isPending ? "Redirecionando..." : "Alterar Plano"}
+                    </Button>
+                    <Button variant="outline" disabled>
+                      Cancelar Assinatura
+                    </Button>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
