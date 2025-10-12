@@ -51,7 +51,8 @@ test.describe("Providers configuration", () => {
     }, token);
 
     await page.route("**/providers", async (route) => {
-      if (route.request().resourceType() !== "xhr") {
+      const resourceType = route.request().resourceType();
+      if (resourceType === "document") {
         await route.continue();
         return;
       }
