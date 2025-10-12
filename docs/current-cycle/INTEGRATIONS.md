@@ -1,7 +1,8 @@
 # Integrações Externas (Ciclo Atual)
 
 Este documento consolida o estado das integrações externas durante o ciclo corrente, com foco
-no conector CRM priorizado (HubSpot) e na sincronização incremental do catálogo de contatos.
+nos conectores CRM priorizados (HubSpot e Pipedrive) e na sincronização incremental do catálogo
+de contatos.
 
 ## CRM HubSpot
 
@@ -81,6 +82,35 @@ serializado com essas informações (`processed_contacts`, `has_more`, `last_cha
   se o intervalo mínimo está sendo respeitado.
 - Para validação manual, o script CLI imprime o `SyncResult` em JSON.
 
+## CRM Pipedrive (beta)
+
+### Visão Geral
+
+- Autenticação via token de API e domínio da empresa (`company_domain`).
+- Apenas polling incremental está habilitado nesta fase; webhooks permanecem desativados.
+- O conector normaliza `primary_email`/`primary_phone` a partir das listas retornadas pelo
+  endpoint `/persons`.
+
+### Configuração
+
+1. **Registrar o provedor**
+   - `Provider.type = "crm"`, `meta.slug = "pipedrive"`.
+2. **Cadastrar credenciais**
+   - Payload mínimo: `{ "api_token": "...", "company_domain": "<tenant>.pipedrive.com" }`.
+   - Campos opcionais: `timeout`, `base_url` (override do template) e `max_page_size` (<=
+     `CRM_PIPEDRIVE_MAX_PAGE_SIZE`).
+3. **Polling incremental**
+   - Utilizar `python backend/scripts/run_crm_sync.py --provider pipedrive --org-id <uuid>`.
+   - `CRMIncrementalSyncService.run_polling_cycle` ignora registros cujo `update_time` seja
+     anterior ou igual ao `last_change_at` persistido.
+
+### Limitações
+
+- Sem suporte a webhooks; recomenda-se janelas de polling que mantenham a coleção abaixo de
+  `CRM_PIPEDRIVE_MAX_PAGE_SIZE` por execução.
+- Campos customizados seguem o mesmo mecanismo de `Provider.meta.field_mapping`.
+- Eventos com `marketing_status = null` devem ser descartados na aplicação de regras de opt-in.
+
 ## Variáveis de Ambiente
 
 | Variável | Descrição |
@@ -88,6 +118,8 @@ serializado com essas informações (`processed_contacts`, `has_more`, `last_cha
 | `CRM_WEBHOOK_SECRET` | Segredo compartilhado para validar eventos outbound do CRM. |
 | `CRM_POLLING_INTERVAL_SECONDS` | Intervalo padrão (em segundos) para rodar o fallback de polling. |
 | `CRM_MAX_PAGE_SIZE` | Limite máximo de registros por página durante polling incremental. |
+| `CRM_PIPEDRIVE_BASE_URL_TEMPLATE` | Template para montar a URL base do tenant Pipedrive. |
+| `CRM_PIPEDRIVE_MAX_PAGE_SIZE` | Valor máximo aceito pelo conector Pipedrive (default 500). |
 
 > As variáveis acima foram adicionadas a `.env.example` e são carregadas em `app.core.config`.
 
@@ -96,6 +128,7 @@ serializado com essas informações (`processed_contacts`, `has_more`, `last_cha
 - Implementar endpoints públicos para acionar `CRMIncrementalSyncService` e expor métricas de
   sincronização por tenant.
 - Ampliar o registry (`CRMProviderRegistry`) com outros CRMs priorizados (Salesforce, RD Station).
+- Revisitar suporte a webhooks Pipedrive assim que a API oficial estiver liberada.
 - Consolidar dashboards que correlacionem métricas de sucesso/falha (Prometheus) com eventos de
   webhook para detectar divergências entre webhooks e polling.
 

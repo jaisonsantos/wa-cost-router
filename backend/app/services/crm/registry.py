@@ -7,6 +7,7 @@ from typing import Dict, Type
 from .base import CRMProvider
 from .exceptions import ProviderNotRegisteredError
 from .hubspot import HubSpotProvider
+from .pipedrive import PipedriveProvider
 
 
 class CRMProviderRegistry:
@@ -33,4 +34,5 @@ def build_default_registry() -> CRMProviderRegistry:
 
     registry = CRMProviderRegistry()
     registry.register(HubSpotProvider)
+    registry.register(PipedriveProvider)
     return registry

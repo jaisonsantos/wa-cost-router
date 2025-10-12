@@ -12,6 +12,8 @@ Este guia descreve como configurar as integrações CRM suportadas no piloto (Hu
   - `CRM_MAX_PAGE_SIZE` (default 100).
   - `CRM_POLLING_INTERVAL_SECONDS` (janela mínima entre enfileiramentos de polling).
   - `CRM_WEBHOOK_SECRET` (utilizada para validação de webhooks HubSpot).
+  - `CRM_PIPEDRIVE_BASE_URL_TEMPLATE` (formato padrão para montar a URL do tenant Pipedrive).
+  - `CRM_PIPEDRIVE_MAX_PAGE_SIZE` (limite superior aceito pelo conector Pipedrive).
 
 ## 2. HubSpot
 
@@ -61,6 +63,7 @@ Este guia descreve como configurar as integrações CRM suportadas no piloto (Hu
 3. **Limitações conhecidas**
    - Campos customizados devem ser configurados manualmente (`Provider.meta.field_mapping.custom_attributes`).
    - Eventos com `marketing_status=null` são ignorados para evitar opt-outs indevidos.
+   - Como o conector depende de polling, o atraso mínimo entre execuções deve respeitar `CRM_PIPEDRIVE_MAX_PAGE_SIZE` para evitar lacunas em tenants com alto volume.
 
 ## 4. Troubleshooting
 

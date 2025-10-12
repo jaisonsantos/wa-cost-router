@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     CRM_WEBHOOK_SECRET: str = "change-me"
     CRM_POLLING_INTERVAL_SECONDS: int = 300
     CRM_MAX_PAGE_SIZE: int = 100
+    CRM_PIPEDRIVE_BASE_URL_TEMPLATE: str = "https://{company_domain}/api/v1"
+    CRM_PIPEDRIVE_MAX_PAGE_SIZE: int = 500
 
     OPT_IN_EMAIL_TEMPLATE_ID: str = "request-whatsapp-opt-in"
     OPT_IN_MAX_ATTEMPTS: int = 3
