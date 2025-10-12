@@ -1,6 +1,6 @@
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -125,6 +125,7 @@ def test_select_provider_skips_rules_with_different_channel(db_session):
         category="MARKETING",
         template_id=None,
         channel="sms",
+        send_time=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
     )
 
     assert decision is not None
@@ -160,6 +161,7 @@ def test_select_provider_filters_legacy_fallbacks_by_channel(db_session):
         category="MARKETING",
         template_id=None,
         channel="whatsapp",
+        send_time=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
     )
 
     assert decision is not None
@@ -218,4 +220,5 @@ def test_select_provider_raises_without_channel_consent(db_session):
             template_id=None,
             channel="whatsapp",
             contact_address="+5511999999999",
+            send_time=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
         )
