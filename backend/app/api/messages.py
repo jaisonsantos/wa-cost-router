@@ -586,6 +586,8 @@ async def _attempt_delivery_with_fallback(
 
     attempt_number = 0
 
+    last_attempt_cost_minor = estimated_cost_minor
+
     for provider_id in providers_to_try:
         attempt_number += 1
 
@@ -637,6 +639,15 @@ async def _attempt_delivery_with_fallback(
             logger.error(f"Invalid credentials payload for provider {provider_id}: {exc}")
             continue
 
+        attempt_cost_minor, attempt_currency = _resolve_pricing_context(
+            db=db,
+            provider_id=provider.id,
+            country_iso=job.country_iso,
+            category=job.template_category,
+            fallback_cost=estimated_cost_minor,
+        )
+        last_attempt_cost_minor = attempt_cost_minor
+
         for retry in range(3):
             connector = get_connector(
                 provider.name,
@@ -678,7 +689,7 @@ async def _attempt_delivery_with_fallback(
                         "retry": retry,
                         "error": str(exc),
                     },
-                    cost_minor=estimated_cost_minor,
+                    cost_minor=attempt_cost_minor,
                 )
                 db.add(exception_action)
 
@@ -728,18 +739,10 @@ async def _attempt_delivery_with_fallback(
                     reason="success",
                 )
 
-                unit_cost_minor, currency = _resolve_pricing_context(
-                    db=db,
-                    provider_id=provider.id,
-                    country_iso=job.country_iso,
-                    category=job.template_category,
-                    fallback_cost=estimated_cost_minor,
-                )
-
                 cost_record = CostRecord(
                     message_job_id=job_identifier,
                     provider_id=provider.id,
-                    price_eur=unit_cost_minor,
+                    price_eur=attempt_cost_minor,
                     country_iso=job.country_iso,
                     category=job.template_category,
                     price_table_version="v1",
@@ -773,9 +776,9 @@ async def _attempt_delivery_with_fallback(
                     phone_cc=None,
                     timestamp_provider=datetime.now(timezone.utc),
                     delivery_status="delivered",
-                    unit_cost_minor=unit_cost_minor,
+                    unit_cost_minor=attempt_cost_minor,
                     baseline_cost_minor=baseline_cost_minor,
-                    currency=currency,
+                    currency=attempt_currency,
                     attributes=event_attributes or None,
                 )
                 db.add(message_event)
@@ -810,7 +813,7 @@ async def _attempt_delivery_with_fallback(
                         "connector_response": result.get("response"),
                         "provider_message_id": provider_message_id,
                     },
-                    cost_minor=estimated_cost_minor,
+                    cost_minor=attempt_cost_minor,
                 )
                 db.add(success_action)
 
@@ -845,7 +848,7 @@ async def _attempt_delivery_with_fallback(
                     "error_code": result.get("error_code"),
                     "error_message": result.get("error_message"),
                 },
-                cost_minor=estimated_cost_minor,
+                cost_minor=attempt_cost_minor,
             )
             db.add(failure_action)
 
@@ -892,7 +895,7 @@ async def _attempt_delivery_with_fallback(
             "provider_name": None,
             "reason": "all_providers_failed",
         },
-        cost_minor=estimated_cost_minor,
+        cost_minor=last_attempt_cost_minor,
     )
     db.add(final_action)
 
