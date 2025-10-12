@@ -140,7 +140,9 @@ test.describe("Providers configuration", () => {
 
     const sendgridCard = page.getByRole("heading", { name: /SendGrid/i }).locator("../../..");
     await sendgridCard.getByRole("button", { name: "Configurar" }).click();
-    await expect(page.getByText("Utilize double opt-in.")).toBeVisible();
+    await expect(
+      sendgridCard.getByText(/Utilize double opt-in/)
+    ).toBeVisible();
     await page.getByRole("button", { name: "Cancelar" }).click();
   });
 });
