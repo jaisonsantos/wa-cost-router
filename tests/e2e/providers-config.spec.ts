@@ -51,6 +51,10 @@ test.describe("Providers configuration", () => {
     }, token);
 
     await page.route("**/providers", async (route) => {
+      if (route.request().resourceType() !== "xhr") {
+        await route.continue();
+        return;
+      }
       providersCallCount += 1;
       const upstream = await route.fetch();
       const payload = (await upstream.json()) as ProviderResponse[];
