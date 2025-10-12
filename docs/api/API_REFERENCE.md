@@ -516,6 +516,13 @@ Aceita arquivo CSV (campo `file`). Colunas obrigatórias: `effective_from`, `cou
 ### `GET /reports/summary`
 Retorna custos e economia (últimos 7 dias por padrão ou intervalo customizado com `from`/`to`). Campos: `cost_7d_minor`, `saved_7d_minor`, `pct_saved`.
 
+### `GET /reports/summary/export`
+Exporta o mesmo conjunto de dados do resumo em CSV (padrão) ou JSON via streaming.
+
+- Parâmetros: `from`, `to` (ISO 8601) e `format` (`csv` ou `json`, default `csv`).
+- Cabeçalhos: `Content-Type` varia conforme o formato (`text/csv; charset=utf-8` ou `application/json`), sempre com `Content-Disposition: attachment; filename="summary-report.<ext>"`.
+- CSV inclui colunas `cost_7d_minor`, `saved_7d_minor`, `pct_saved`.
+
 ### `GET /reports/dashboard-metrics`
 Métricas completas do dashboard para `days` (1–90):
 - Totais (`total_messages`, `total_cost_minor`, `baseline_cost_minor`, `saved_minor`) alimentados diretamente por `MessageEvent`.
@@ -526,6 +533,13 @@ Erros: valores fora do range retornam `422`.
 
 ### `GET /reports/provider-metrics`
 Estatísticas por provedor: `provider_id`, `provider_name`, `total_sent`, `success_rate`, `avg_latency_ms`, `total_cost_minor`. Parâmetro `days` segue a mesma regra da rota anterior.
+
+### `GET /reports/provider-metrics/export`
+Streaming dos mesmos dados agregados por provedor.
+
+- Parâmetros: `days` (1–90, default 7) e `format` (`csv` ou `json`).
+- `Content-Disposition: attachment; filename="provider-metrics-report.<ext>"`.
+- CSV apresenta as colunas `provider_id`, `provider_name`, `total_sent`, `success_rate`, `avg_latency_ms`, `total_cost_minor`.
 
 ### `GET /reports/channel-metrics`
 Consolida dados de SLA por canal a partir de `sla_snapshot`. Aceita `from` e `to` em ISO 8601 (default: últimos 7 dias). Cada item retorna:
@@ -560,6 +574,13 @@ Consolida dados de SLA por canal a partir de `sla_snapshot`. Aceita `from` e `to
 ]
 ```
 
+### `GET /reports/channel-metrics/export`
+Exporta as métricas por canal com suporte a CSV/JSON.
+
+- Parâmetros: `from`, `to` e `format` (`csv` ou `json`).
+- Arquivo fornecido com `Content-Disposition: attachment; filename="channel-metrics-report.<ext>"`.
+- CSV inclui backlog (`open`, `pending`, `closed`), dados de primeira resposta e metadados de SLA para cada canal.
+
 ### `GET /reports/queues`
 Mostra a saúde das filas de atendimento calculada a partir de `queue_entry`. Aceita `from` e `to` (ISO 8601, default: últimos 7 dias). Para cada canal são retornados:
 - `backlog` com contagem de itens `open`, `responded`, `closed` e `total` no recorte.
@@ -590,6 +611,13 @@ Mostra a saúde das filas de atendimento calculada a partir de `queue_entry`. Ac
   }
 ]
 ```
+
+### `GET /reports/queues/export`
+Disponibiliza o mesmo payload das filas em CSV/JSON.
+
+- Parâmetros: `from`, `to` e `format` (`csv` ou `json`).
+- Cabeçalho `Content-Disposition` utiliza `queue-metrics-report.<ext>` como nome do arquivo.
+- CSV traz colunas para backlog (`open`, `responded`, `closed`, `total`), métricas de primeira resposta e indicadores de SLA.
 
 ## Contatos
 

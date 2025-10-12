@@ -1,7 +1,11 @@
+import csv
+import io
+import json
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, case, func
 from sqlalchemy.orm import Session
 
@@ -27,6 +31,46 @@ from app.schemas.reports import (
 )
 
 router = APIRouter()
+
+
+def _csv_value(value: Optional[float | int | str]) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    return str(value)
+
+
+def _stream_csv(headers: Iterable[str], rows: Iterable[Iterable[object]], *, filename: str) -> StreamingResponse:
+    def row_generator():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(headers)
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+        for row in rows:
+            writer.writerow([_csv_value(value) for value in row])
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    return StreamingResponse(
+        row_generator(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _stream_json(payload: object, *, filename: str) -> StreamingResponse:
+    def json_generator():
+        yield json.dumps(payload, default=str)
+
+    return StreamingResponse(
+        json_generator(),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _resolve_interval(
@@ -173,6 +217,261 @@ def _load_sla_metrics(
 
     return sla_map, backlog_map
 
+
+def _build_summary_response(db: Session, org_id: str, from_dt: datetime, to_dt: datetime) -> SummaryResponse:
+    total_cost = (
+        db.query(func.sum(MessageEvent.unit_cost_minor))
+        .filter(
+            MessageEvent.org_id == org_id,
+            MessageEvent.timestamp_provider >= from_dt,
+            MessageEvent.timestamp_provider <= to_dt,
+            MessageEvent.unit_cost_minor.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+
+    baseline_cost = (
+        db.query(func.sum(MessageEvent.baseline_cost_minor))
+        .filter(
+            MessageEvent.org_id == org_id,
+            MessageEvent.timestamp_provider >= from_dt,
+            MessageEvent.timestamp_provider <= to_dt,
+            MessageEvent.baseline_cost_minor.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+
+    saved = max(0, baseline_cost - total_cost)
+    pct = (saved / baseline_cost) * 100 if baseline_cost > 0 else 0.0
+
+    return SummaryResponse(cost_7d_minor=total_cost, saved_7d_minor=saved, pct_saved=pct)
+
+
+def _build_provider_metrics(db: Session, org_id: str, from_dt: datetime) -> List[ProviderMetric]:
+    provider_stats = (
+        db.query(
+            Provider.id,
+            Provider.name,
+            func.count(DeliveryAttempt.id).label("total_attempts"),
+            func.sum(case((DeliveryAttempt.status == "success", 1), else_=0)).label("successful"),
+            func.avg(
+                case(
+                    (DeliveryAttempt.status == "success", DeliveryAttempt.latency_ms),
+                    else_=None,
+                )
+            ).label("avg_latency"),
+            func.sum(MessageEvent.unit_cost_minor).label("total_cost"),
+        )
+        .select_from(Provider)
+        .outerjoin(
+            DeliveryAttempt,
+            and_(
+                DeliveryAttempt.provider_id == Provider.id,
+                DeliveryAttempt.timestamp >= from_dt,
+            ),
+        )
+        .outerjoin(
+            MessageJob,
+            and_(
+                MessageJob.id == DeliveryAttempt.message_job_id,
+                MessageJob.org_id == org_id,
+            ),
+        )
+        .outerjoin(
+            MessageEvent,
+            and_(
+                MessageEvent.message_job_id == MessageJob.id,
+                MessageEvent.org_id == org_id,
+                MessageEvent.timestamp_provider >= from_dt,
+            ),
+        )
+        .filter(Provider.org_id == org_id)
+        .group_by(Provider.id, Provider.name)
+        .all()
+    )
+
+    metrics: List[ProviderMetric] = []
+    for stat in provider_stats:
+        total_attempts = stat.total_attempts or 0
+        successful = stat.successful or 0
+        success_rate = (successful / total_attempts * 100) if total_attempts > 0 else 0
+
+        metrics.append(
+            ProviderMetric(
+                provider_id=str(stat.id),
+                provider_name=stat.name,
+                total_sent=total_attempts,
+                success_rate=success_rate,
+                avg_latency_ms=float(stat.avg_latency or 0),
+                total_cost_minor=stat.total_cost or 0,
+            )
+        )
+
+    return metrics
+
+
+def _build_channel_metrics(
+    db: Session, org_id: str, from_dt: datetime, to_dt: datetime
+) -> List[ChannelMetric]:
+    sla_map, backlog_map = _load_sla_metrics(db, org_id, from_dt, to_dt)
+
+    metrics: List[ChannelMetric] = []
+    for channel, sla_data in sla_map.items():
+        backlog_data = backlog_map.get(
+            channel,
+            {"open": 0, "pending": 0, "closed": 0},
+        )
+
+        metrics.append(
+            ChannelMetric(
+                channel=channel,
+                conversations_opened=int(sla_data["conversations_opened"]),
+                conversations_closed=int(sla_data["conversations_closed"]),
+                backlog=backlog_data,
+                first_response=FirstResponseMetrics(
+                    average_seconds=sla_data["first_response_avg_seconds"],
+                    sample_size=int(sla_data["first_response_sample_size"]),
+                ),
+                sla=SlaMetrics(
+                    target_seconds=sla_data["sla_target_seconds"],
+                    within_target=int(sla_data["first_response_within_target"]),
+                    total_tracked=int(sla_data["conversations_closed"]),
+                    compliance_rate=sla_data["sla_compliance_rate"],
+                ),
+            )
+        )
+
+    metrics.sort(key=lambda metric: metric.channel)
+    return metrics
+
+
+def _build_queue_metrics(
+    db: Session, org_id: str, from_dt: datetime, to_dt: datetime
+) -> List[QueueMetrics]:
+    sla_map, backlog_map = _load_sla_metrics(db, org_id, from_dt, to_dt)
+
+    queue_rows = (
+        db.query(
+            QueueEntry.channel.label("channel"),
+            func.sum(
+                case((QueueEntry.status == QueueStatusEnum.open, 1), else_=0)
+            ).label("open"),
+            func.sum(
+                case((QueueEntry.status == QueueStatusEnum.responded, 1), else_=0)
+            ).label("responded"),
+            func.sum(
+                case((QueueEntry.status == QueueStatusEnum.closed, 1), else_=0)
+            ).label("closed"),
+            func.sum(
+                case(
+                    (
+                        QueueEntry.first_response_latency_seconds.isnot(None),
+                        QueueEntry.first_response_latency_seconds,
+                    ),
+                    else_=0,
+                )
+            ).label("first_response_total"),
+            func.sum(
+                case(
+                    (
+                        QueueEntry.first_response_latency_seconds.isnot(None),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("first_response_count"),
+        )
+        .filter(
+            QueueEntry.org_id == org_id,
+            QueueEntry.opened_at >= from_dt,
+            QueueEntry.opened_at <= to_dt,
+        )
+        .group_by(QueueEntry.channel)
+        .all()
+    )
+
+    metrics_map: Dict[str, QueueMetrics] = {}
+
+    for row in queue_rows:
+        channel = row.channel
+        open_count = int(row.open or 0)
+        responded_count = int(row.responded or 0)
+        closed_count = int(row.closed or 0)
+        total_count = open_count + responded_count + closed_count
+        first_response_count = int(row.first_response_count or 0)
+        first_response_total = float(row.first_response_total or 0)
+        avg_first_response = (
+            first_response_total / first_response_count
+            if first_response_count > 0
+            else None
+        )
+
+        sla_data = sla_map.get(channel, {})
+
+        metrics_map[channel] = QueueMetrics(
+            channel=channel,
+            backlog={
+                "open": open_count,
+                "responded": responded_count,
+                "closed": closed_count,
+                "total": total_count,
+            },
+            first_response=FirstResponseMetrics(
+                average_seconds=avg_first_response,
+                sample_size=first_response_count,
+            ),
+            sla=SlaMetrics(
+                target_seconds=sla_data.get("sla_target_seconds"),
+                within_target=int(sla_data.get("first_response_within_target", 0)),
+                total_tracked=int(sla_data.get("conversations_closed", 0)),
+                compliance_rate=sla_data.get("sla_compliance_rate"),
+            ),
+        )
+
+    for channel, sla_data in sla_map.items():
+        if channel in metrics_map:
+            continue
+
+        backlog_data = backlog_map.get(
+            channel,
+            {"open": 0, "pending": 0, "closed": 0},
+        )
+
+        responded_fallback = backlog_data.get("pending", 0)
+        total_fallback = (
+            backlog_data.get("open", 0)
+            + responded_fallback
+            + backlog_data.get("closed", 0)
+        )
+
+        metrics_map[channel] = QueueMetrics(
+            channel=channel,
+            backlog={
+                "open": backlog_data.get("open", 0),
+                "responded": responded_fallback,
+                "closed": backlog_data.get("closed", 0),
+                "total": total_fallback,
+            },
+            first_response=FirstResponseMetrics(
+                average_seconds=sla_data["first_response_avg_seconds"],
+                sample_size=int(sla_data["first_response_sample_size"]),
+            ),
+            sla=SlaMetrics(
+                target_seconds=sla_data["sla_target_seconds"],
+                within_target=int(sla_data["first_response_within_target"]),
+                total_tracked=int(sla_data["conversations_closed"]),
+                compliance_rate=sla_data["sla_compliance_rate"],
+            ),
+        )
+
+    metrics_list = list(metrics_map.values())
+    metrics_list.sort(key=lambda metric: metric.channel)
+    return metrics_list
+
+
+
 @router.get("/summary", response_model=SummaryResponse)
 def get_summary(
     from_date: str = Query(None, alias="from"),
@@ -186,32 +485,36 @@ def get_summary(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     org_id = current_user["org_id"]
+    return _build_summary_response(db, org_id, from_dt, to_dt)
 
-    total_cost = db.query(func.sum(MessageEvent.unit_cost_minor)).filter(
-        MessageEvent.org_id == org_id,
-        MessageEvent.timestamp_provider >= from_dt,
-        MessageEvent.timestamp_provider <= to_dt,
-        MessageEvent.unit_cost_minor.isnot(None)
-    ).scalar() or 0
 
-    # Calculate baseline (most expensive provider for each message)
-    baseline_cost = db.query(func.sum(MessageEvent.baseline_cost_minor)).filter(
-        MessageEvent.org_id == org_id,
-        MessageEvent.timestamp_provider >= from_dt,
-        MessageEvent.timestamp_provider <= to_dt,
-        MessageEvent.baseline_cost_minor.isnot(None)
-    ).scalar() or 0
-    
-    # Calculate savings
-    saved = max(0, baseline_cost - total_cost)
-    pct = 0.0
-    if baseline_cost > 0:
-        pct = (saved / baseline_cost) * 100
-    
-    return SummaryResponse(
-        cost_7d_minor=total_cost,
-        saved_7d_minor=saved,
-        pct_saved=pct
+@router.get("/summary/export")
+def export_summary(
+    from_date: str = Query(None, alias="from"),
+    to_date: str = Query(None, alias="to"),
+    export_format: str = Query("csv", alias="format"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        from_dt, to_dt = _resolve_interval(from_date, to_date)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if export_format not in {"csv", "json"}:
+        raise HTTPException(status_code=400, detail="format must be 'csv' or 'json'")
+
+    org_id = current_user["org_id"]
+    summary = _build_summary_response(db, org_id, from_dt, to_dt)
+
+    if export_format == "json":
+        return _stream_json(summary.model_dump(), filename="summary-report.json")
+
+    rows = [[summary.cost_7d_minor, summary.saved_7d_minor, summary.pct_saved]]
+    return _stream_csv(
+        ["cost_7d_minor", "saved_7d_minor", "pct_saved"],
+        rows,
+        filename="summary-report.csv",
     )
 
 @router.get("/dashboard-metrics", response_model=DashboardMetrics)
@@ -374,63 +677,51 @@ def get_provider_metrics(
     """Métricas de desempenho por provedor"""
     from_dt = datetime.utcnow() - timedelta(days=days)
     org_id = current_user["org_id"]
-    
-    # Query combinada para todas as métricas por provedor
-    provider_stats = (
-        db.query(
-            Provider.id,
-            Provider.name,
-            func.count(DeliveryAttempt.id).label("total_attempts"),
-            func.sum(case((DeliveryAttempt.status == "success", 1), else_=0)).label("successful"),
-            func.avg(
-                case((DeliveryAttempt.status == "success", DeliveryAttempt.latency_ms), else_=None)
-            ).label("avg_latency"),
-            func.sum(MessageEvent.unit_cost_minor).label("total_cost"),
-        )
-        .select_from(Provider)
-        .outerjoin(
-            DeliveryAttempt,
-            and_(
-                DeliveryAttempt.provider_id == Provider.id,
-                DeliveryAttempt.timestamp >= from_dt,
-            ),
-        )
-        .outerjoin(
-            MessageJob,
-            and_(
-                MessageJob.id == DeliveryAttempt.message_job_id,
-                MessageJob.org_id == org_id,
-            ),
-        )
-        .outerjoin(
-            MessageEvent,
-            and_(
-                MessageEvent.message_job_id == MessageJob.id,
-                MessageEvent.org_id == org_id,
-                MessageEvent.timestamp_provider >= from_dt,
-            ),
-        )
-        .filter(Provider.org_id == org_id)
-        .group_by(Provider.id, Provider.name)
-        .all()
-    )
-    
-    metrics = []
-    for stat in provider_stats:
-        total_attempts = stat.total_attempts or 0
-        successful = stat.successful or 0
-        success_rate = (successful / total_attempts * 100) if total_attempts > 0 else 0
-        
-        metrics.append(ProviderMetric(
-            provider_id=str(stat.id),
-            provider_name=stat.name,
-            total_sent=total_attempts,
-            success_rate=success_rate,
-            avg_latency_ms=float(stat.avg_latency or 0),
-            total_cost_minor=stat.total_cost or 0
-        ))
+    return _build_provider_metrics(db, org_id, from_dt)
 
-    return metrics
+
+@router.get("/provider-metrics/export")
+def export_provider_metrics(
+    days: int = Query(7, ge=1, le=90),
+    export_format: str = Query("csv", alias="format"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if export_format not in {"csv", "json"}:
+        raise HTTPException(status_code=400, detail="format must be 'csv' or 'json'")
+
+    from_dt = datetime.utcnow() - timedelta(days=days)
+    org_id = current_user["org_id"]
+    metrics = _build_provider_metrics(db, org_id, from_dt)
+
+    if export_format == "json":
+        payload = [metric.model_dump() for metric in metrics]
+        return _stream_json(payload, filename="provider-metrics-report.json")
+
+    rows = [
+        [
+            metric.provider_id,
+            metric.provider_name,
+            metric.total_sent,
+            metric.success_rate,
+            metric.avg_latency_ms,
+            metric.total_cost_minor,
+        ]
+        for metric in metrics
+    ]
+
+    return _stream_csv(
+        [
+            "provider_id",
+            "provider_name",
+            "total_sent",
+            "success_rate",
+            "avg_latency_ms",
+            "total_cost_minor",
+        ],
+        rows,
+        filename="provider-metrics-report.csv",
+    )
 
 
 @router.get("/channel-metrics", response_model=List[ChannelMetric])
@@ -446,36 +737,68 @@ def get_channel_metrics(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     org_id = current_user["org_id"]
-    sla_map, backlog_map = _load_sla_metrics(db, org_id, from_dt, to_dt)
+    return _build_channel_metrics(db, org_id, from_dt, to_dt)
 
-    metrics: List[ChannelMetric] = []
-    for channel, sla_data in sla_map.items():
-        backlog_data = backlog_map.get(
-            channel,
-            {"open": 0, "pending": 0, "closed": 0},
-        )
 
-        metrics.append(
-            ChannelMetric(
-                channel=channel,
-                conversations_opened=int(sla_data["conversations_opened"]),
-                conversations_closed=int(sla_data["conversations_closed"]),
-                backlog=backlog_data,
-                first_response=FirstResponseMetrics(
-                    average_seconds=sla_data["first_response_avg_seconds"],
-                    sample_size=int(sla_data["first_response_sample_size"]),
-                ),
-                sla=SlaMetrics(
-                    target_seconds=sla_data["sla_target_seconds"],
-                    within_target=int(sla_data["first_response_within_target"]),
-                    total_tracked=int(sla_data["conversations_closed"]),
-                    compliance_rate=sla_data["sla_compliance_rate"],
-                ),
-            )
-        )
+@router.get("/channel-metrics/export")
+def export_channel_metrics(
+    from_date: str = Query(None, alias="from"),
+    to_date: str = Query(None, alias="to"),
+    export_format: str = Query("csv", alias="format"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        from_dt, to_dt = _resolve_interval(from_date, to_date)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    metrics.sort(key=lambda metric: metric.channel)
-    return metrics
+    if export_format not in {"csv", "json"}:
+        raise HTTPException(status_code=400, detail="format must be 'csv' or 'json'")
+
+    org_id = current_user["org_id"]
+    metrics = _build_channel_metrics(db, org_id, from_dt, to_dt)
+
+    if export_format == "json":
+        payload = [metric.model_dump() for metric in metrics]
+        return _stream_json(payload, filename="channel-metrics-report.json")
+
+    rows = [
+        [
+            metric.channel,
+            metric.conversations_opened,
+            metric.conversations_closed,
+            metric.backlog.open,
+            metric.backlog.pending,
+            metric.backlog.closed,
+            metric.first_response.average_seconds,
+            metric.first_response.sample_size,
+            metric.sla.target_seconds,
+            metric.sla.within_target,
+            metric.sla.total_tracked,
+            metric.sla.compliance_rate,
+        ]
+        for metric in metrics
+    ]
+
+    return _stream_csv(
+        [
+            "channel",
+            "conversations_opened",
+            "conversations_closed",
+            "backlog_open",
+            "backlog_pending",
+            "backlog_closed",
+            "first_response_avg_seconds",
+            "first_response_sample_size",
+            "sla_target_seconds",
+            "sla_within_target",
+            "sla_total_tracked",
+            "sla_compliance_rate",
+        ],
+        rows,
+        filename="channel-metrics-report.csv",
+    )
 
 
 @router.get("/queues", response_model=List[QueueMetrics])
@@ -491,122 +814,63 @@ def get_queue_metrics(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     org_id = current_user["org_id"]
-    sla_map, backlog_map = _load_sla_metrics(db, org_id, from_dt, to_dt)
+    return _build_queue_metrics(db, org_id, from_dt, to_dt)
 
-    queue_rows = (
-        db.query(
-            QueueEntry.channel.label("channel"),
-            func.sum(
-                case((QueueEntry.status == QueueStatusEnum.open, 1), else_=0)
-            ).label("open"),
-            func.sum(
-                case((QueueEntry.status == QueueStatusEnum.responded, 1), else_=0)
-            ).label("responded"),
-            func.sum(
-                case((QueueEntry.status == QueueStatusEnum.closed, 1), else_=0)
-            ).label("closed"),
-            func.sum(
-                case(
-                    (
-                        QueueEntry.first_response_latency_seconds.isnot(None),
-                        QueueEntry.first_response_latency_seconds,
-                    ),
-                    else_=0,
-                )
-            ).label("first_response_total"),
-            func.sum(
-                case(
-                    (
-                        QueueEntry.first_response_latency_seconds.isnot(None),
-                        1,
-                    ),
-                    else_=0,
-                )
-            ).label("first_response_count"),
-        )
-        .filter(
-            QueueEntry.org_id == org_id,
-            QueueEntry.opened_at >= from_dt,
-            QueueEntry.opened_at <= to_dt,
-        )
-        .group_by(QueueEntry.channel)
-        .all()
+
+@router.get("/queues/export")
+def export_queue_metrics(
+    from_date: str = Query(None, alias="from"),
+    to_date: str = Query(None, alias="to"),
+    export_format: str = Query("csv", alias="format"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        from_dt, to_dt = _resolve_interval(from_date, to_date)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if export_format not in {"csv", "json"}:
+        raise HTTPException(status_code=400, detail="format must be 'csv' or 'json'")
+
+    org_id = current_user["org_id"]
+    metrics = _build_queue_metrics(db, org_id, from_dt, to_dt)
+
+    if export_format == "json":
+        payload = [metric.model_dump() for metric in metrics]
+        return _stream_json(payload, filename="queue-metrics-report.json")
+
+    rows = [
+        [
+            metric.channel,
+            metric.backlog.open,
+            metric.backlog.responded,
+            metric.backlog.closed,
+            metric.backlog.total,
+            metric.first_response.average_seconds,
+            metric.first_response.sample_size,
+            metric.sla.target_seconds,
+            metric.sla.within_target,
+            metric.sla.total_tracked,
+            metric.sla.compliance_rate,
+        ]
+        for metric in metrics
+    ]
+
+    return _stream_csv(
+        [
+            "channel",
+            "backlog_open",
+            "backlog_responded",
+            "backlog_closed",
+            "backlog_total",
+            "first_response_avg_seconds",
+            "first_response_sample_size",
+            "sla_target_seconds",
+            "sla_within_target",
+            "sla_total_tracked",
+            "sla_compliance_rate",
+        ],
+        rows,
+        filename="queue-metrics-report.csv",
     )
-
-    metrics_map: Dict[str, QueueMetrics] = {}
-
-    for row in queue_rows:
-        channel = row.channel
-        open_count = int(row.open or 0)
-        responded_count = int(row.responded or 0)
-        closed_count = int(row.closed or 0)
-        total_count = open_count + responded_count + closed_count
-        first_response_count = int(row.first_response_count or 0)
-        first_response_total = float(row.first_response_total or 0)
-        avg_first_response = (
-            first_response_total / first_response_count
-            if first_response_count > 0
-            else None
-        )
-
-        sla_data = sla_map.get(channel, {})
-
-        metrics_map[channel] = QueueMetrics(
-            channel=channel,
-            backlog={
-                "open": open_count,
-                "responded": responded_count,
-                "closed": closed_count,
-                "total": total_count,
-            },
-            first_response=FirstResponseMetrics(
-                average_seconds=avg_first_response,
-                sample_size=first_response_count,
-            ),
-            sla=SlaMetrics(
-                target_seconds=sla_data.get("sla_target_seconds"),
-                within_target=int(sla_data.get("first_response_within_target", 0)),
-                total_tracked=int(sla_data.get("conversations_closed", 0)),
-                compliance_rate=sla_data.get("sla_compliance_rate"),
-            ),
-        )
-
-    for channel, sla_data in sla_map.items():
-        if channel in metrics_map:
-            continue
-
-        backlog_data = backlog_map.get(
-            channel,
-            {"open": 0, "pending": 0, "closed": 0},
-        )
-
-        responded_fallback = backlog_data.get("pending", 0)
-        total_fallback = (
-            backlog_data.get("open", 0)
-            + responded_fallback
-            + backlog_data.get("closed", 0)
-        )
-
-        metrics_map[channel] = QueueMetrics(
-            channel=channel,
-            backlog={
-                "open": backlog_data.get("open", 0),
-                "responded": responded_fallback,
-                "closed": backlog_data.get("closed", 0),
-                "total": total_fallback,
-            },
-            first_response=FirstResponseMetrics(
-                average_seconds=sla_data["first_response_avg_seconds"],
-                sample_size=int(sla_data["first_response_sample_size"]),
-            ),
-            sla=SlaMetrics(
-                target_seconds=sla_data["sla_target_seconds"],
-                within_target=int(sla_data["first_response_within_target"]),
-                total_tracked=int(sla_data["conversations_closed"]),
-                compliance_rate=sla_data["sla_compliance_rate"],
-            ),
-        )
-
-    metrics_list = list(metrics_map.values())
-    metrics_list.sort(key=lambda metric: metric.channel)
-    return metrics_list

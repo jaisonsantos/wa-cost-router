@@ -5,8 +5,18 @@ import MetricCard from "@/components/MetricCard";
 import SimpleLayout from "@/components/SimpleLayout";
 import ChannelMetricCard from "@/components/ChannelMetricCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useDashboardMetrics, useProviderMetrics, useChannelMetrics, useQueueMetrics } from "@/hooks/useApi";
-import { useMemo } from "react";
+import { api } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
+import { useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   TrendingDown,
@@ -22,6 +32,9 @@ import {
   TimerReset,
   BellRing,
   Signal,
+  DownloadCloud,
+  FileJson,
+  FileSpreadsheet,
 } from "lucide-react";
 import { ChannelMetric, DashboardMetrics, ProviderMetric, QueueMetric } from "@/types/api";
 
@@ -53,6 +66,15 @@ interface ChannelSpecificAlert {
   message: string;
   severity: "warning" | "critical";
 }
+
+const EXPORT_OPTIONS = [
+  { key: "summary", label: "Resumo de custos" },
+  { key: "providers", label: "Métricas por provedor" },
+  { key: "channels", label: "Métricas por canal" },
+  { key: "queues", label: "Filas e SLA" },
+] as const;
+
+type ExportResource = (typeof EXPORT_OPTIONS)[number]["key"];
 
 const generateChannelAlerts = (metric: ChannelMetric, queueMetric?: QueueMetric): ChannelSpecificAlert[] => {
   const alerts: ChannelSpecificAlert[] = [];
@@ -110,6 +132,34 @@ const generateChannelAlerts = (metric: ChannelMetric, queueMetric?: QueueMetric)
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const handleReportExport = useCallback(
+    async (resource: ExportResource, format: "csv" | "json") => {
+      try {
+        switch (resource) {
+          case "summary":
+            await api.downloadSummary(format);
+            break;
+          case "providers":
+            await api.downloadProviderMetrics(format);
+            break;
+          case "channels":
+            await api.downloadChannelMetrics(format);
+            break;
+          case "queues":
+            await api.downloadQueueMetrics(format);
+            break;
+          default:
+            break;
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Erro inesperado ao exportar relatórios.";
+        toast({ title: "Erro ao exportar relatório", description: message, variant: "destructive" });
+      }
+    },
+    [],
+  );
+  const exportOptions = EXPORT_OPTIONS;
   const {
     data: metricsData,
     isLoading: metricsLoading,
@@ -243,11 +293,62 @@ const Dashboard = () => {
   return (
     <SimpleLayout>
       <div className="space-y-6">
-      {/* Métricas principais */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {metrics.map((metric, index) => (
-          <MetricCard key={index} {...metric} />
-        ))}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold">Visão geral de desempenho</h1>
+            <p className="text-sm text-muted-foreground flex items-center gap-1">
+              <DownloadCloud className="h-4 w-4" />
+              Exportações disponíveis em CSV ou JSON para análises detalhadas.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Exportar CSV
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Relatórios</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {exportOptions.map((option) => (
+                  <DropdownMenuItem
+                    key={`csv-${option.key}`}
+                    onClick={() => handleReportExport(option.key, "csv")}
+                  >
+                    {option.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <FileJson className="h-4 w-4" />
+                  Exportar JSON
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Relatórios</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {exportOptions.map((option) => (
+                  <DropdownMenuItem
+                    key={`json-${option.key}`}
+                    onClick={() => handleReportExport(option.key, "json")}
+                  >
+                    {option.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+        {/* Métricas principais */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {metrics.map((metric, index) => (
+            <MetricCard key={index} {...metric} />
+          ))}
       </div>
 
       {/* Gráfico de economia */}
