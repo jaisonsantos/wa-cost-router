@@ -36,6 +36,9 @@ class ProviderConnector(ABC):
         """Verifica saúde do provedor"""
         pass
 
+    async def list_templates(self) -> List[Dict[str, Any]]:  # pragma: no cover - default noop
+        """Retorna templates disponíveis para sincronização."""
+        return []
 
 class Dialog360Connector(ProviderConnector):
     """Conector para 360Dialog (WhatsApp)"""
@@ -285,6 +288,44 @@ class SandboxProviderConnector(ProviderConnector):
             "latency_ms": latency_ms,
             "mode": "sandbox",
         }
+
+    async def list_templates(self) -> List[Dict[str, Any]]:
+        configured = self.credentials.get("templates")
+        templates: List[Dict[str, Any]] = []
+
+        if isinstance(configured, list):
+            for entry in configured:
+                if not isinstance(entry, dict):
+                    continue
+                name = entry.get("name")
+                if not name:
+                    continue
+                templates.append(
+                    {
+                        "name": name,
+                        "category": entry.get("category", "marketing"),
+                        "language": entry.get("language", "en_US"),
+                        "status": entry.get("status", "approved"),
+                        "meta": entry.get("meta") or {},
+                    }
+                )
+
+        if templates:
+            return templates
+
+        default_name = self.credentials.get("default_template_name")
+        if default_name:
+            return [
+                {
+                    "name": default_name,
+                    "category": self.credentials.get("default_template_category", "marketing"),
+                    "language": self.credentials.get("default_template_language", "en_US"),
+                    "status": self.credentials.get("default_template_status", "approved"),
+                    "meta": {},
+                }
+            ]
+
+        return []
 
     def _build_fingerprint(self, to_number: str, template_id: str, variables: Dict[str, Any]) -> str:
         serialized = json.dumps({
@@ -935,6 +976,7 @@ def get_connector(
 
     connectors = {
         "360dialog": Dialog360Connector,
+        "whatsapp": Dialog360Connector,
         "gupshup": GupshupConnector,
         "sendgrid": SendGridConnector,
         "email": SendGridConnector,

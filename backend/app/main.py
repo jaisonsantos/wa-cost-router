@@ -14,6 +14,7 @@ from app.api import (
     rates,
     reports,
     rules,
+    templates,
 )
 from app.api.routes import contact_segments, contacts
 
@@ -54,6 +55,7 @@ app.include_router(rules.router, prefix="/rules", tags=["rules"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
 app.include_router(providers.router, prefix="/providers", tags=["providers"])
+app.include_router(templates.router, prefix="/templates", tags=["templates"])
 app.include_router(contacts.router, prefix="/contacts", tags=["contacts"])
 app.include_router(
     contact_segments.router,

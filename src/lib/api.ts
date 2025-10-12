@@ -14,6 +14,10 @@ import {
   ProviderCredentialInput,
   ProviderHealth,
   ProviderMetric,
+  Template,
+  TemplateCreatePayload,
+  TemplateSyncResponse,
+  TemplateUpdatePayload,
   IntegrationConnection,
   ConnectionTestResult,
   RateEntry,
@@ -244,6 +248,41 @@ class ApiClient {
 
   async healthCheckProvider(providerId: string): Promise<ProviderHealth> {
     return this.request<ProviderHealth>(`/providers/${providerId}/health`, {
+      method: "POST",
+    });
+  }
+
+  // Templates
+  async getTemplates(params: { language?: string; status?: string } = {}): Promise<Template[]> {
+    const searchParams = new URLSearchParams();
+    if (params.language) searchParams.append("language", params.language);
+    if (params.status) searchParams.append("status", params.status);
+    const query = searchParams.toString();
+    return this.request<Template[]>(`/templates${query ? `?${query}` : ""}`);
+  }
+
+  async createTemplate(payload: TemplateCreatePayload): Promise<Template> {
+    return this.request<Template>("/templates/", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateTemplate(templateId: string, updates: TemplateUpdatePayload): Promise<Template> {
+    return this.request<Template>(`/templates/${templateId}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deleteTemplate(templateId: string): Promise<void> {
+    await this.request<void>(`/templates/${templateId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async syncTemplates(): Promise<TemplateSyncResponse> {
+    return this.request<TemplateSyncResponse>("/templates/sync", {
       method: "POST",
     });
   }

@@ -50,7 +50,7 @@ from app.core.normalization import (
 from app.services.contacts import OptInRequestService
 from app.services.conversations import ConversationLifecycleService
 from app.services.provider_connectors import get_connector
-from app.services.routing import ContactOptOutError
+from app.services.routing import ContactOptOutError, RoutingPolicyViolation
 from app.services.routing_engine import RoutingEngine
 from prometheus_client import Counter, Gauge
 
@@ -325,6 +325,7 @@ async def send_message(
             template_id=data.template_id,
             channel=data.channel,
             contact_address=resolved_address,
+            send_time=datetime.now(timezone.utc),
         )
     except ContactOptOutError as exc:
         job.status = JobStatusEnum.failed_final
@@ -360,6 +361,28 @@ async def send_message(
                     },
                 )
         raise HTTPException(status_code=403, detail=str(exc))
+    except RoutingPolicyViolation as exc:
+        logger.info(
+            "Routing policy violation on job %s for org %s", job_identifier, current_user["org_id"],
+            extra={
+                "event": "routing_policy_violation",
+                "policy_code": exc.code,
+                "detail": exc.message,
+            },
+        )
+        job.status = JobStatusEnum.failed_final
+        try:
+            _commit_or_raise(db)
+        except Exception:
+            logger.exception(
+                "Failed to persist policy violation for job %s in org %s",
+                job_identifier,
+                current_user["org_id"],
+            )
+        raise HTTPException(
+            status_code=403,
+            detail={"code": exc.code, "message": exc.message},
+        )
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(
             "Routing engine failure for job %s in org %s: %s",

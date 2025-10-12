@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "./ui/button";
 import {
   LayoutDashboard,
+  FileSpreadsheet,
   FileText,
   Settings,
   Activity,
@@ -67,6 +68,16 @@ export default function SimpleLayout({ children }: SimpleLayoutProps) {
                 <Link to="/providers">
                   <Satellite className="h-4 w-4 mr-2" />
                   Provedores
+                </Link>
+              </Button>
+              <Button
+                variant={location.pathname === "/templates" ? "default" : "ghost"}
+                size="sm"
+                asChild
+              >
+                <Link to="/templates">
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Templates
                 </Link>
               </Button>
               <Button

@@ -18,6 +18,7 @@ import ContactListPage from "./pages/Contacts/List";
 import ContactDetailPage from "./pages/Contacts/Detail";
 import ContactImportWizardPage from "./pages/Contacts/ImportWizard";
 import Segments from "./pages/Segments";
+import Templates from "./pages/Templates";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
             <Route path="/providers" element={<PrivateRoute><Providers /></PrivateRoute>} />
+            <Route path="/templates" element={<PrivateRoute><Templates /></PrivateRoute>} />
             <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
             <Route path="/contacts" element={<PrivateRoute><ContactListPage /></PrivateRoute>} />
             <Route path="/contacts/import" element={<PrivateRoute><ContactImportWizardPage /></PrivateRoute>} />

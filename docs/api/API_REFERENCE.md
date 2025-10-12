@@ -306,6 +306,48 @@ Erros: `400 Bad Request` (UUID inválido ou sem credenciais), `404 Not Found` pa
 ### `DELETE /providers/{provider_id}/credentials`
 Desativa credenciais ativas do provedor. Retorna `{"status":"credentials_removed"}` em `200 OK`. Erros: `400` (UUID inválido) e `404` (credenciais não encontradas).
 
+## Templates
+
+Catálogo de templates WhatsApp sincronizado com provedores conectados.
+
+### `GET /templates`
+Lista templates cadastrados para a organização. Parâmetros opcionais de query:
+
+| Parâmetro | Tipo | Observações |
+|-----------|------|-------------|
+| `language` | string | Filtra pelo código do idioma (`pt_BR`, `en_US`, ...). Comparação case-insensitive. |
+| `status` | string | Filtra pelo status normalizado (`approved`, `rejected`, `pending`, ...). |
+
+**Resposta 200** – array de objetos com `id`, `name`, `category`, `language`, `status` e `meta` (JSON livre).
+
+### `POST /templates`
+Cria um template manualmente.
+
+| Campo | Tipo | Obrigatório | Observações |
+|-------|------|-------------|-------------|
+| `name` | string | sim | Nome único por idioma. |
+| `category` | string | sim | Ex.: `marketing`, `utility`. |
+| `language` | string | sim | Código BCP47 (`pt_BR`, `en_US`). |
+| `status` | string | sim | Estado atual do template (`approved`, `rejected`, ...). |
+| `meta` | objeto | não | Estrutura arbitrária retornada pelos provedores. |
+
+**Resposta 201** – template criado.
+
+### `PATCH /templates/{template_id}`
+Atualiza parcialmente um template (campos opcionais `name`, `category`, `language`, `status`, `meta`). Erros: `400` para UUID inválido e `404` quando não pertence à organização.
+
+### `DELETE /templates/{template_id}`
+Remove o template informado. Resposta `204 No Content` quando sucesso. `404` se não existir.
+
+### `POST /templates/sync`
+Sincroniza templates a partir dos provedores WhatsApp ativos (360dialog, Gupshup, Cloud). Para cada provedor com credenciais válidas:
+
+- Consulta `list_templates` no conector e cria/atualiza registros locais combinando `name` + `language`.
+- Retorna resumo com `providers[]` (nome do provedor, total sincronizado, idiomas e status encontrados) e listas agregadas `languages`, `statuses` para a organização.
+- Campo `synced` indica o total de templates processados na execução.
+
+Erros individuais de provedores são reportados por item (`providers[].error`) sem abortar a sincronização dos demais.
+
 ## Regras de roteamento
 
 ### `GET /rules`
