@@ -2749,7 +2749,14 @@
                 "admin",
                 "metrics"
               ]
-            }
+            },
+            "header": [
+              {
+                "key": "X-Admin-Token",
+                "value": "{{admin_metrics_token}}",
+                "type": "text"
+              }
+            ]
           }
         }
       ]

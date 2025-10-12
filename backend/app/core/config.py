@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="allow")
 
+    ENVIRONMENT: str = "local"
     DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@db:5432/wa_cost_router"
     REDIS_URL: str = "redis://redis:6379/0"
     JWT_SECRET: str = "change-this"
@@ -49,6 +50,21 @@ class Settings(BaseSettings):
     RATE_LIMIT_LOGIN_PER_MIN: int = 20
 
     MARKETING_SILENT_HOURS_UTC: list[str] = Field(default_factory=lambda: ["22:00-06:00"])
+
+    METRICS_AUTH_TOKEN: str | None = None
+    METRICS_AUTH_HEADER_NAME: str = "X-Admin-Token"
+    METRICS_AUTH_LOCAL_TOKEN: str = "local-admin-metrics-token"
+
+    def get_metrics_auth_token(self) -> str | None:
+        token = self.METRICS_AUTH_TOKEN
+        if token:
+            return token
+
+        environment = (self.ENVIRONMENT or "").lower()
+        if environment in {"local", "dev", "development", "test", "testing"}:
+            return self.METRICS_AUTH_LOCAL_TOKEN
+
+        return None
 
 
 settings = Settings()

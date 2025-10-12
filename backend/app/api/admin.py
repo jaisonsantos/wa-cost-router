@@ -1,11 +1,13 @@
 import logging
+import secrets
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, generate_latest
 
 from app.core.circuit_breaker import get_circuit_breaker_store
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -21,8 +23,34 @@ circuit_half_open_gauge = Gauge("admin_circuit_breakers_half_open_total", "Quant
 def health():
     return {"status": "ok"}
 
+def require_admin_metrics_token(
+    provided_token: str | None = Header(default=None, alias=settings.METRICS_AUTH_HEADER_NAME),
+) -> None:
+    expected_token = settings.get_metrics_auth_token()
+    if not expected_token:
+        logger.error(
+            "Metrics authentication missing", extra={"event": "admin_metrics_auth_missing"}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Metrics authentication is not configured",
+        )
+
+    if provided_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing admin auth token",
+        )
+
+    if not secrets.compare_digest(provided_token, expected_token):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid admin auth token",
+        )
+
+
 @router.get("/metrics")
-def metrics():
+def metrics(_: None = Depends(require_admin_metrics_token)):
     request_count.inc()
     metrics_scrape_count.inc()
     try:
