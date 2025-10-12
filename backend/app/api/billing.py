@@ -46,6 +46,18 @@ class BillingSummaryResponse(BaseModel):
     price_id: str | None = None
 
 
+def _as_dict(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
+    for attr in ("to_dict_recursive", "to_dict"):
+        method = getattr(value, attr, None)
+        if callable(method):
+            result = method()
+            if isinstance(result, dict):
+                return result
+    return None
+
+
 def _parse_uuid(value: Any) -> uuid.UUID | None:
     if value is None:
         return None
@@ -124,7 +136,7 @@ def create_checkout_session(
                 name=org.name,
                 metadata={"org_id": str(org.id), "org_name": org.name},
             )
-        except stripe_error.StripeError as exc:  # pragma: no cover - network failure
+        except stripe_error.StripeError as exc:  # pragma: no cover
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         customer_id = customer.id
         subscription = _ensure_subscription(db, org_id=org.id, customer_id=customer_id)
@@ -142,7 +154,7 @@ def create_checkout_session(
             metadata={"org_id": str(org.id), "price_id": payload.price_id},
             subscription_data={"metadata": {"org_id": str(org.id)}},
         )
-    except stripe_error.StripeError as exc:  # pragma: no cover - network failure
+    except stripe_error.StripeError as exc:  # pragma: no cover
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     if subscription:
@@ -190,7 +202,6 @@ def _update_from_subscription_payload(
     if not customer_id:
         return
 
-    subscription = None
     if org_id:
         subscription = _ensure_subscription(db, org_id=org_id, customer_id=customer_id)
     else:
@@ -202,7 +213,7 @@ def _update_from_subscription_payload(
     subscription.stripe_subscription_id = payload.get("id") or subscription.stripe_subscription_id
 
     status_value = payload.get("status")
-    if status_value:
+    if isinstance(status_value, str):
         try:
             subscription.status = BillingStatusEnum(status_value)
         except ValueError:
@@ -245,7 +256,7 @@ def _update_from_subscription_payload(
         if isinstance(card, dict):
             brand = card.get("brand")
             last4 = card.get("last4")
-            payment_info = {}
+            payment_info: dict[str, Any] = {}
             if isinstance(brand, str):
                 payment_info["brand"] = brand
             if isinstance(last4, str):
@@ -296,16 +307,15 @@ async def handle_webhook(request: Request, db: Session = Depends(get_db)) -> dic
     except (StripeConfigurationError, ValueError, stripe_error.SignatureVerificationError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    event_type = event.get("type")
-    data_object = event.get("data", {}).get("object", {})
-    if not isinstance(data_object, dict):
-        return {"received": "ignored"}
+    # Normaliza o objeto Event/Stripe para dicts
+    event_payload = _as_dict(event) or {}
+    event_type = event_payload.get("type")
 
-    org_id = _parse_uuid(
-        data_object.get("metadata", {}).get("org_id")
-        if isinstance(data_object.get("metadata"), dict)
-        else None
-    )
+    data_payload = _as_dict(event_payload.get("data")) or {}
+    data_object = _as_dict(data_payload.get("object")) or {}
+
+    metadata = _as_dict(data_object.get("metadata")) or {}
+    org_id = _parse_uuid(metadata.get("org_id"))
     customer_id = data_object.get("customer") if isinstance(data_object.get("customer"), str) else None
 
     if event_type == "checkout.session.completed":
@@ -315,12 +325,14 @@ async def handle_webhook(request: Request, db: Session = Depends(get_db)) -> dic
             subscription.stripe_subscription_id = subscription_id or subscription.stripe_subscription_id
             if data_object.get("status") == "complete":
                 subscription.status = BillingStatusEnum.active
-            price_id = data_object.get("metadata", {}).get("price_id") if isinstance(data_object.get("metadata"), dict) else None
+            price_id = metadata.get("price_id")
             if isinstance(price_id, str):
                 subscription.price_id = price_id
             db.commit()
+
     elif event_type in {"customer.subscription.updated", "customer.subscription.created"}:
         _update_from_subscription_payload(db, data_object, org_id=org_id, customer_id=customer_id)
+
     elif event_type == "customer.subscription.deleted":
         subscription = None
         if org_id and customer_id:
@@ -331,6 +343,7 @@ async def handle_webhook(request: Request, db: Session = Depends(get_db)) -> dic
             subscription.status = BillingStatusEnum.canceled
             subscription.cancel_at_period_end = True
             db.commit()
+
     elif event_type in {"invoice.paid", "invoice.payment_succeeded"}:
         _handle_invoice_paid(db, data_object)
 
