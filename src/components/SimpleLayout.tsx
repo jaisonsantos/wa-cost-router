@@ -1,47 +1,20 @@
-import type { ComponentType, ReactNode, SVGProps } from "react";
+import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "./ui/button";
 import { Sheet, SheetClose, SheetContent, SheetTrigger } from "./ui/sheet";
+import { LogOut, Menu } from "lucide-react";
+import { navigationItems, type NavigationItem } from "@/config/navigation";
+import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard,
-  FileSpreadsheet,
-  FileText,
-  Settings,
-  Activity,
-  LogOut,
-  Satellite,
-  MessageSquare,
-  Users,
-  Tags,
-  Menu,
-} from "lucide-react";
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-  match?: "exact" | "startsWith";
-}
-
-const navItems: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/contacts", label: "Contatos", icon: Users, match: "startsWith" },
-  { to: "/segments", label: "Segmentos", icon: Tags },
-  { to: "/providers", label: "Provedores", icon: Satellite },
-  { to: "/messages", label: "Mensagens", icon: MessageSquare },
-  { to: "/rules", label: "Regras", icon: Activity },
-  { to: "/reports", label: "Relatórios", icon: FileText },
-  { to: "/settings", label: "Configurações", icon: Settings },
-];
-
-const isActiveRoute = (pathname: string, item: NavItem) => {
-  if (item.match === "startsWith") {
-    return pathname.startsWith(item.to);
-  }
-
-  return pathname === item.to;
-};
+  NavigationMenu,
+  NavigationMenuContent,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuList,
+  NavigationMenuTrigger,
+  navigationMenuTriggerStyle,
+} from "./ui/navigation-menu";
 
 interface SimpleLayoutProps {
   children: ReactNode;
@@ -50,6 +23,44 @@ interface SimpleLayoutProps {
 export default function SimpleLayout({ children }: SimpleLayoutProps) {
   const { logout } = useAuth();
   const location = useLocation();
+
+  const renderMobileItems = (items: NavigationItem[], level = 0) =>
+    items.map((item) => {
+      const Icon = item.icon;
+      const isActive = isItemActive(location.pathname, item);
+      const isSelfActive = isItemSelfActive(location.pathname, item);
+
+      return (
+        <div key={item.href} className="flex flex-col gap-2">
+          <SheetClose asChild>
+            <Button
+              variant={isActive ? "default" : "ghost"}
+              size="sm"
+              className={cn(
+                "justify-start gap-2",
+                getMobileLevelClasses(level),
+              )}
+              asChild
+            >
+              <Link
+                to={item.href}
+                className="flex items-center gap-2"
+                aria-current={isSelfActive ? "page" : undefined}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            </Button>
+          </SheetClose>
+
+          {item.children?.length ? (
+            <div className="flex flex-col gap-2">
+              {renderMobileItems(item.children, level + 1)}
+            </div>
+          ) : null}
+        </div>
+      );
+    });
 
   return (
     <div className="min-h-screen bg-background">
@@ -74,34 +85,15 @@ export default function SimpleLayout({ children }: SimpleLayoutProps) {
                       </p>
                     </div>
                     <nav className="flex flex-col gap-2">
-                      {navItems.map((item) => {
-                        const Icon = item.icon;
-                        const isActive = isActiveRoute(location.pathname, item);
-
-                        return (
-                          <SheetClose asChild key={item.to}>
-                            <Button
-                              variant={isActive ? "default" : "ghost"}
-                              size="sm"
-                              className="justify-start"
-                              asChild
-                            >
-                              <Link to={item.to}>
-                                <Icon className="mr-2 h-4 w-4" />
-                                {item.label}
-                              </Link>
-                            </Button>
-                          </SheetClose>
-                        );
-                      })}
+                      {renderMobileItems(navigationItems)}
                       <SheetClose asChild>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="justify-start"
+                          className="justify-start gap-2"
                           onClick={logout}
                         >
-                          <LogOut className="mr-2 h-4 w-4" />
+                          <LogOut className="h-4 w-4" aria-hidden />
                           Sair
                         </Button>
                       </SheetClose>
@@ -111,25 +103,88 @@ export default function SimpleLayout({ children }: SimpleLayoutProps) {
               </div>
             </div>
 
-            <nav className="hidden w-full overflow-x-auto md:flex md:w-auto md:items-center md:justify-end md:gap-2 lg:gap-3">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = isActiveRoute(location.pathname, item);
+            <div className="hidden w-full overflow-x-auto md:flex md:w-auto md:items-center md:justify-end md:gap-2 lg:gap-3">
+              <NavigationMenu className="max-w-none">
+                <NavigationMenuList>
+                  {navigationItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = isItemActive(location.pathname, item);
 
-                return (
-                  <Button key={item.to} variant={isActive ? "default" : "ghost"} size="sm" asChild>
-                    <Link to={item.to} className="flex items-center">
-                      <Icon className="mr-2 h-4 w-4" />
-                      {item.label}
-                    </Link>
-                  </Button>
-                );
-              })}
+                    if (item.children?.length) {
+                      return (
+                        <NavigationMenuItem key={item.href}>
+                          <NavigationMenuTrigger
+                            className={cn(
+                              "gap-2 justify-start",
+                              isActive && "bg-primary text-primary-foreground hover:bg-primary/90",
+                            )}
+                            data-active={isActive || undefined}
+                          >
+                            <Icon className="h-4 w-4" />
+                            {item.label}
+                          </NavigationMenuTrigger>
+                          <NavigationMenuContent>
+                            <ul className="grid gap-1 p-2 md:w-64">
+                              {item.children.map((child) => {
+                                const ChildIcon = child.icon;
+                                const isChildActive = isItemActive(location.pathname, child);
+                                const isChildSelfActive = isItemSelfActive(location.pathname, child);
+
+                                return (
+                                  <li key={child.href}>
+                                    <NavigationMenuLink asChild>
+                                      <Link
+                                        to={child.href}
+                                        className={cn(
+                                          "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent",
+                                          isChildActive &&
+                                            "bg-primary text-primary-foreground hover:bg-primary/90",
+                                        )}
+                                        aria-current={isChildSelfActive ? "page" : undefined}
+                                      >
+                                        <ChildIcon className="h-4 w-4" />
+                                        {child.label}
+                                      </Link>
+                                    </NavigationMenuLink>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </NavigationMenuContent>
+                        </NavigationMenuItem>
+                      );
+                    }
+
+                    return (
+                      <NavigationMenuItem key={item.href}>
+                        <NavigationMenuLink
+                          asChild
+                          className={cn(
+                            navigationMenuTriggerStyle(),
+                            "gap-2 justify-start",
+                            isActive && "bg-primary text-primary-foreground hover:bg-primary/90",
+                          )}
+                        >
+                          <Link
+                            to={item.href}
+                            className="flex items-center gap-2"
+                            aria-current={isItemSelfActive(location.pathname, item) ? "page" : undefined}
+                          >
+                            <Icon className="h-4 w-4" />
+                            {item.label}
+                          </Link>
+                        </NavigationMenuLink>
+                      </NavigationMenuItem>
+                    );
+                  })}
+                </NavigationMenuList>
+              </NavigationMenu>
 
               <Button variant="ghost" size="sm" onClick={logout}>
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4" aria-hidden />
+                <span className="sr-only">Sair</span>
               </Button>
-            </nav>
+            </div>
           </div>
         </div>
       </header>
@@ -140,3 +195,52 @@ export default function SimpleLayout({ children }: SimpleLayoutProps) {
     </div>
   );
 }
+
+const normalizePath = (value: string) => {
+  if (!value) {
+    return "/";
+  }
+
+  if (value === "/") {
+    return value;
+  }
+
+  return value.replace(/\/+$/, "");
+};
+
+const matchesPath = (pathname: string, href: string, match: NavigationItem["match"] = "exact") => {
+  const normalizedPath = normalizePath(pathname);
+  const normalizedHref = normalizePath(href);
+
+  if (match === "startsWith") {
+    if (normalizedHref === "/") {
+      return normalizedPath === normalizedHref;
+    }
+
+    return (
+      normalizedPath === normalizedHref ||
+      normalizedPath.startsWith(`${normalizedHref}/`)
+    );
+  }
+
+  return normalizedPath === normalizedHref;
+};
+
+const isItemSelfActive = (pathname: string, item: NavigationItem) =>
+  matchesPath(pathname, item.href, item.match);
+
+const isItemActive = (pathname: string, item: NavigationItem): boolean =>
+  isItemSelfActive(pathname, item) ||
+  item.children?.some((child) => isItemActive(pathname, child)) === true;
+
+const getMobileLevelClasses = (level: number) => {
+  if (level <= 0) {
+    return undefined;
+  }
+
+  if (level === 1) {
+    return "pl-6 text-sm";
+  }
+
+  return "pl-10 text-sm";
+};
