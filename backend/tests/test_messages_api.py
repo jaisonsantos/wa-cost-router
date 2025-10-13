@@ -1,6 +1,6 @@
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -50,6 +50,7 @@ from app.models.models import (  # noqa: E402
     MessageEvent,
     RoutedAction,
     DeliveryAttempt,
+    WATemplate,
 )
 from app.services.routing_engine import RoutingEngine  # noqa: E402
 from app.services.routing.policies import RoutingPolicyViolation  # noqa: E402
@@ -425,6 +426,101 @@ def test_send_message_returns_success(client, db_session):
     assert stored_cost.price_eur == 85
 
 
+def test_send_message_blocked_by_template_country(client, db_session):
+    test_client, org_id = client
+    _, contact = _bootstrap_routing_stack(db_session, org_id)
+
+    template = WATemplate(
+        org_id=org_id,
+        name="welcome",
+        category="MARKETING",
+        language="pt_BR",
+        status="approved",
+        meta={"blocked_countries": ["br"]},
+    )
+    db_session.add(template)
+    db_session.commit()
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "blocked-country",
+            "channel": "whatsapp",
+            "contact_id": str(contact.id),
+            "template_id": "welcome",
+            "template_category": "MARKETING",
+        },
+    )
+
+    assert response.status_code == 403
+    payload = response.json()
+    assert payload["detail"]["code"] == "template_blocked_country"
+
+    job = (
+        db_session.query(MessageJob)
+        .filter(
+            MessageJob.org_id == org_id,
+            MessageJob.idempotency_key == "blocked-country",
+        )
+        .one()
+    )
+    assert job.status == JobStatusEnum.failed_final
+
+
+def test_send_message_blocked_by_template_hours(client, db_session, monkeypatch):
+    test_client, org_id = client
+    _, contact = _bootstrap_routing_stack(db_session, org_id)
+
+    template = WATemplate(
+        org_id=org_id,
+        name="promo_hora",
+        category="MARKETING",
+        language="pt_BR",
+        status="approved",
+        meta={"allowed_hours": ["08:00-09:00"]},
+    )
+    db_session.add(template)
+    db_session.commit()
+
+    fixed_now = datetime(2024, 1, 1, 5, 0, tzinfo=timezone.utc)
+    original_select = routing_engine_module.RoutingEngine.select_provider
+
+    def select_with_fixed_time(self, *args, **kwargs):
+        kwargs["send_time"] = fixed_now
+        return original_select(self, *args, **kwargs)
+
+    monkeypatch.setattr(
+        routing_engine_module.RoutingEngine,
+        "select_provider",
+        select_with_fixed_time,
+    )
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "blocked-hours",
+            "channel": "whatsapp",
+            "contact_id": str(contact.id),
+            "template_id": "promo_hora",
+            "template_category": "MARKETING",
+        },
+    )
+
+    assert response.status_code == 403
+    payload = response.json()
+    assert payload["detail"]["code"] == "template_outside_allowed_hours"
+
+    job = (
+        db_session.query(MessageJob)
+        .filter(
+            MessageJob.org_id == org_id,
+            MessageJob.idempotency_key == "blocked-hours",
+        )
+        .one()
+    )
+    assert job.status == JobStatusEnum.failed_final
+
+
 def test_message_payloads_are_sanitized(client, db_session):
     test_client, org_id = client
     _, contact = _bootstrap_routing_stack(db_session, org_id)
@@ -518,7 +614,15 @@ def test_send_message_blocked_by_policy(client, db_session, monkeypatch):
     test_client, org_id = client
     _, contact = _bootstrap_routing_stack(db_session, org_id)
 
-    def _deny_policy(self, *, template_category, channel, requested_at):
+    def _deny_policy(
+        self,
+        *,
+        template_category,
+        channel,
+        requested_at,
+        template_metadata=None,
+        country_iso=None,
+    ):
         raise RoutingPolicyViolation("marketing_silent_hours", "Blocked for tests")
 
     monkeypatch.setattr(

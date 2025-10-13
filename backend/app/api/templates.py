@@ -1,9 +1,10 @@
 import logging
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, Iterable, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -13,7 +14,72 @@ from app.core.security import decrypt_credentials
 from app.models.models import Provider, ProviderCredential, WATemplate
 from app.services.provider_connectors import get_connector
 
+def _deduplicate_preserve_order(values: Iterable[str]) -> List[str]:
+    seen: set[str] = set()
+    result: List[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
 
+
+def _sanitize_country_list(raw: Any) -> Optional[List[str]]:
+    if not isinstance(raw, Iterable) or isinstance(raw, (str, bytes)):
+        return None
+    normalized: List[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        candidate = item.strip().upper()
+        if len(candidate) in {2, 3} and candidate.isalpha():
+            normalized.append(candidate)
+    if not normalized:
+        return None
+    return _deduplicate_preserve_order(normalized)
+
+
+def _sanitize_hour_windows(raw: Any) -> Optional[List[str]]:
+    if not isinstance(raw, Iterable) or isinstance(raw, (str, bytes)):
+        return None
+    windows: List[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        try:
+            start_raw, end_raw = item.split("-", 1)
+            start_time = datetime.strptime(start_raw.strip(), "%H:%M").time()
+            end_time = datetime.strptime(end_raw.strip(), "%H:%M").time()
+        except (ValueError, AttributeError):
+            logger.debug("Ignoring invalid template hour window: %r", item)
+            continue
+        windows.append(f"{start_time.strftime('%H:%M')}-{end_time.strftime('%H:%M')}")
+    if not windows:
+        return None
+    return _deduplicate_preserve_order(windows)
+
+
+def _sanitize_template_meta(raw: Any) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+
+    sanitized: Dict[str, Any] = {
+        key: value for key, value in raw.items() if isinstance(key, str)
+    }
+
+    def _apply(key: str, value: Optional[List[str]]) -> None:
+        if value:
+            sanitized[key] = value
+        else:
+            sanitized.pop(key, None)
+
+    _apply("blocked_countries", _sanitize_country_list(raw.get("blocked_countries")))
+    _apply("allowed_countries", _sanitize_country_list(raw.get("allowed_countries")))
+    _apply("blocked_hours", _sanitize_hour_windows(raw.get("blocked_hours")))
+    _apply("allowed_hours", _sanitize_hour_windows(raw.get("allowed_hours")))
+
+    return sanitized
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -32,11 +98,7 @@ class TemplateResponse(BaseModel):
     @field_validator("meta", mode="before")
     @classmethod
     def _ensure_meta(cls, value: Any) -> Dict[str, Any]:
-        if value is None:
-            return {}
-        if isinstance(value, dict):
-            return value
-        return {}
+        return _sanitize_template_meta(value)
 
     @field_validator("id", mode="before")
     @classmethod
@@ -51,6 +113,11 @@ class TemplateCreatePayload(BaseModel):
     status: str
     meta: Dict[str, Any] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def _sanitize_meta(self) -> "TemplateCreatePayload":
+        self.meta = _sanitize_template_meta(self.meta)
+        return self
+
 
 class TemplateUpdatePayload(BaseModel):
     name: Optional[str] = None
@@ -58,6 +125,12 @@ class TemplateUpdatePayload(BaseModel):
     language: Optional[str] = None
     status: Optional[str] = None
     meta: Optional[Dict[str, Any]] = None
+
+    @model_validator(mode="after")
+    def _sanitize_meta(self) -> "TemplateUpdatePayload":
+        if self.meta is not None:
+            self.meta = _sanitize_template_meta(self.meta)
+        return self
 
 
 class TemplateSyncProviderSummary(BaseModel):
@@ -249,7 +322,7 @@ async def sync_templates(
             language = template_payload.get("language") or "en_US"
             status_value = template_payload.get("status") or "pending"
             category = template_payload.get("category") or "marketing"
-            metadata = template_payload.get("meta") or {}
+            metadata = _sanitize_template_meta(template_payload.get("meta"))
 
             provider_languages.add(language)
             provider_statuses.add(status_value)
