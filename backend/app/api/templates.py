@@ -8,6 +8,12 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.api.dependencies import get_current_user
+from app.core.database import get_db
+from app.core.security import decrypt_credentials
+from app.models.models import Provider, ProviderCredential, WATemplate
+from app.services.provider_connectors import get_connector
+
 def _deduplicate_preserve_order(values: Iterable[str]) -> List[str]:
     seen: set[str] = set()
     result: List[str] = []
@@ -77,14 +83,6 @@ def _sanitize_template_meta(raw: Any) -> Dict[str, Any]:
         sanitized["allowed_hours"] = allowed_hours
 
     return sanitized
-
-from app.api.dependencies import get_current_user
-from app.core.database import get_db
-from app.core.security import decrypt_credentials
-from app.models.models import Provider, ProviderCredential, WATemplate
-from app.services.provider_connectors import get_connector
-
-
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
