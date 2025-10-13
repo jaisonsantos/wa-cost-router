@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from app.core.security import encrypt_credentials
+from app.models.models import Provider, ProviderCredential
 
 from .base import CRMContactChange, CRMIncrementalResult
 from .hubspot import HubSpotProvider, _parse_timestamp
@@ -100,4 +106,81 @@ class SandboxHubSpotProvider(HubSpotProvider):
                 "since": since.isoformat() if isinstance(since, datetime) else since,
             },
         )
+
+
+_SANDBOX_PROVIDER_NAME = "HubSpot Sandbox"
+_SANDBOX_DEFAULT_CONTACT = {
+    "id": "hubspot-sandbox-contact",
+    "properties": {
+        "firstname": "Taylor",
+        "lastname": "Sandbox",
+        "email": "crm.sandbox@example.com",
+        "phone": "+15550000000",
+    },
+}
+
+
+def ensure_sandbox_crm_provider(db: Session, org_id: UUID) -> Provider:
+    """Ensure a sandbox CRM provider and credentials exist for the given org."""
+
+    provider = (
+        db.query(Provider)
+        .filter(Provider.org_id == org_id, Provider.type == "crm", Provider.name == _SANDBOX_PROVIDER_NAME)
+        .one_or_none()
+    )
+
+    meta = {"slug": SandboxHubSpotProvider.slug}
+    if provider is None:
+        provider = Provider(
+            org_id=org_id,
+            name=_SANDBOX_PROVIDER_NAME,
+            type="crm",
+            status="active",
+            meta=meta,
+        )
+        db.add(provider)
+        db.flush()
+    else:
+        merged_meta = dict(provider.meta or {})
+        merged_meta.update(meta)
+        provider.status = "active"
+        provider.meta = merged_meta
+
+    credentials_payload: Dict[str, object] = {
+        "access_token": "sandbox-crm-access-token",
+        "seed_contacts": [
+            {
+                **_SANDBOX_DEFAULT_CONTACT,
+                "properties": {
+                    **_SANDBOX_DEFAULT_CONTACT["properties"],
+                    "lastmodifieddate": int(datetime.now(timezone.utc).timestamp() * 1000),
+                },
+            }
+        ],
+    }
+
+    credential = (
+        db.query(ProviderCredential)
+        .filter(
+            ProviderCredential.org_id == org_id,
+            ProviderCredential.provider_id == provider.id,
+        )
+        .one_or_none()
+    )
+
+    encrypted = encrypt_credentials(credentials_payload)
+    if credential is None:
+        credential = ProviderCredential(
+            org_id=org_id,
+            provider_id=provider.id,
+            credentials_encrypted=encrypted,
+            is_active=True,
+        )
+        db.add(credential)
+    else:
+        credential.credentials_encrypted = encrypted
+        credential.is_active = True
+
+    db.flush()
+    return provider
 

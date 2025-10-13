@@ -17,7 +17,7 @@ Este guia descreve como configurar as integrações CRM suportadas no piloto (Hu
 
 ## 2. HubSpot
 
-> **Nota:** o script `backend/scripts/seed.py` provisiona automaticamente um provedor "HubSpot Sandbox" com credenciais fake e contatos de demonstração quando `SANDBOX_PROVIDERS=true`, permitindo que os testes Newman/CI validem webhooks e polling sem depender da API real da HubSpot.
+> **Nota:** quando `SANDBOX_PROVIDERS=true`, o ambiente cria automaticamente um provedor "HubSpot Sandbox" com credenciais fake e contatos de demonstração. O seed (`backend/scripts/seed.py`) cobre a organização demo e, para qualquer nova organização criada via `/auth/register`, o primeiro webhook ou ciclo de polling em `/integrations/crm/hubspot/*` auto provisiona o provedor/credenciais antes de aplicar as alterações — garantindo que os fluxos da coleção Postman/Newman funcionem sem passos manuais.
 
 1. **Credenciais**
    - Gerar token de Private App (`crm.objects.contacts.read`, `crm.objects.contacts.write`, `crm.schemas.contacts.read`).
