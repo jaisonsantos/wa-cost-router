@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource
 
 
 class Settings(BaseSettings):
@@ -60,6 +61,62 @@ class Settings(BaseSettings):
     METRICS_AUTH_TOKEN: str | None = None
     METRICS_AUTH_HEADER_NAME: str = "X-Admin-Token"
     METRICS_AUTH_LOCAL_TOKEN: str = "local-admin-metrics-token"
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+        **kwargs,
+    ):
+        def _wrap_source(source: EnvSettingsSource | None) -> EnvSettingsSource | None:
+            if source is None:
+                return None
+
+            source_cls = source.__class__
+
+            class _BlankAwareSource(source_cls):  # type: ignore[misc, valid-type]
+                def decode_complex_value(self, field_name, field, value):  # type: ignore[override]
+                    if field_name == "API_CORS_ORIGINS":
+                        if value is None:
+                            return None
+                        if isinstance(value, str):
+                            stripped = value.strip()
+                            if not stripped:
+                                return []
+                            return stripped
+                    return super().decode_complex_value(field_name, field, value)
+
+            init_kwargs: dict[str, Any] = {
+                "case_sensitive": getattr(source, "case_sensitive", None),
+                "env_prefix": getattr(source, "env_prefix", None),
+                "env_nested_delimiter": getattr(source, "env_nested_delimiter", None),
+            }
+
+            if isinstance(source, DotEnvSettingsSource):
+                init_kwargs.update(
+                    {
+                        "env_file": source.env_file,
+                        "env_file_encoding": source.env_file_encoding,
+                    }
+                )
+
+            return _BlankAwareSource(settings_cls, **init_kwargs)
+
+        additional_sources = tuple(
+            source for source in kwargs.values() if source is not None
+        )
+
+        return (
+            init_settings,
+            _wrap_source(env_settings),
+            _wrap_source(dotenv_settings),
+            file_secret_settings,
+            *additional_sources,
+        )
 
     @staticmethod
     def _normalize_cors_origins(value: Any) -> list[str] | Any:

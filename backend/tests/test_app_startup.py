@@ -1,3 +1,4 @@
+import pytest
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import Settings
@@ -41,3 +42,20 @@ def test_empty_string_cors_origins_does_not_crash():
 
     assert cors_middleware is not None
     assert cors_middleware.kwargs["allow_origins"] == []
+
+
+def test_blank_env_variable_is_treated_as_empty_list(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("API_CORS_ORIGINS", "")
+
+    settings = Settings(_env_file=None, ENVIRONMENT="production")
+
+    assert settings.API_CORS_ORIGINS == []
+
+
+def test_blank_env_file_entry_is_treated_as_empty_list(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("API_CORS_ORIGINS=\n")
+
+    settings = Settings(_env_file=env_file, ENVIRONMENT="production")
+
+    assert settings.API_CORS_ORIGINS == []
