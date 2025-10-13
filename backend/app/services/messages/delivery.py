@@ -29,6 +29,7 @@ from app.models.models import (
 )
 from app.services.conversations import ConversationLifecycleService
 from app.services.provider_connectors import get_connector
+from app.services.routing_engine import RoutingEngine
 
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,148 @@ class DeliveryResult:
     provider_name: Optional[str]
     message: str
     channel: Optional[str]
+
+
+class DryRunNoRouteAvailable(RuntimeError):
+    """Raised when the routing engine cannot determine a provider for the job."""
+
+
+class MessageDeliveryDryRunService:
+    """Reconstroi o contexto de entrega sem alterar o estado persistido."""
+
+    def __init__(
+        self,
+        db: Session,
+        circuit_breaker: Optional[CircuitBreakerStore] = None,
+    ) -> None:
+        self.db = db
+        self.circuit_breaker = circuit_breaker
+
+    def simulate(self, *, job: MessageJob) -> DeliveryContext:
+        engine = RoutingEngine(
+            self.db,
+            job.org_id,
+            circuit_breaker=self.circuit_breaker,
+        )
+
+        routing_decision = engine.select_provider(
+            country_iso=job.country_iso or "XX",
+            category=job.template_category or "",
+            template_id=job.template_id,
+            channel=job.channel,
+            contact_address=job.channel_address or job.to_number,
+            send_time=datetime.now(timezone.utc),
+        )
+
+        if not routing_decision:
+            raise DryRunNoRouteAvailable("No provider available for this job")
+
+        estimated_cost_minor = self._normalize_estimated_cost(
+            routing_decision.get("estimated_cost")
+        )
+        baseline_cost_minor = engine.calculate_baseline_cost(
+            job.country_iso or "XX",
+            job.template_category or "",
+        )
+
+        context = DeliveryContext(
+            job_id=str(job.id),
+            org_id=str(job.org_id),
+            routing_decision=dict(routing_decision),
+            estimated_cost_minor=estimated_cost_minor,
+            baseline_cost_minor=baseline_cost_minor,
+            variables=copy.deepcopy(job.variables) if job.variables else None,
+        )
+
+        primary_identifier = routing_decision.get("provider_id")
+        fallback_identifiers = self._normalize_fallback_chain(
+            routing_decision.get("fallback_chain")
+        )
+        ordered_identifiers = []
+        if primary_identifier is not None:
+            ordered_identifiers.append(str(primary_identifier))
+        ordered_identifiers.extend(fallback_identifiers)
+
+        provider_names = self._load_provider_names(ordered_identifiers)
+
+        dry_run_payload = sanitize_provider_payload(
+            {
+                "job_id": str(job.id),
+                "dry_run": True,
+                "rule_name": routing_decision.get("rule_name"),
+                "rule_id": routing_decision.get("rule_id"),
+                "provider_id": str(primary_identifier) if primary_identifier else None,
+                "provider_name": provider_names.get(str(primary_identifier))
+                if primary_identifier
+                else None,
+                "fallback_chain": [
+                    {
+                        "provider_id": identifier,
+                        "provider_name": provider_names.get(identifier),
+                    }
+                    for identifier in fallback_identifiers
+                ],
+                "estimated_cost_minor": estimated_cost_minor,
+                "baseline_cost_minor": baseline_cost_minor,
+            }
+        )
+
+        dry_run_action = RoutedAction(
+            org_id=job.org_id,
+            rule_id=coerce_uuid(routing_decision.get("rule_id")),
+            message_event_id=None,
+            action="deliver_message",
+            status="dry_run",
+            provider_response=dry_run_payload,
+            cost_minor=estimated_cost_minor,
+            dry_run=True,
+        )
+        self.db.add(dry_run_action)
+        commit_or_raise(self.db)
+
+        return context
+
+    def _normalize_fallback_chain(self, fallback_chain: Any) -> list[str]:
+        if fallback_chain in (None, ""):
+            return []
+        if isinstance(fallback_chain, Iterable) and not isinstance(
+            fallback_chain, (str, bytes)
+        ):
+            normalized: list[str] = []
+            for candidate in fallback_chain:
+                if candidate is None:
+                    continue
+                normalized.append(str(candidate))
+            return normalized
+        logger.warning("Invalid fallback chain %r; ignoring", fallback_chain)
+        return []
+
+    def _load_provider_names(self, identifiers: list[str]) -> Dict[str, Optional[str]]:
+        if not identifiers:
+            return {}
+
+        uuid_identifiers = [coerce_uuid(identifier) for identifier in identifiers]
+        valid_ids = [identifier for identifier in uuid_identifiers if identifier]
+        if not valid_ids:
+            return {}
+
+        rows = (
+            self.db.query(Provider.id, Provider.name)
+            .filter(Provider.id.in_(valid_ids))
+            .all()
+        )
+        return {str(row.id): row.name for row in rows}
+
+    @staticmethod
+    def _normalize_estimated_cost(value: Any) -> int:
+        if value is None:
+            return 0
+        try:
+            cost = int(value)
+        except (TypeError, ValueError):
+            logger.warning("Invalid estimated cost %r; defaulting to 0", value)
+            return 0
+        return max(cost, 0)
 
 
 class MessageDeliveryService:
@@ -703,6 +846,8 @@ def log_circuit_transition(
 __all__ = [
     "DeliveryContext",
     "DeliveryResult",
+    "DryRunNoRouteAvailable",
+    "MessageDeliveryDryRunService",
     "MessageDeliveryService",
     "MESSAGES_SEND_COUNTER",
     "DELIVERY_ATTEMPTS_COUNTER",

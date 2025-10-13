@@ -13,7 +13,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, expression
 import uuid
 import enum
 from app.core.database import Base
@@ -172,7 +172,7 @@ class RoutingRule(Base):
 
 class RoutedAction(Base):
     __tablename__ = "routed_action"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False)
     rule_id = Column(UUID(as_uuid=True), ForeignKey("routing_rule.id"))
@@ -182,6 +182,12 @@ class RoutedAction(Base):
     provider_response = Column(JSON)
     cost_minor = Column(Integer)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    dry_run = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=expression.false(),
+    )
 
 class EconomySnapshot(Base):
     __tablename__ = "economy_snapshot"

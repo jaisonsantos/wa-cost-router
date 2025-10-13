@@ -490,6 +490,33 @@ Retorna a trilha de decisões (`RoutedAction`) gravada durante o envio, incluind
 ```
 Erros: `404 Not Found` quando o job não pertence à organização autenticada ou não existe.
 
+### `POST /messages/jobs/{job_id}/dry-run`
+Simula novamente o roteamento do job sem alterar estado, registrando um `RoutedAction` marcado com `dry_run: true` e retornando a cadeia atualizada.
+
+**Resposta 200**
+```json
+{
+  "job_id": "<uuid>",
+  "actions": [
+    {
+      "id": "<uuid>",
+      "rule_id": "<uuid>",
+      "rule_name": "route-sms-1a2b3c",
+      "status": "dry_run",
+      "provider_id": "<uuid>",
+      "provider_name": "Twilio Primary",
+      "attempt_number": null,
+      "cost_minor": 180,
+      "connector_response": null,
+      "created_at": "2025-10-09T11:21:05+00:00",
+      "message_event_id": null,
+      "dry_run": true
+    }
+  ]
+}
+```
+Erros: `400 Bad Request` quando nenhuma rota elegível é encontrada, `403 Forbidden` (opt-out ou política violada) e `404 Not Found` para jobs inexistentes ou fora do escopo da organização.
+
 ## Eventos
 
 ### `GET /events`

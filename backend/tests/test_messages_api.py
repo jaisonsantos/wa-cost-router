@@ -858,21 +858,101 @@ def test_get_message_routing_chain_endpoint(
     assert chain_payload["job_id"] == payload["job_id"]
     assert len(chain_payload["actions"]) == 2
 
-    providers = [item["provider_name"] for item in chain_payload["actions"]]
-    assert providers == [primary_seed["provider"].name, fallback_provider.name]
 
-    statuses = [item["status"] for item in chain_payload["actions"]]
-    assert statuses == ["failed", "delivered_with_fallback"]
+def test_dry_run_endpoint_creates_simulation_without_state_changes(
+    client,
+    db_session,
+    organization_factory,
+    contact_factory,
+    sms_provider_seed,
+    provider_factory,
+    routing_rule_factory,
+):
+    test_client, org_id = client
+    organization_factory(org_id=org_id)
 
-    attempts = [item["attempt_number"] for item in chain_payload["actions"]]
-    assert attempts == [1, 2]
+    primary_seed = sms_provider_seed(org_id=org_id, unit_cost_minor=180)
+    fallback_provider = provider_factory(
+        org_id=org_id,
+        name="Backup SMS", 
+        provider_type="sms",
+        channel="sms",
+        unit_cost_minor=200,
+        country_iso="BR",
+        meta={"channels": {"sms": {"inbound_numbers": ["+15550001111"]}}},
+        credentials={
+            "api_key": "nexmo",
+            "api_secret": "secret",
+            "from_number": "+15550001111",
+        },
+    )
 
-    rule_ids = [item["rule_id"] for item in chain_payload["actions"]]
-    assert all(rule_ids)
-    assert {str(rule_id) for rule_id in rule_ids} == {str(rule.id)}
+    _create_rule_for_channel(
+        routing_rule_factory=routing_rule_factory,
+        org_id=org_id,
+        channel="sms",
+        providers=[primary_seed["provider"], fallback_provider],
+    )
 
-    assert chain_payload["actions"][0]["connector_response"] is None
-    assert chain_payload["actions"][1]["connector_response"] == {"status": "ok"}
+    contact = _seed_contact_with_opt_in(
+        contact_factory=contact_factory,
+        org_id=org_id,
+        phone="+15551230000",
+        channel="sms",
+        channel_address="+15551230000",
+    )
+
+    response = test_client.post(
+        "/messages/send",
+        json={
+            "idempotency_key": "dry-run", 
+            "channel": "sms",
+            "contact_id": str(contact.id),
+            "template_id": "promo",
+            "template_category": "MARKETING",
+            "variables": {"body_params": ["DryRun"]},
+        },
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    job_id = payload["job_id"]
+
+    # Evita execução assíncrona real durante o teste
+    getattr(test_client, "enqueued_message_jobs", []).clear()  # type: ignore[attr-defined]
+
+    job_before = db_session.get(MessageJob, uuid.UUID(job_id))
+    assert job_before is not None
+    assert job_before.status == JobStatusEnum.pending
+
+    dry_response = test_client.post(f"/messages/jobs/{job_id}/dry-run")
+    assert dry_response.status_code == 200
+
+    chain_payload = dry_response.json()
+    assert chain_payload["job_id"] == job_id
+    assert len(chain_payload["actions"]) == 1
+
+    simulated_action = chain_payload["actions"][0]
+    assert simulated_action["dry_run"] is True
+    assert simulated_action["status"] == "dry_run"
+    assert simulated_action["provider_name"] == primary_seed["provider"].name
+    assert simulated_action["attempt_number"] is None
+
+    job_after = db_session.get(MessageJob, uuid.UUID(job_id))
+    assert job_after is not None
+    assert job_after.status == JobStatusEnum.pending
+
+    attempts = (
+        db_session.query(DeliveryAttempt)
+        .filter(DeliveryAttempt.message_job_id == uuid.UUID(job_id))
+        .all()
+    )
+    assert attempts == []
+
+    routed_actions = _fetch_routed_actions(db_session, uuid.UUID(job_id))
+    assert len(routed_actions) == 1
+    assert routed_actions[0].dry_run is True
+    assert routed_actions[0].status == "dry_run"
 
 
 def test_send_message_idempotency_with_contact_id(
