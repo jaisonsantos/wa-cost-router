@@ -15,6 +15,12 @@ Este guia cobre tarefas rotineiras para operar o WA Cost Router em ambientes de 
 
 Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Makefile padronizam a ordem correta (migrations → seed → serviços).
 
+## Configuração de CORS da API
+
+- Defina `API_CORS_ORIGINS` com uma lista separada por vírgulas (`https://app.example.com,https://admin.example.com`) para autorizar chamadas do frontend.
+- Se o valor ficar em branco e o ambiente for `ENVIRONMENT=local|dev|test`, a API libera apenas os hosts de desenvolvimento padrão (`http://localhost/127.0.0.1` nas portas 5173 e 8080`).
+- Em ambientes de homologação/produção sempre declare explicitamente os domínios confiáveis; um valor vazio bloqueia origens externas.
+
 ## Envio assíncrono de mensagens
 
 - `POST /messages/send` responde `202 Accepted` com o `job_id` e registra o job como `pending`; o processamento é realizado pelo worker RQ na fila `message_send`.
