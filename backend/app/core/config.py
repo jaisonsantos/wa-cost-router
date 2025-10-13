@@ -143,6 +143,26 @@ class Settings(BaseSettings):
         if environment in {"local", "dev", "development", "test", "testing"}:
             if "MARKETING_SILENT_HOURS_UTC" not in self.model_fields_set:
                 object.__setattr__(self, "MARKETING_SILENT_HOURS_UTC", [])
+        else:
+            insecure_defaults = {
+                "JWT_SECRET": {
+                    "change-this",
+                    "change-this-in-production",
+                    "local-dev-only-jwt-secret",
+                },
+                "APP_SECRET_KEY": {
+                    "please-change-me",
+                    "please-change-me-in-production",
+                    "local-dev-only-app-secret",
+                },
+            }
+
+            for field_name, invalid_values in insecure_defaults.items():
+                value = getattr(self, field_name)
+                if value in invalid_values:
+                    raise ValueError(
+                        f"{field_name} must be overridden with a strong secret when ENVIRONMENT={self.ENVIRONMENT!r}."
+                    )
 
     def get_metrics_auth_token(self) -> str | None:
         token = self.METRICS_AUTH_TOKEN

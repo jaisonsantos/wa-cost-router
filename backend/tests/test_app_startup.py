@@ -10,6 +10,8 @@ def test_custom_cors_origins_are_applied():
         _env_file=None,
         API_CORS_ORIGINS="https://app.example.com, https://admin.example.com",
         ENVIRONMENT="production",
+        JWT_SECRET="prod-secret",
+        APP_SECRET_KEY="prod-app-secret",
     )
 
     app = create_app(settings=settings)
@@ -54,6 +56,8 @@ def test_empty_string_cors_origins_does_not_crash():
         _env_file=None,
         API_CORS_ORIGINS="",
         ENVIRONMENT="production",
+        JWT_SECRET="prod-secret",
+        APP_SECRET_KEY="prod-app-secret",
     )
 
     app = create_app(settings=settings)
@@ -70,7 +74,12 @@ def test_empty_string_cors_origins_does_not_crash():
 def test_blank_env_variable_is_treated_as_empty_list(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("API_CORS_ORIGINS", "")
 
-    settings = Settings(_env_file=None, ENVIRONMENT="production")
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="production",
+        JWT_SECRET="prod-secret",
+        APP_SECRET_KEY="prod-app-secret",
+    )
 
     assert settings.API_CORS_ORIGINS == []
 
@@ -79,6 +88,11 @@ def test_blank_env_file_entry_is_treated_as_empty_list(tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text("API_CORS_ORIGINS=\n")
 
-    settings = Settings(_env_file=env_file, ENVIRONMENT="production")
+    settings = Settings(
+        _env_file=env_file,
+        ENVIRONMENT="production",
+        JWT_SECRET="prod-secret",
+        APP_SECRET_KEY="prod-app-secret",
+    )
 
     assert settings.API_CORS_ORIGINS == []

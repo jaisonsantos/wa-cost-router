@@ -21,6 +21,12 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 - Se o valor ficar em branco e o ambiente for `ENVIRONMENT=local|dev|test`, a API libera apenas os hosts de desenvolvimento padrão (`http://localhost/127.0.0.1` nas portas 5173 e 8080`).
 - Em ambientes de homologação/produção sempre declare explicitamente os domínios confiáveis; um valor vazio bloqueia origens externas.
 
+## Secrets obrigatórios por ambiente
+
+- `Settings` bloqueia a inicialização caso `JWT_SECRET` ou `APP_SECRET_KEY` permaneçam com os valores padrão quando `ENVIRONMENT` estiver configurado para `staging`, `qa`, `production` (ou qualquer outro fora de `local|dev|test`).
+- Gere secrets fortes com `openssl rand -base64 32` e injete-os via variáveis de ambiente/secret manager do orquestrador.
+- Atualize o checklist pré-deploy para garantir que os secrets rotacionados estão registrados e acessíveis para a API e workers.
+
 ## Envio assíncrono de mensagens
 
 - `POST /messages/send` responde `202 Accepted` com o `job_id` e registra o job como `pending`; o processamento é realizado pelo worker RQ na fila `message_send`.

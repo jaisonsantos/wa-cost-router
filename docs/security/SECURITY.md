@@ -24,8 +24,8 @@
    - Mover endpoints admin para rede interna.
 5. ~~**Rate limiting**~~ ✅
    - Expandir monitoramento (Prometheus/alertas) usando as métricas registradas nos logs estruturados.
-6. **Secrets & Config**
-   - Enforce override de `JWT_SECRET`/`APP_SECRET_KEY` em produção (ver backlog P1 "enforce secret strength").
+6. ~~**Secrets & Config**~~ ✅
+   - `Settings` agora rejeita `JWT_SECRET`/`APP_SECRET_KEY` com valores padrão quando `ENVIRONMENT` não estiver em modo desenvolvimento/teste. Gere secrets fortes com `openssl rand -base64 32` e armazene-os em um secrets manager.
    - TLS obrigatório; CORS configurável via env.
 
 ## Ações Futuras
