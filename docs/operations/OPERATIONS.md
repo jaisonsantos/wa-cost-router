@@ -31,7 +31,7 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 
 - `POST /messages/send` responde `202 Accepted` com o `job_id` e registra o job como `pending`; o processamento é realizado pelo worker RQ na fila `message_send`.
 - Em ambientes `ENVIRONMENT=local|dev|test` os horários de silêncio de marketing (`MARKETING_SILENT_HOURS_UTC`) são desativados automaticamente para evitar retornos 403 acidentais em demos e na suíte Newman. Defina explicitamente a variável para restaurar a janela em homologação/produção.
-- Templates WhatsApp sincronizados carregam metadados (`blocked_countries`, `allowed_hours`, etc.) que são validados antes do envio. Violações retornam `403` com `detail.code = template_*` e o job é marcado como `failed_final` para auditoria.
+- Templates WhatsApp sincronizados carregam metadados normalizados (`blocked_countries`, `allowed_hours`, etc. – sempre em maiúsculas, faixas `HH:MM-HH:MM` e sem duplicidades). As regras são reavaliadas a cada envio; se o provedor remover as restrições, o `meta` local é limpo na próxima sincronização. Violações retornam `403` com `detail.code = template_*` e o job é marcado como `failed_final` para auditoria.
 - O worker dedicado (vide `backend/app/workers/message_send.py`) executa `MessageDeliveryService`, atualizando `MessageJob`, `DeliveryAttempt`, `MessageEvent` e métricas (`messages_send_total`, `messages_delivery_attempts_total`, `messages_circuit_breaker_state`).
 - Para acompanhar a fila utilize `docker compose exec redis rq info message_send` ou `rq worker message_send` em ambientes que utilizem workers separados.
 - Idempotência permanece garantida por `(org_id, idempotency_key)`. Requisições repetidas retornam `200 OK` com o status consolidado do job.

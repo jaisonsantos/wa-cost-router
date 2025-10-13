@@ -318,7 +318,7 @@ Lista templates cadastrados para a organização. Parâmetros opcionais de query
 | `language` | string | Filtra pelo código do idioma (`pt_BR`, `en_US`, ...). Comparação case-insensitive. |
 | `status` | string | Filtra pelo status normalizado (`approved`, `rejected`, `pending`, ...). |
 
-**Resposta 200** – array de objetos com `id`, `name`, `category`, `language`, `status` e `meta`. O campo `meta` inclui apenas chaves curadas utilizadas nas políticas de envio (`blocked_countries`, `allowed_countries`, `blocked_hours`, `allowed_hours`).
+**Resposta 200** – array de objetos com `id`, `name`, `category`, `language`, `status` e `meta`. O campo `meta` inclui apenas chaves curadas utilizadas nas políticas de envio (`blocked_countries`, `allowed_countries`, `blocked_hours`, `allowed_hours`) já normalizadas (códigos ISO em maiúsculo, janelas `HH:MM-HH:MM`, entradas duplicadas/ inválidas removidas).
 
 ### `POST /templates`
 Cria um template manualmente.
@@ -329,7 +329,7 @@ Cria um template manualmente.
 | `category` | string | sim | Ex.: `marketing`, `utility`. |
 | `language` | string | sim | Código BCP47 (`pt_BR`, `en_US`). |
 | `status` | string | sim | Estado atual do template (`approved`, `rejected`, ...). |
-| `meta` | objeto | não | Aceita apenas listas de `blocked_countries`, `allowed_countries`, `blocked_hours` e `allowed_hours`. Valores inválidos são ignorados. |
+| `meta` | objeto | não | Aceita apenas listas de `blocked_countries`, `allowed_countries`, `blocked_hours` e `allowed_hours`. Valores são normalizados (maiúsculas, faixas válidas) e itens inválidos são descartados. |
 
 **Resposta 201** – template criado.
 
@@ -342,7 +342,7 @@ Remove o template informado. Resposta `204 No Content` quando sucesso. `404` se 
 ### `POST /templates/sync`
 Sincroniza templates a partir dos provedores WhatsApp ativos (360dialog, Gupshup, Cloud). Para cada provedor com credenciais válidas:
 
-- Consulta `list_templates` no conector, cria/atualiza registros locais combinando `name` + `language` e persiste somente os metadados relevantes (`blocked_countries`, `allowed_countries`, `blocked_hours`, `allowed_hours`).
+- Consulta `list_templates` no conector, cria/atualiza registros locais combinando `name` + `language` e persiste somente os metadados relevantes (`blocked_countries`, `allowed_countries`, `blocked_hours`, `allowed_hours`), normalizando listas e removendo valores vazios. Caso o provedor deixe de informar restrições, o `meta` local é limpo.
 - Retorna resumo com `providers[]` (nome do provedor, total sincronizado, idiomas e status encontrados) e listas agregadas `languages`, `statuses` para a organização.
 - Campo `synced` indica o total de templates processados na execução.
 
