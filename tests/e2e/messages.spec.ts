@@ -4,7 +4,7 @@ const API_BASE_URL = process.env.E2E_API_BASE_URL ?? "http://localhost:8000";
 const DEMO_EMAIL = process.env.E2E_DEMO_EMAIL ?? "admin@demo.local";
 const DEMO_PASSWORD = process.env.E2E_DEMO_PASSWORD ?? "demo123";
 
-type MessageJobSummary = {
+type MessageJobDetail = {
   id: string;
   channel: string;
   channel_address?: string | null;
@@ -27,46 +27,50 @@ async function sendMessage(
   request: APIRequestContext,
   token: string,
   payload: Record<string, unknown>,
-): Promise<void> {
+): Promise<string> {
   const response = await request.post(`${API_BASE_URL}/messages/send`, {
     headers: { Authorization: `Bearer ${token}` },
     data: payload,
   });
 
   expect(response.ok()).toBeTruthy();
+
+  const body = (await response.json()) as { job_id?: string };
+  expect(body.job_id).toBeTruthy();
+
+  return body.job_id!;
 }
 
 async function waitForJob(
   request: APIRequestContext,
   token: string,
-  channel: string,
-  channelAddress: string,
-): Promise<MessageJobSummary> {
-  const normalizedAddress = channelAddress.toLowerCase();
+  jobId: string,
+  expectedChannel: string,
+): Promise<MessageJobDetail> {
+  const transientStatuses = new Set(["pending", "processing"]);
 
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const response = await request.get(`${API_BASE_URL}/messages/jobs`, {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await request.get(`${API_BASE_URL}/messages/jobs/${jobId}`, {
       headers: { Authorization: `Bearer ${token}` },
-      params: { channel },
     });
+
+    if (response.status() === 404) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      continue;
+    }
 
     expect(response.ok()).toBeTruthy();
 
-    const jobs = (await response.json()) as MessageJobSummary[];
-    const found = jobs.find(
-      (job) =>
-        job.channel === channel &&
-        (job.channel_address ?? "").toLowerCase() === normalizedAddress,
-    );
+    const job = (await response.json()) as MessageJobDetail;
 
-    if (found) {
-      return found;
+    if (job.channel === expectedChannel && !transientStatuses.has(job.status)) {
+      return job;
     }
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  throw new Error(`Timed out waiting for job on channel ${channel}`);
+  throw new Error(`Timed out waiting for job ${jobId} on channel ${expectedChannel}`);
 }
 
 test.describe("Messages end-to-end", () => {
@@ -81,7 +85,7 @@ test.describe("Messages end-to-end", () => {
     const smsSuffix = (timestamp % 1_000_0000).toString().padStart(7, "0");
     const smsNumber = `+1551${smsSuffix}`;
 
-    await sendMessage(request, token, {
+    const emailJobId = await sendMessage(request, token, {
       idempotency_key: `e2e-email-${timestamp}`,
       channel: "email",
       template_id: "email_digest",
@@ -94,7 +98,7 @@ test.describe("Messages end-to-end", () => {
       },
     });
 
-    await sendMessage(request, token, {
+    const smsJobId = await sendMessage(request, token, {
       idempotency_key: `e2e-sms-${timestamp}`,
       channel: "sms",
       template_id: "otp_sms",
@@ -106,8 +110,8 @@ test.describe("Messages end-to-end", () => {
       },
     });
 
-    const emailJob = await waitForJob(request, token, "email", emailAddress);
-    const smsJob = await waitForJob(request, token, "sms", smsNumber);
+    const emailJob = await waitForJob(request, token, emailJobId, "email");
+    const smsJob = await waitForJob(request, token, smsJobId, "sms");
 
     await page.addInitScript((authToken: string) => {
       window.localStorage.setItem("token", authToken);
