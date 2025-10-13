@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
 
-from app.models.models import Provider, RateCard, RoutingRule
+from app.models.models import Provider, RateCard, RoutingRule, WATemplate
 from app.schemas.routing_rules import RoutingRuleActions
 from app.services.routing import (
     ContactOptOutError,
@@ -63,13 +63,24 @@ class RoutingEngine:
         ).order_by(RoutingRule.priority.asc()).all()
 
         normalized_channel = self._normalize_channel(channel)
+        template_metadata: Dict[str, Any] = {}
+        resolved_category = category
+
+        if template_id:
+            template = self._load_template(template_id)
+            if template is not None:
+                template_metadata = template.meta or {}
+                if not resolved_category:
+                    resolved_category = template.category
 
         if enforce_policies:
             try:
                 self._policy_service.validate(
-                    template_category=category,
+                    template_category=resolved_category,
                     channel=normalized_channel,
                     requested_at=send_time or datetime.now(timezone.utc),
+                    template_metadata=template_metadata,
+                    country_iso=country_iso,
                 )
             except RoutingPolicyViolation as exc:
                 logger.info(
@@ -110,7 +121,7 @@ class RoutingEngine:
         # 2. Avaliar condições de cada regra
         for rule in rules:
             if not self._evaluate_conditions(
-                rule.conditions_json, country_iso, category, template_id
+                rule.conditions_json, country_iso, resolved_category, template_id
             ):
                 continue
 
@@ -165,7 +176,7 @@ class RoutingEngine:
                 continue
 
             selected_provider = candidates[0]
-            estimated_cost = self._get_estimated_cost(selected_provider.id, country_iso, category)
+            estimated_cost = self._get_estimated_cost(selected_provider.id, country_iso, resolved_category)
             fallback_ids = [str(provider.id) for provider in candidates[1:]]
 
             return {
@@ -179,7 +190,7 @@ class RoutingEngine:
         # 3. Fallback: escolher provedor mais barato
         cheapest, cheapest_denied, cheapest_denied_channel = self._find_cheapest_provider(
             country_iso,
-            category,
+            resolved_category,
             channel=normalized_channel,
             preferences=preferences,
             contact_address=contact_address,
@@ -219,7 +230,11 @@ class RoutingEngine:
                 channel_address=contact_address,
             )
 
-        logger.warning(f"No provider found for country={country_iso}, category={category}")
+        logger.warning(
+            "No provider found for country=%s, category=%s",
+            country_iso,
+            resolved_category,
+        )
         return None
     
     def _evaluate_conditions(
@@ -360,6 +375,41 @@ class RoutingEngine:
             }, denied_by_consent, denied_channel
 
         return None, denied_by_consent, denied_channel
+
+    def _load_template(self, template_id: str) -> Optional[WATemplate]:
+        if not template_id:
+            return None
+
+        template: Optional[WATemplate]
+        try:
+            template_uuid = UUID(template_id)
+        except ValueError:
+            template = (
+                self.db.query(WATemplate)
+                .filter(
+                    WATemplate.org_id == self.org_id,
+                    func.lower(WATemplate.name) == template_id.lower(),
+                )
+                .first()
+            )
+        else:
+            template = (
+                self.db.query(WATemplate)
+                .filter(
+                    WATemplate.org_id == self.org_id,
+                    WATemplate.id == template_uuid,
+                )
+                .first()
+            )
+
+        if template is None:
+            logger.debug(
+                "Template %s not found for org %s when evaluating routing policies",
+                template_id,
+                self.org_id,
+            )
+
+        return template
     
     def calculate_baseline_cost(self, country_iso: str, category: str) -> int:
         """Calcula custo baseline (mais caro) para economia"""

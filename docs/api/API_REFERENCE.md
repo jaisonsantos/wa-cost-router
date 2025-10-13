@@ -318,7 +318,7 @@ Lista templates cadastrados para a organização. Parâmetros opcionais de query
 | `language` | string | Filtra pelo código do idioma (`pt_BR`, `en_US`, ...). Comparação case-insensitive. |
 | `status` | string | Filtra pelo status normalizado (`approved`, `rejected`, `pending`, ...). |
 
-**Resposta 200** – array de objetos com `id`, `name`, `category`, `language`, `status` e `meta` (JSON livre).
+**Resposta 200** – array de objetos com `id`, `name`, `category`, `language`, `status` e `meta`. O campo `meta` inclui apenas chaves curadas utilizadas nas políticas de envio (`blocked_countries`, `allowed_countries`, `blocked_hours`, `allowed_hours`).
 
 ### `POST /templates`
 Cria um template manualmente.
@@ -329,7 +329,7 @@ Cria um template manualmente.
 | `category` | string | sim | Ex.: `marketing`, `utility`. |
 | `language` | string | sim | Código BCP47 (`pt_BR`, `en_US`). |
 | `status` | string | sim | Estado atual do template (`approved`, `rejected`, ...). |
-| `meta` | objeto | não | Estrutura arbitrária retornada pelos provedores. |
+| `meta` | objeto | não | Aceita apenas listas de `blocked_countries`, `allowed_countries`, `blocked_hours` e `allowed_hours`. Valores inválidos são ignorados. |
 
 **Resposta 201** – template criado.
 
@@ -342,7 +342,7 @@ Remove o template informado. Resposta `204 No Content` quando sucesso. `404` se 
 ### `POST /templates/sync`
 Sincroniza templates a partir dos provedores WhatsApp ativos (360dialog, Gupshup, Cloud). Para cada provedor com credenciais válidas:
 
-- Consulta `list_templates` no conector e cria/atualiza registros locais combinando `name` + `language`.
+- Consulta `list_templates` no conector, cria/atualiza registros locais combinando `name` + `language` e persiste somente os metadados relevantes (`blocked_countries`, `allowed_countries`, `blocked_hours`, `allowed_hours`).
 - Retorna resumo com `providers[]` (nome do provedor, total sincronizado, idiomas e status encontrados) e listas agregadas `languages`, `statuses` para a organização.
 - Campo `synced` indica o total de templates processados na execução.
 
@@ -390,7 +390,7 @@ Agenda envio aplicando roteamento e fallback.
 |----------------------|----------|-------------|-------------|
 | `idempotency_key`    | string   | sim         | Requisições repetidas retornam o mesmo job. |
 | `channel`            | string   | sim         | `whatsapp`, `sms` ou `email` (pilot). Normalizado automaticamente. |
-| `template_id`        | string   | sim         | Identificador do template. |
+| `template_id`        | string   | sim         | Identificador do template (nome ou UUID sincronizado em `/templates`). |
 | `template_category`  | string   | não         | Default `marketing`. |
 | `variables`          | objeto   | não         | Valores aplicados ao template. |
 | `contact_id`         | UUID     | condicional | Obrigatório quando `channel_address` estiver vazio; permite inferir endereço preferencial. |
@@ -400,7 +400,7 @@ Agenda envio aplicando roteamento e fallback.
 **Respostas principais**
 - `200 OK` – `{ "job_id": "<uuid>", "status": "processing", "provider_used": "360dialog", "estimated_cost": 35, "message": "Message delivered successfully" }` (mensagem entregue ou em andamento).
 - `400 Bad Request` – nenhum provedor disponível ou erro de roteamento persistido.
-- `403 Forbidden` – contato com opt-out registrado (gera enfileiramento de reconfirmação e auditoria em `contact_consent_audit`).
+- `403 Forbidden` – contato com opt-out registrado (gera enfileiramento de reconfirmação e auditoria em `contact_consent_audit`) **ou** violação de política do template (`detail.code` expõe o motivo, ex.: `template_blocked_country`).
 - `429 Too Many Requests` – limite de envios por `org_id` excedido; inclui headers `Retry-After` e `X-RateLimit-Remaining: 0` para orientar o retry.
 - Fluxos bem sucedidos criam `MessageEvent` vinculado ao `MessageJob` com `unit_cost_minor`, `baseline_cost_minor`, `currency`, `country_iso` e `template_name`, garantindo consistência das métricas.
 - Cada tentativa (incluindo fallback) gera um registro em `routed_action` com `rule_id`, provedor selecionado, custo estimado (`cost_minor`), resposta do conector (`provider_response.connector_response`) e status final. Os eventos `MessageEvent` armazenam `attributes.routing_rule_name` e `attributes.provider_id` para auditoria do provedor vencedor.
