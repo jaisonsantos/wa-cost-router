@@ -517,6 +517,10 @@ Simula novamente o roteamento do job sem alterar estado, registrando um `RoutedA
 ```
 Erros: `400 Bad Request` quando nenhuma rota elegível é encontrada, `403 Forbidden` (opt-out ou política violada) e `404 Not Found` para jobs inexistentes ou fora do escopo da organização.
 
+Observações:
+- A simulação registra um novo item na cadeia com `dry_run: true`, preservando status original do job e suas tentativas reais.
+- O payload associado ao `RoutedAction` é sanitizado (`fallback_chain`, `provider_id`, `provider_name`) e serve apenas para auditoria.
+
 ## Eventos
 
 ### `GET /events`

@@ -1586,6 +1586,7 @@
           ],
           "request": {
             "method": "POST",
+            "description": "Simula o roteamento do job sem efeitos colaterais, registrando um RoutedAction com dry_run e retornando a cadeia atualizada.",
             "header": [
               {
                 "key": "Authorization",

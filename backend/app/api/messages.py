@@ -192,6 +192,29 @@ class RoutedActionChainResponse(BaseModel):
     job_id: UUID
     actions: list[RoutedActionItem]
 
+
+def _serialize_routed_action(
+    *, job_id: UUID, action: RoutedAction
+) -> Optional[RoutedActionItem]:
+    payload = action.provider_response or {}
+    if payload.get("job_id") != str(job_id):
+        return None
+
+    return RoutedActionItem(
+        id=action.id,
+        rule_id=action.rule_id,
+        rule_name=payload.get("rule_name"),
+        status=action.status,
+        provider_id=coerce_uuid(payload.get("provider_id")),
+        provider_name=payload.get("provider_name"),
+        attempt_number=payload.get("attempt_number"),
+        cost_minor=action.cost_minor,
+        connector_response=payload.get("connector_response"),
+        created_at=action.created_at,
+        message_event_id=action.message_event_id,
+        dry_run=bool(action.dry_run),
+    )
+
 @router.post(
     "/send",
     response_model=SendMessageResponse,
@@ -484,26 +507,10 @@ def get_message_routing_chain(
 
     filtered: list[RoutedActionItem] = []
     for action in actions:
-        payload = action.provider_response or {}
-        if payload.get("job_id") != str(job_id):
+        item = _serialize_routed_action(job_id=job_id, action=action)
+        if item is None:
             continue
-
-        filtered.append(
-            RoutedActionItem(
-                id=action.id,
-                rule_id=action.rule_id,
-                rule_name=payload.get("rule_name"),
-                status=action.status,
-                provider_id=coerce_uuid(payload.get("provider_id")),
-                provider_name=payload.get("provider_name"),
-                attempt_number=payload.get("attempt_number"),
-                cost_minor=action.cost_minor,
-                connector_response=payload.get("connector_response"),
-                created_at=action.created_at,
-                message_event_id=action.message_event_id,
-                dry_run=bool(action.dry_run),
-            )
-        )
+        filtered.append(item)
 
     return RoutedActionChainResponse(job_id=job_id, actions=filtered)
 
