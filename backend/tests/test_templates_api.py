@@ -292,3 +292,74 @@ def test_template_sync_collects_languages_and_statuses(client, db_session, monke
     )
     assert stored_new.language == "es_ES"
     assert stored_new.status == "rejected"
+
+
+def test_template_sync_sanitizes_policy_metadata(client, db_session, monkeypatch):
+    test_client, org_id = client
+
+    existing = _create_template(
+        db_session,
+        org_id=org_id,
+        name="welcome_flow",
+        language="en_US",
+        status="approved",
+        meta={"blocked_countries": ["BR"]},
+    )
+
+    provider = _seed_provider(db_session, org_id=org_id)
+
+    class _StubConnector:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def list_templates(self) -> List[Dict[str, Any]]:
+            return [
+                {
+                    "name": "welcome_flow",
+                    "language": "en_US",
+                    "status": "approved",
+                    "category": "marketing",
+                    "meta": {},
+                },
+                {
+                    "name": "winter_campaign",
+                    "language": "es_ES",
+                    "status": "approved",
+                    "category": "marketing",
+                    "meta": {
+                        "blocked_countries": [" br", "ar", "BR"],
+                        "allowed_countries": ["us", "ca", "US"],
+                        "allowed_hours": ["08:00-09:00", "invalid", "09:30-10:45"],
+                        "blocked_hours": ["23:00-01:00", "bad-entry"],
+                        "notes": "kept",
+                    },
+                },
+            ]
+
+    def _connector_factory(*args, **kwargs):
+        return _StubConnector()
+
+    monkeypatch.setattr("app.api.templates.get_connector", _connector_factory)
+
+    response = test_client.post("/templates/sync")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["synced"] == 2
+    assert payload["providers"][0]["provider"] == provider.name
+
+    db_session.refresh(existing)
+    assert existing.meta == {}
+
+    stored_new = (
+        db_session.query(WATemplate)
+        .filter(WATemplate.org_id == org_id, WATemplate.name == "winter_campaign")
+        .one()
+    )
+
+    assert stored_new.meta == {
+        "blocked_countries": ["BR", "AR"],
+        "allowed_countries": ["US", "CA"],
+        "allowed_hours": ["08:00-09:00", "09:30-10:45"],
+        "blocked_hours": ["23:00-01:00"],
+        "notes": "kept",
+    }
