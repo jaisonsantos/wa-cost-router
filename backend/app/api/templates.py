@@ -342,7 +342,8 @@ async def sync_templates(
             if existing:
                 existing.category = category
                 existing.status = status_value
-                existing.meta = metadata
+                if metadata:
+                    existing.meta = metadata
             else:
                 new_template = WATemplate(
                     org_id=current_user["org_id"],
