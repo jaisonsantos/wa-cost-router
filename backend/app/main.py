@@ -23,20 +23,28 @@ from app.api.routes import contact_segments, contacts
 from app.core.config import Settings, settings
 
 
+_LOCAL_DEFAULT_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8080",
+]
+
+
 def _determine_cors_origins(settings: Settings) -> list[str]:
-    if settings.API_CORS_ORIGINS:
-        return settings.API_CORS_ORIGINS
-
     environment = (settings.ENVIRONMENT or "").lower()
-    if environment in {"local", "dev", "development", "test", "testing"}:
-        return [
-            "http://localhost:5173",
-            "http://localhost:8080",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:8080",
-        ]
+    configured = [origin for origin in settings.API_CORS_ORIGINS if origin]
 
-    return []
+    defaults: list[str] = []
+    if environment in {"local", "dev", "development", "test", "testing"}:
+        defaults = _LOCAL_DEFAULT_CORS_ORIGINS
+
+    combined: list[str] = []
+    for origin in (*configured, *defaults):
+        if origin and origin not in combined:
+            combined.append(origin)
+
+    return combined
 
 
 def create_app(settings: Settings = settings) -> FastAPI:

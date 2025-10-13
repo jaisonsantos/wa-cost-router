@@ -26,6 +26,29 @@ def test_custom_cors_origins_are_applied():
     ]
 
 
+def test_local_environment_includes_default_cors_hosts():
+    settings = Settings(
+        _env_file=None,
+        API_CORS_ORIGINS="http://localhost:5173",
+        ENVIRONMENT="local",
+    )
+
+    app = create_app(settings=settings)
+
+    cors_middleware = next(
+        (middleware for middleware in app.user_middleware if middleware.cls is CORSMiddleware),
+        None,
+    )
+
+    assert cors_middleware is not None
+    assert cors_middleware.kwargs["allow_origins"] == [
+        "http://localhost:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8080",
+    ]
+
+
 def test_empty_string_cors_origins_does_not_crash():
     settings = Settings(
         _env_file=None,
