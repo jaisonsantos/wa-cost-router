@@ -614,7 +614,15 @@ def test_send_message_blocked_by_policy(client, db_session, monkeypatch):
     test_client, org_id = client
     _, contact = _bootstrap_routing_stack(db_session, org_id)
 
-    def _deny_policy(self, *, template_category, channel, requested_at):
+    def _deny_policy(
+        self,
+        *,
+        template_category,
+        channel,
+        requested_at,
+        template_metadata=None,
+        country_iso=None,
+    ):
         raise RoutingPolicyViolation("marketing_silent_hours", "Blocked for tests")
 
     monkeypatch.setattr(

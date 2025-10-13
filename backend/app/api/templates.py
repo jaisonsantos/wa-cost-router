@@ -64,23 +64,20 @@ def _sanitize_template_meta(raw: Any) -> Dict[str, Any]:
     if not isinstance(raw, dict):
         return {}
 
-    sanitized: Dict[str, Any] = {}
+    sanitized: Dict[str, Any] = {
+        key: value for key, value in raw.items() if isinstance(key, str)
+    }
 
-    blocked_countries = _sanitize_country_list(raw.get("blocked_countries"))
-    if blocked_countries:
-        sanitized["blocked_countries"] = blocked_countries
+    def _apply(key: str, value: Optional[List[str]]) -> None:
+        if value:
+            sanitized[key] = value
+        else:
+            sanitized.pop(key, None)
 
-    allowed_countries = _sanitize_country_list(raw.get("allowed_countries"))
-    if allowed_countries:
-        sanitized["allowed_countries"] = allowed_countries
-
-    blocked_hours = _sanitize_hour_windows(raw.get("blocked_hours"))
-    if blocked_hours:
-        sanitized["blocked_hours"] = blocked_hours
-
-    allowed_hours = _sanitize_hour_windows(raw.get("allowed_hours"))
-    if allowed_hours:
-        sanitized["allowed_hours"] = allowed_hours
+    _apply("blocked_countries", _sanitize_country_list(raw.get("blocked_countries")))
+    _apply("allowed_countries", _sanitize_country_list(raw.get("allowed_countries")))
+    _apply("blocked_hours", _sanitize_hour_windows(raw.get("blocked_hours")))
+    _apply("allowed_hours", _sanitize_hour_windows(raw.get("allowed_hours")))
 
     return sanitized
 logger = logging.getLogger(__name__)
