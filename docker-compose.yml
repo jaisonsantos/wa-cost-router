@@ -34,6 +34,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: change-this-in-production
       APP_SECRET_KEY: please-change-me-in-production
+      API_CORS_ORIGINS: http://localhost:5173,http://localhost:8080
       WA_VERIFY_TOKEN: my-verify-token
       SANDBOX_PROVIDERS: "true"
       SANDBOX_LATENCY_MS: "100"
