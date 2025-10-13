@@ -195,6 +195,10 @@ class MessageDeliveryDryRunService:
         )
         self.db.add(dry_run_action)
         commit_or_raise(self.db)
+        try:
+            self.db.refresh(dry_run_action)
+        except Exception:  # pragma: no cover - refresh best effort for defaults
+            logger.exception("Failed to refresh dry-run routed action %s", dry_run_action.id)
 
         return context
 

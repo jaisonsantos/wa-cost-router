@@ -1057,6 +1057,13 @@ def test_dry_run_endpoint_creates_simulation_without_state_changes(
     assert len(routed_actions) == 1
     assert routed_actions[0].dry_run is True
     assert routed_actions[0].status == "dry_run"
+    payload = routed_actions[0].provider_response or {}
+    assert payload.get("dry_run") is True
+    assert payload.get("job_id") == job_id
+    fallback_chain = payload.get("fallback_chain") or []
+    if fallback_chain:
+        assert fallback_chain[0].get("provider_id") == str(fallback_provider.id)
+        assert fallback_chain[0].get("provider_name") == fallback_provider.name
 
 
 def test_send_message_idempotency_with_contact_id(
