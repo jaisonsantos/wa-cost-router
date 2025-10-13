@@ -22,9 +22,18 @@ def upgrade() -> None:
         sa.Column(
             "dry_run",
             sa.Boolean(),
-            nullable=False,
-            server_default=sa.text("false"),
+            nullable=True,
         ),
+    )
+
+    op.execute("UPDATE routed_action SET dry_run = FALSE")
+
+    op.alter_column(
+        "routed_action",
+        "dry_run",
+        existing_type=sa.Boolean(),
+        nullable=False,
+        server_default=sa.text("false"),
     )
 
 
