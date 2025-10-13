@@ -45,6 +45,8 @@ from app.services.routing import ContactOptOutError, RoutingPolicyViolation
 from app.services.routing_engine import RoutingEngine
 from app.services.messages.delivery import (
     DeliveryContext,
+    DryRunNoRouteAvailable,
+    MessageDeliveryDryRunService,
     commit_or_raise,
     coerce_uuid,
 )
@@ -183,6 +185,7 @@ class RoutedActionItem(BaseModel):
     connector_response: Optional[Dict[str, Any]]
     created_at: datetime
     message_event_id: Optional[UUID]
+    dry_run: bool = False
 
 
 class RoutedActionChainResponse(BaseModel):
@@ -498,10 +501,59 @@ def get_message_routing_chain(
                 connector_response=payload.get("connector_response"),
                 created_at=action.created_at,
                 message_event_id=action.message_event_id,
+                dry_run=bool(action.dry_run),
             )
         )
 
     return RoutedActionChainResponse(job_id=job_id, actions=filtered)
+
+
+@router.post(
+    "/jobs/{job_id}/dry-run",
+    response_model=RoutedActionChainResponse,
+)
+def simulate_message_delivery(
+    job_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Validate access using existing routing chain endpoint
+    get_message_routing_chain(job_id=job_id, current_user=current_user, db=db)
+
+    job = (
+        db.query(MessageJob)
+        .filter(
+            MessageJob.id == job_id,
+            MessageJob.org_id == current_user["org_id"],
+        )
+        .first()
+    )
+
+    if job is None:
+        raise HTTPException(status_code=404, detail="Message job not found")
+
+    circuit_breaker = get_circuit_breaker_store()
+    dry_run_service = MessageDeliveryDryRunService(
+        db,
+        circuit_breaker=circuit_breaker,
+    )
+
+    try:
+        dry_run_service.simulate(job=job)
+    except ContactOptOutError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except RoutingPolicyViolation as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": exc.code, "message": exc.message},
+        )
+    except DryRunNoRouteAvailable as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        logger.exception("Failed to simulate delivery for job %s", job_id)
+        raise HTTPException(status_code=500, detail="Failed to simulate delivery")
+
+    return get_message_routing_chain(job_id=job_id, current_user=current_user, db=db)
 
 def _normalize_channel_address_value(
     channel: Optional[str],

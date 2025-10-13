@@ -1559,6 +1559,53 @@
               }
             }
           ]
+        },
+        {
+          "name": "Messages - Job Dry Run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  pm.test('Dry run returns routing chain', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('job_id');",
+                  "    pm.expect(body).to.have.property('actions');",
+                  "    if (Array.isArray(body.actions) && body.actions.length > 0) {",
+                  "      const lastAction = body.actions[body.actions.length - 1];",
+                  "      pm.expect(lastAction).to.have.property('dry_run', true);",
+                  "    }",
+                  "  });",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/messages/jobs/{{job_id}}/dry-run",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "jobs",
+                "{{job_id}}",
+                "dry-run"
+              ]
+            }
+          }
         }
       ]
     },
