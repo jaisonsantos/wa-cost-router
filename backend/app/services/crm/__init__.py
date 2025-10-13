@@ -13,6 +13,7 @@ from .field_mapping import CRMFieldMapper, FieldMappingConfig
 from .hubspot import HubSpotProvider
 from .pipedrive import PipedriveProvider
 from .registry import CRMProviderRegistry, build_default_registry
+from .sandbox import SandboxHubSpotProvider
 from .sync import CRMIncrementalSyncService, SyncResult
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "SyncResult",
     "HubSpotProvider",
     "PipedriveProvider",
+    "SandboxHubSpotProvider",
 ]

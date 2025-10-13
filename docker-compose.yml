@@ -38,6 +38,7 @@ services:
       SANDBOX_PROVIDERS: "true"
       SANDBOX_LATENCY_MS: "100"
       SANDBOX_FAILURE_RATE: "0"
+      CRM_WEBHOOK_SECRET: demo-crm-webhook-secret
     depends_on:
       db:
         condition: service_healthy
@@ -55,6 +56,7 @@ services:
       SANDBOX_PROVIDERS: "true"
       SANDBOX_LATENCY_MS: "100"
       SANDBOX_FAILURE_RATE: "0"
+      CRM_WEBHOOK_SECRET: demo-crm-webhook-secret
     depends_on:
       - db
       - redis
