@@ -145,8 +145,16 @@ class Settings(BaseSettings):
                 object.__setattr__(self, "MARKETING_SILENT_HOURS_UTC", [])
         else:
             insecure_defaults = {
-                "JWT_SECRET": {"change-this", "change-this-in-production"},
-                "APP_SECRET_KEY": {"please-change-me", "please-change-me-in-production"},
+                "JWT_SECRET": {
+                    "change-this",
+                    "change-this-in-production",
+                    "local-dev-only-jwt-secret",
+                },
+                "APP_SECRET_KEY": {
+                    "please-change-me",
+                    "please-change-me-in-production",
+                    "local-dev-only-app-secret",
+                },
             }
 
             for field_name, invalid_values in insecure_defaults.items():

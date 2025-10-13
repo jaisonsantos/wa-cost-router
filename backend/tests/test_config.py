@@ -44,6 +44,18 @@ def test_default_secrets_rejected_in_hardened_environments(environment: str) -> 
         Settings(_env_file=None, ENVIRONMENT=environment)
 
 
+@pytest.mark.parametrize(
+    "field_values",
+    [
+        {"JWT_SECRET": "local-dev-only-jwt-secret", "APP_SECRET_KEY": "super-secure"},
+        {"JWT_SECRET": "super-secure", "APP_SECRET_KEY": "local-dev-only-app-secret"},
+    ],
+)
+def test_example_env_placeholder_secrets_rejected_in_hardened_environment(field_values: dict[str, str]) -> None:
+    with pytest.raises(ValueError):
+        Settings(_env_file=None, ENVIRONMENT="production", **field_values)
+
+
 def test_custom_secrets_allowed_for_hardened_environment() -> None:
     settings = Settings(
         _env_file=None,
