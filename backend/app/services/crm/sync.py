@@ -17,6 +17,7 @@ from .credentials import CRMCredentialStore
 from .exceptions import ProviderNotConfiguredError, ProviderSyncError
 from .field_mapping import CRMFieldMapper, FieldMappingConfig
 from .registry import CRMProviderRegistry
+from .sandbox import SandboxHubSpotProvider, ensure_sandbox_crm_provider
 
 
 @dataclass(slots=True)
@@ -172,6 +173,8 @@ class CRMIncrementalSyncService:
     ) -> tuple[Provider, CRMProvider]:
         provider_entry = self._load_provider(org_id, provider_slug)
         provider_cls = self.registry.get(provider_slug)
+        if settings.SANDBOX_PROVIDERS and provider_slug == SandboxHubSpotProvider.slug:
+            provider_cls = SandboxHubSpotProvider
         credentials = self.credential_store.get_credentials(
             org_id=org_id,
             provider_id=provider_entry.id,
@@ -195,6 +198,9 @@ class CRMIncrementalSyncService:
             candidate_slug = meta.get("slug") or candidate.name
             if candidate_slug == provider_slug:
                 return candidate
+
+        if settings.SANDBOX_PROVIDERS and provider_slug == SandboxHubSpotProvider.slug:
+            return ensure_sandbox_crm_provider(self.db, org_id)
 
         raise ProviderNotConfiguredError(provider_slug)
 

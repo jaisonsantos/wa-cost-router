@@ -1,7 +1,7 @@
 import sys
 import uuid
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import create_engine
@@ -139,6 +139,7 @@ def test_routing_engine_skips_open_circuit(db_session):
         category="MARKETING",
         template_id=None,
         channel="whatsapp",
+        send_time=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
     )
 
     assert decision is not None

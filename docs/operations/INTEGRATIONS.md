@@ -11,11 +11,13 @@ Este guia descreve como configurar as integrações CRM suportadas no piloto (Hu
 - Variáveis de ambiente:
   - `CRM_MAX_PAGE_SIZE` (default 100).
   - `CRM_POLLING_INTERVAL_SECONDS` (janela mínima entre enfileiramentos de polling).
-  - `CRM_WEBHOOK_SECRET` (utilizada para validação de webhooks HubSpot).
+  - `CRM_WEBHOOK_SECRET` (utilizada para validação de webhooks HubSpot; no sandbox local utilizamos `demo-crm-webhook-secret`, alinhado com a coleção Postman).
   - `CRM_PIPEDRIVE_BASE_URL_TEMPLATE` (formato padrão para montar a URL do tenant Pipedrive).
   - `CRM_PIPEDRIVE_MAX_PAGE_SIZE` (limite superior aceito pelo conector Pipedrive).
 
 ## 2. HubSpot
+
+> **Nota:** quando `SANDBOX_PROVIDERS=true`, o ambiente cria automaticamente um provedor "HubSpot Sandbox" com credenciais fake e contatos de demonstração. O seed (`backend/scripts/seed.py`) cobre a organização demo e, para qualquer nova organização criada via `/auth/register`, o primeiro webhook ou ciclo de polling em `/integrations/crm/hubspot/*` auto provisiona o provedor/credenciais antes de aplicar as alterações — garantindo que os fluxos da coleção Postman/Newman funcionem sem passos manuais.
 
 1. **Credenciais**
    - Gerar token de Private App (`crm.objects.contacts.read`, `crm.objects.contacts.write`, `crm.schemas.contacts.read`).

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from typing import Dict, Type
 
+from app.core.config import settings
+
 from .base import CRMProvider
 from .exceptions import ProviderNotRegisteredError
 from .hubspot import HubSpotProvider
 from .pipedrive import PipedriveProvider
+from .sandbox import SandboxHubSpotProvider
 
 
 class CRMProviderRegistry:
@@ -35,4 +38,7 @@ def build_default_registry() -> CRMProviderRegistry:
     registry = CRMProviderRegistry()
     registry.register(HubSpotProvider)
     registry.register(PipedriveProvider)
+    if settings.SANDBOX_PROVIDERS:
+        # Override HubSpot with a deterministic sandbox provider for local/CI runs.
+        registry.register(SandboxHubSpotProvider)
     return registry

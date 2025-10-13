@@ -1,26 +1,19 @@
-import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Any, Iterable, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy import func
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import decrypt_credentials
-from app.core.circuit_breaker import (
-    CircuitBreakerStore,
-    CircuitState,
-    get_circuit_breaker_store,
-)
+from app.core.circuit_breaker import get_circuit_breaker_store
 from app.core.rate_limiter import (
     RateLimitExceeded,
     RateLimitStatus,
@@ -29,18 +22,14 @@ from app.core.rate_limiter import (
 )
 from app.models.models import (
     MessageJob,
-    DeliveryAttempt,
     CostRecord,
-    Provider,
-    ProviderCredential,
-    MessageEvent,
     RoutedAction,
-    RateCard,
     JobStatusEnum,
-    AttemptStatusEnum,
     Contact,
     ContactChannelOptIn,
     OptInStatusEnum,
+    DeliveryAttempt,
+    Provider,
 )
 from app.core.normalization import (
     normalize_country_code,
@@ -49,37 +38,20 @@ from app.core.normalization import (
 )
 from app.core.pii import (
     mask_contact_point,
-    sanitize_provider_payload,
     sanitize_template_variables,
 )
 from app.services.contacts import OptInRequestService
-from app.services.conversations import ConversationLifecycleService
-from app.services.provider_connectors import get_connector
 from app.services.routing import ContactOptOutError, RoutingPolicyViolation
 from app.services.routing_engine import RoutingEngine
-from prometheus_client import Counter, Gauge
+from app.services.messages.delivery import (
+    DeliveryContext,
+    commit_or_raise,
+    coerce_uuid,
+)
+from app.workers import message_send as message_worker
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-MESSAGES_SEND_COUNTER = Counter(
-    "messages_send_total",
-    "Total de requisições /messages/send processadas",
-    labelnames=["status", "provider", "channel"],
-)
-
-DELIVERY_ATTEMPTS_COUNTER = Counter(
-    "messages_delivery_attempts_total",
-    "Total de tentativas de entrega por provedor",
-    labelnames=["provider_id", "provider", "outcome", "channel"],
-)
-
-CIRCUIT_STATE_GAUGE = Gauge(
-    "messages_circuit_breaker_state",
-    "Estado atual do circuito por provedor (0=closed,1=half-open,2=open)",
-    labelnames=["provider_id"],
-)
-
 
 PHONE_CHANNELS = {"whatsapp", "sms"}
 
@@ -217,9 +189,14 @@ class RoutedActionChainResponse(BaseModel):
     job_id: UUID
     actions: list[RoutedActionItem]
 
-@router.post("/send", response_model=SendMessageResponse)
+@router.post(
+    "/send",
+    response_model=SendMessageResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def send_message(
     data: SendMessageRequest,
+    response: Response,
     context: SendMessageContext = Depends(_limit_messages_send),
     db: Session = Depends(get_db),
 ):
@@ -238,8 +215,9 @@ async def send_message(
         MessageJob.org_id == current_user["org_id"],
         MessageJob.idempotency_key == data.idempotency_key
     ).first()
-    
+
     if existing_job:
+        response.status_code = status.HTTP_200_OK
         return SendMessageResponse(
             job_id=str(existing_job.id),
             status=existing_job.status.value,
@@ -284,12 +262,12 @@ async def send_message(
         template_category=data.template_category,
         variables=sanitized_variables,
         country_iso=country_iso,
-        status=JobStatusEnum.processing
+        status=JobStatusEnum.pending
     )
     db.add(job)
 
     try:
-        _commit_or_raise(db)
+        commit_or_raise(db)
     except Exception as exc:  # pragma: no cover - committed failure handled below
         logger.exception(
             "Failed to persist message job %s for org %s: %s",
@@ -306,6 +284,7 @@ async def send_message(
             existing_job = None
 
         if existing_job:
+            response.status_code = status.HTTP_200_OK
             return SendMessageResponse(
                 job_id=str(existing_job.id),
                 status=existing_job.status.value,
@@ -314,6 +293,7 @@ async def send_message(
                 message="Message already processed (idempotent)",
             )
 
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return SendMessageResponse(
             job_id=str(job_identifier),
             status=JobStatusEnum.failed_final.value,
@@ -337,7 +317,7 @@ async def send_message(
     except ContactOptOutError as exc:
         job.status = JobStatusEnum.failed_final
         try:
-            _commit_or_raise(db)
+            commit_or_raise(db)
         except Exception:
             logger.exception(
                 "Failed to persist consent violation for job %s in org %s",
@@ -379,7 +359,7 @@ async def send_message(
         )
         job.status = JobStatusEnum.failed_final
         try:
-            _commit_or_raise(db)
+            commit_or_raise(db)
         except Exception:
             logger.exception(
                 "Failed to persist policy violation for job %s in org %s",
@@ -397,31 +377,28 @@ async def send_message(
             current_user["org_id"],
             exc,
         )
-        status_value = JobStatusEnum.failed_final.value
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        job.status = JobStatusEnum.failed_final
         try:  # pragma: no cover - best effort persistence
-            job_to_update = _ensure_job_attached(db, job)
-            if job_to_update is not None:
-                job_to_update.status = JobStatusEnum.failed_final
-                status_value = job_to_update.status.value
+            commit_or_raise(db)
         except Exception:
             logger.exception("Unable to mark job %s as failed after routing error", job_identifier)
         return SendMessageResponse(
             job_id=str(job_identifier),
-            status=status_value,
+            status=job.status.value,
             provider_used=None,
             estimated_cost=None,
             message="Routing engine error",
         )
-    
+
     if not routing_decision:
         job.status = JobStatusEnum.failed_final
         try:
-            _commit_or_raise(db)
+            commit_or_raise(db)
         except Exception:
             logger.exception("Failed to mark job %s as failed after empty routing decision", job_identifier)
         raise HTTPException(status_code=400, detail="No provider available for this route")
-    
-    # 5. Tentar envio com fallback
+
     estimated_cost_minor = _normalize_estimated_cost(
         routing_decision.get("estimated_cost")
     )
@@ -431,62 +408,50 @@ async def send_message(
         category=data.template_category,
     )
 
+    delivery_context = DeliveryContext(
+        job_id=str(job_identifier),
+        org_id=str(current_user["org_id"]),
+        routing_decision=routing_decision,
+        estimated_cost_minor=estimated_cost_minor,
+        baseline_cost_minor=baseline_cost_minor,
+        variables=data.variables,
+    )
+
+    initial_status = job.status.value
+
     try:
-        result = await _attempt_delivery_with_fallback(
-            db=db,
-            job=job,
-            routing_decision=routing_decision,
-            data=data,
-            org_id=current_user["org_id"],
-            estimated_cost_minor=estimated_cost_minor,
-            baseline_cost_minor=baseline_cost_minor,
-            circuit_breaker=circuit_breaker,
-            job_identifier=job_identifier,
-        )
+        message_worker.enqueue_message_delivery(delivery_context.to_payload())
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(
-            "Unexpected delivery failure for job %s via provider %s: %s",
+            "Failed to enqueue delivery job %s for org %s: %s",
             job_identifier,
-            routing_decision.get("provider_id") if routing_decision else None,
+            current_user["org_id"],
             exc,
         )
-        status_value = JobStatusEnum.failed_final.value
-        try:  # pragma: no cover - best effort persistence
-            job_to_update = _ensure_job_attached(db, job)
-            if job_to_update is not None:
-                job_to_update.status = JobStatusEnum.failed_final
-                status_value = job_to_update.status.value
+        job.status = JobStatusEnum.failed_final
+        try:
+            commit_or_raise(db)
         except Exception:
-            logger.exception("Unable to mark job %s as failed after delivery error", job_identifier)
-        result = {
-            "status": status_value,
-            "provider_name": None,
-            "message": "Delivery orchestration error",
-        }
-    
-    final_provider = result.get("provider_name") or "none"
-    try:
-        MESSAGES_SEND_COUNTER.labels(
-            status=result["status"],
-            provider=final_provider,
-            channel=data.channel,
-        ).inc()
-    except Exception:  # pragma: no cover - metrics failures must not break API
-        logger.exception(
-            "Failed to record messages_send_total metric",
-            extra={
-                "event": "metrics_error",
-                "metric": "messages_send_total",
-                "provider": final_provider,
-            },
+            logger.exception(
+                "Failed to persist enqueue failure for job %s in org %s",
+                job_identifier,
+                current_user["org_id"],
+            )
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return SendMessageResponse(
+            job_id=str(job_identifier),
+            status=job.status.value,
+            provider_used=None,
+            estimated_cost=estimated_cost_minor,
+            message="Message enqueue error",
         )
 
     return SendMessageResponse(
         job_id=str(job_identifier),
-        status=result["status"],
-        provider_used=result.get("provider_name"),
+        status=initial_status,
+        provider_used=None,
         estimated_cost=estimated_cost_minor,
-        message=result.get("message", "Message sent successfully")
+        message="Message enqueued for asynchronous delivery",
     )
 
 
@@ -526,7 +491,7 @@ def get_message_routing_chain(
                 rule_id=action.rule_id,
                 rule_name=payload.get("rule_name"),
                 status=action.status,
-                provider_id=_coerce_uuid(payload.get("provider_id")),
+                provider_id=coerce_uuid(payload.get("provider_id")),
                 provider_name=payload.get("provider_name"),
                 attempt_number=payload.get("attempt_number"),
                 cost_minor=action.cost_minor,
@@ -537,468 +502,6 @@ def get_message_routing_chain(
         )
 
     return RoutedActionChainResponse(job_id=job_id, actions=filtered)
-
-async def _attempt_delivery_with_fallback(
-    db: Session,
-    job: MessageJob,
-    routing_decision: Dict[str, Any],
-    data: SendMessageRequest,
-    org_id: str,
-    estimated_cost_minor: int,
-    baseline_cost_minor: int,
-    circuit_breaker: CircuitBreakerStore,
-    job_identifier: UUID,
-) -> Dict[str, Any]:
-    """Tenta entrega com retry e fallback"""
-
-    job_org_uuid = _coerce_uuid(job.org_id)
-    org_uuid = _coerce_uuid(org_id)
-    rule_id = _coerce_uuid(routing_decision.get("rule_id"))
-    rule_name = routing_decision.get("rule_name")
-
-    if org_uuid is None:
-        logger.error("Invalid organization identifier %r for job %s", org_id, job_identifier)
-        job.status = JobStatusEnum.failed_final
-        try:
-            if job_org_uuid is not None:
-                failure_action = RoutedAction(
-                    org_id=job_org_uuid,
-                    rule_id=rule_id,
-                    message_event_id=None,
-                    action="deliver_message",
-                    status=JobStatusEnum.failed_final.value,
-                    provider_response=sanitize_provider_payload(
-                        {
-                            "job_id": str(job_identifier),
-                            "rule_name": rule_name,
-                            "provider_id": None,
-                            "provider_name": None,
-                            "reason": "invalid_org_context",
-                        }
-                    ),
-                    cost_minor=estimated_cost_minor,
-                )
-                db.add(failure_action)
-            _commit_or_raise(db)
-        except Exception:
-            logger.exception("Failed to persist invalid organization failure for job %s", job_identifier)
-        return {
-            "status": job.status.value,
-            "message": "Invalid organization context",
-        }
-
-    raw_providers = []
-
-    primary_identifier = routing_decision.get("provider_id")
-    if primary_identifier is not None:
-        raw_providers.append(primary_identifier)
-
-    fallback_chain = routing_decision.get("fallback_chain")
-    if fallback_chain in (None, ""):
-        fallback_candidates: Iterable[Any] = []
-    elif isinstance(fallback_chain, Iterable) and not isinstance(fallback_chain, (str, bytes)):
-        fallback_candidates = fallback_chain
-    else:
-        logger.warning(
-            "Invalid fallback chain %r for job %s; ignoring",
-            fallback_chain,
-            job_identifier,
-        )
-        fallback_candidates = []
-
-    raw_providers.extend(list(fallback_candidates))
-
-    providers_to_try = []
-    for raw_identifier in raw_providers:
-        provider_uuid = _coerce_uuid(raw_identifier)
-        if provider_uuid is None:
-            logger.warning("Skipping invalid provider identifier %r", raw_identifier)
-            continue
-        providers_to_try.append(provider_uuid)
-
-    attempt_number = 0
-
-    last_attempt_cost_minor = estimated_cost_minor
-
-    for provider_id in providers_to_try:
-        attempt_number += 1
-
-        provider = db.query(Provider).filter(
-            Provider.id == provider_id,
-            Provider.org_id == org_uuid,
-        ).first()
-        if not provider:
-            logger.warning("Provider %s not found for org %s", provider_id, org_uuid)
-            continue
-
-        state = circuit_breaker.get_state(str(provider.id))
-        _record_circuit_state(provider.id, state)
-        if state.is_blocked():
-            logger.info(
-                "Skipping provider %s on attempt %s due to circuit state %s",
-                provider.id,
-                attempt_number,
-                state.state,
-                extra={
-                    "event": "circuit_breaker_skip",
-                    "provider_id": str(provider.id),
-                    "provider_name": provider.name,
-                    "state": state.state,
-                    "failure_count": state.failure_count,
-                },
-            )
-            DELIVERY_ATTEMPTS_COUNTER.labels(
-                provider_id=str(provider.id),
-                provider=provider.name,
-                outcome="skipped_circuit",
-                channel=job.channel,
-            ).inc()
-            continue
-
-        credential = db.query(ProviderCredential).filter(
-            ProviderCredential.org_id == org_uuid,
-            ProviderCredential.provider_id == provider_id,
-            ProviderCredential.is_active.is_(True)
-        ).first()
-
-        if not credential:
-            logger.warning(f"No credentials for provider {provider_id}")
-            continue
-
-        try:
-            credentials_payload = decrypt_credentials(credential.credentials_encrypted)
-        except Exception as exc:
-            logger.error(f"Invalid credentials payload for provider {provider_id}: {exc}")
-            continue
-
-        attempt_cost_minor, attempt_currency = _resolve_pricing_context(
-            db=db,
-            provider_id=provider.id,
-            country_iso=job.country_iso,
-            category=job.template_category,
-            fallback_cost=estimated_cost_minor,
-        )
-        last_attempt_cost_minor = attempt_cost_minor
-
-        for retry in range(3):
-            connector = get_connector(
-                provider.name,
-                credentials_payload,
-                provider.base_url,
-                provider_type=provider.type,
-            )
-
-            try:
-                result = await connector.send_message(
-                    to_number=job.channel_address,
-                    template_id=data.template_id,
-                    variables=data.variables
-                )
-            except Exception as exc:
-                logger.error(f"Delivery error: {str(exc)}")
-                attempt = DeliveryAttempt(
-                    message_job_id=job_identifier,
-                    provider_id=provider.id,
-                    attempt_number=attempt_number,
-                    status=AttemptStatusEnum.failed,
-                    error_code="EXCEPTION",
-                    error_message=str(exc)
-                )
-                db.add(attempt)
-
-                exception_action = RoutedAction(
-                    org_id=job_org_uuid or provider.org_id,
-                    rule_id=rule_id,
-                    message_event_id=None,
-                    action="deliver_message",
-                    status=AttemptStatusEnum.failed.value,
-                    provider_response=sanitize_provider_payload(
-                        {
-                            "job_id": str(job_identifier),
-                            "rule_name": rule_name,
-                            "provider_id": str(provider.id),
-                            "provider_name": provider.name,
-                            "attempt_number": attempt_number,
-                            "retry": retry,
-                            "error": str(exc),
-                        }
-                    ),
-                    cost_minor=attempt_cost_minor,
-                )
-                db.add(exception_action)
-
-                try:
-                    _commit_or_raise(db)
-                except Exception:
-                    logger.exception("Failed to record delivery exception for provider %s", provider.id)
-                    raise
-
-                new_state = circuit_breaker.mark_failure(str(provider.id))
-                _record_circuit_state(provider.id, new_state)
-                _log_circuit_transition(
-                    provider_id=provider.id,
-                    provider_name=provider.name,
-                    state=new_state,
-                    reason="exception",
-                )
-                DELIVERY_ATTEMPTS_COUNTER.labels(
-                    provider_id=str(provider.id),
-                    provider=provider.name,
-                    outcome="exception",
-                    channel=job.channel,
-                ).inc()
-                break
-
-            attempt_status = AttemptStatusEnum.success if result["success"] else AttemptStatusEnum.failed
-            sanitized_provider_payload = sanitize_provider_payload(result.get("response"))
-
-            attempt = DeliveryAttempt(
-                message_job_id=job_identifier,
-                provider_id=provider.id,
-                attempt_number=attempt_number,
-                status=attempt_status,
-                error_code=result.get("error_code"),
-                error_message=result.get("error_message"),
-                latency_ms=result.get("latency_ms"),
-                provider_message_id=result.get("provider_message_id"),
-                provider_response=sanitized_provider_payload,
-            )
-            db.add(attempt)
-
-            if result["success"]:
-                new_state = circuit_breaker.mark_success(str(provider.id))
-                _record_circuit_state(provider.id, new_state)
-                _log_circuit_transition(
-                    provider_id=provider.id,
-                    provider_name=provider.name,
-                    state=new_state,
-                    reason="success",
-                )
-
-                cost_record = CostRecord(
-                    message_job_id=job_identifier,
-                    provider_id=provider.id,
-                    price_eur=attempt_cost_minor,
-                    country_iso=job.country_iso,
-                    category=job.template_category,
-                    price_table_version="v1",
-                )
-                db.add(cost_record)
-
-                provider_message_id = result.get("provider_message_id")
-                if not provider_message_id:
-                    provider_message_id = f"job-{job_identifier}-attempt-{attempt_number}"
-
-                event_attributes = {
-                    "routing_rule_id": str(rule_id) if rule_id else None,
-                    "routing_rule_name": rule_name,
-                    "provider_id": str(provider.id),
-                }
-                event_attributes = {k: v for k, v in event_attributes.items() if v is not None}
-
-                message_event = MessageEvent(
-                    id=uuid.uuid4(),
-                    org_id=job.org_id,
-                    message_job_id=job_identifier,
-                    connection_id=None,
-                    channel=job.channel,
-                    channel_address=job.channel_address,
-                    contact_id=job.contact_id,
-                    provider_event_id=provider_message_id,
-                    direction="outbound",
-                    template_name=job.template_id,
-                    category=job.template_category,
-                    country_iso=job.country_iso,
-                    phone_cc=None,
-                    timestamp_provider=datetime.now(timezone.utc),
-                    delivery_status="delivered",
-                    unit_cost_minor=attempt_cost_minor,
-                    baseline_cost_minor=baseline_cost_minor,
-                    currency=attempt_currency,
-                    attributes=event_attributes or None,
-                )
-                db.add(message_event)
-
-                lifecycle_service = ConversationLifecycleService(db)
-                lifecycle_service.handle_outbound(
-                    org_id=job.org_id,
-                    channel=job.channel,
-                    channel_address=job.channel_address or job.to_number,
-                    contact_id=job.contact_id,
-                    occurred_at=message_event.timestamp_provider,
-                )
-
-                job.status = (
-                    JobStatusEnum.delivered
-                    if attempt_number == 1
-                    else JobStatusEnum.delivered_with_fallback
-                )
-
-                success_action = RoutedAction(
-                    org_id=job_org_uuid or provider.org_id,
-                    rule_id=rule_id,
-                    message_event_id=message_event.id,
-                    action="deliver_message",
-                    status=job.status.value,
-                    provider_response=sanitize_provider_payload(
-                        {
-                            "job_id": str(job_identifier),
-                            "rule_name": rule_name,
-                            "provider_id": str(provider.id),
-                            "provider_name": provider.name,
-                            "attempt_number": attempt_number,
-                            "connector_response": result.get("response"),
-                            "provider_message_id": provider_message_id,
-                        }
-                    ),
-                    cost_minor=attempt_cost_minor,
-                )
-                db.add(success_action)
-
-                _commit_or_raise(db)
-
-                DELIVERY_ATTEMPTS_COUNTER.labels(
-                    provider_id=str(provider.id),
-                    provider=provider.name,
-                    outcome="success",
-                    channel=job.channel,
-                ).inc()
-
-                return {
-                    "status": job.status.value,
-                    "provider_name": provider.name,
-                    "message": "Message delivered successfully"
-                }
-
-            failure_action = RoutedAction(
-                org_id=job_org_uuid or provider.org_id,
-                rule_id=rule_id,
-                message_event_id=None,
-                action="deliver_message",
-                status=attempt_status.value,
-                provider_response=sanitize_provider_payload(
-                    {
-                        "job_id": str(job_identifier),
-                        "rule_name": rule_name,
-                        "provider_id": str(provider.id),
-                        "provider_name": provider.name,
-                        "attempt_number": attempt_number,
-                        "connector_response": result.get("response"),
-                        "error_code": result.get("error_code"),
-                        "error_message": result.get("error_message"),
-                    }
-                ),
-                cost_minor=attempt_cost_minor,
-            )
-            db.add(failure_action)
-
-            try:
-                _commit_or_raise(db)
-            except Exception:
-                logger.exception("Failed to record failed attempt for provider %s", provider.id)
-                raise
-
-            if result.get("error_code") in ["429", "timeout"]:
-                await asyncio.sleep(2 ** retry)
-                continue
-
-            new_state = circuit_breaker.mark_failure(str(provider.id))
-            _record_circuit_state(provider.id, new_state)
-            _log_circuit_transition(
-                provider_id=provider.id,
-                provider_name=provider.name,
-                state=new_state,
-                reason="failure",
-            )
-            DELIVERY_ATTEMPTS_COUNTER.labels(
-                provider_id=str(provider.id),
-                provider=provider.name,
-                outcome="failure",
-                channel=job.channel,
-            ).inc()
-
-            break
-
-    # Todos os providers falharam
-    job.status = JobStatusEnum.failed_final
-
-    final_action = RoutedAction(
-        org_id=job_org_uuid or job.org_id,
-        rule_id=rule_id,
-        message_event_id=None,
-        action="deliver_message",
-        status=job.status.value,
-        provider_response=sanitize_provider_payload(
-            {
-                "job_id": str(job_identifier),
-                "rule_name": rule_name,
-                "provider_id": None,
-                "provider_name": None,
-                "reason": "all_providers_failed",
-            }
-        ),
-        cost_minor=last_attempt_cost_minor,
-    )
-    db.add(final_action)
-
-    _commit_or_raise(db)
-
-    return {
-        "status": job.status.value,
-        "message": "All providers failed"
-    }
-
-
-def _record_circuit_state(provider_id: UUID | str, state: CircuitState) -> None:
-    try:
-        value_map = {"closed": 0, "half-open": 1, "open": 2}
-        CIRCUIT_STATE_GAUGE.labels(provider_id=str(provider_id)).set(value_map.get(state.state, 0))
-    except Exception:  # pragma: no cover - metrics failures must not break API
-        logger.exception(
-            "Failed to record circuit state metric",
-            extra={"event": "metrics_error", "metric": "messages_circuit_breaker_state"},
-        )
-
-
-def _log_circuit_transition(
-    *,
-    provider_id: UUID | str,
-    provider_name: str,
-    state: CircuitState,
-    reason: str,
-) -> None:
-    payload = {
-        "event": "circuit_breaker_state",
-        "provider_id": str(provider_id),
-        "provider_name": provider_name,
-        "state": state.state,
-        "failure_count": state.failure_count,
-        "reason": reason,
-    }
-
-    if state.state == "open":
-        logger.warning(
-            "Circuit breaker opened for provider %s (%s) after %s",
-            provider_name,
-            provider_id,
-            reason,
-            extra=payload,
-        )
-    elif state.state == "half-open":
-        logger.info(
-            "Circuit breaker half-open for provider %s (%s)",
-            provider_name,
-            provider_id,
-            extra=payload,
-        )
-    elif state.state == "closed" and reason == "success":
-        logger.info(
-            "Circuit breaker closed for provider %s (%s)",
-            provider_name,
-            provider_id,
-            extra=payload,
-        )
-
 
 def _normalize_channel_address_value(
     channel: Optional[str],
@@ -1068,7 +571,7 @@ def _resolve_recipient_context(
     contact_id: Optional[UUID],
     provided_address: Optional[str],
 ) -> Tuple[Optional[UUID], Optional[str]]:
-    org_uuid = _coerce_uuid(org_id)
+    org_uuid = coerce_uuid(org_id)
     if org_uuid is None:
         raise HTTPException(status_code=400, detail="Invalid organization context")
 
@@ -1162,82 +665,6 @@ def _infer_country_from_number(number: str) -> str:
 
     return "XX"  # Unknown
 
-
-def _coerce_uuid(value: Any) -> Optional[UUID]:
-    """Safely convert arbitrary identifiers into UUID objects."""
-
-    if isinstance(value, UUID):
-        return value
-
-    try:
-        return UUID(str(value))
-    except (TypeError, ValueError):
-        return None
-
-
-def _commit_or_raise(db: Session) -> None:
-    """Commit the current transaction or propagate the failure after rollback."""
-
-    try:
-        db.commit()
-    except SQLAlchemyError as exc:
-        db.rollback()
-        raise exc
-    except Exception:
-        db.rollback()
-        raise
-
-
-def _ensure_job_attached(db: Session, job: MessageJob) -> MessageJob:
-    """Reload the job from the database if the session was reset."""
-
-    if job is None or getattr(job, "id", None) is None:
-        return job
-
-    refreshed = db.get(MessageJob, job.id)
-    return refreshed or job
-
-
-def _resolve_pricing_context(
-    *,
-    db: Session,
-    provider_id: UUID,
-    country_iso: Optional[str],
-    category: Optional[str],
-    fallback_cost: int,
-) -> Tuple[int, Optional[str]]:
-    """Resolve unit cost and currency for a delivery attempt."""
-
-    if category is None:
-        return fallback_cost, None
-
-    rate = (
-        db.query(RateCard)
-        .filter(
-            RateCard.provider_id == provider_id,
-            RateCard.country_iso == country_iso,
-            RateCard.category == category,
-        )
-        .order_by(RateCard.effective_from.desc())
-        .first()
-    )
-
-    if not rate and country_iso != "GLOBAL":
-        rate = (
-            db.query(RateCard)
-            .filter(
-                RateCard.provider_id == provider_id,
-                RateCard.country_iso == "GLOBAL",
-                RateCard.category == category,
-            )
-            .order_by(RateCard.effective_from.desc())
-            .first()
-        )
-
-    if rate:
-        return rate.unit_cost_minor, rate.currency
-
-    return fallback_cost, None
 
 @router.get("/jobs")
 def list_message_jobs(

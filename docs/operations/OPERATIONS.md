@@ -15,6 +15,15 @@ Este guia cobre tarefas rotineiras para operar o WA Cost Router em ambientes de 
 
 Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Makefile padronizam a ordem correta (migrations → seed → serviços).
 
+## Envio assíncrono de mensagens
+
+- `POST /messages/send` responde `202 Accepted` com o `job_id` e registra o job como `pending`; o processamento é realizado pelo worker RQ na fila `message_send`.
+- Em ambientes `ENVIRONMENT=local|dev|test` os horários de silêncio de marketing (`MARKETING_SILENT_HOURS_UTC`) são desativados automaticamente para evitar retornos 403 acidentais em demos e na suíte Newman. Defina explicitamente a variável para restaurar a janela em homologação/produção.
+- O worker dedicado (vide `backend/app/workers/message_send.py`) executa `MessageDeliveryService`, atualizando `MessageJob`, `DeliveryAttempt`, `MessageEvent` e métricas (`messages_send_total`, `messages_delivery_attempts_total`, `messages_circuit_breaker_state`).
+- Para acompanhar a fila utilize `docker compose exec redis rq info message_send` ou `rq worker message_send` em ambientes que utilizem workers separados.
+- Idempotência permanece garantida por `(org_id, idempotency_key)`. Requisições repetidas retornam `200 OK` com o status consolidado do job.
+- Em incidentes, verifique o log do worker (`make logs worker`) e confirme o estado no banco (`SELECT status FROM message_job WHERE id = '<job_id>'`).
+
 ## Modo sandbox dos conectores
 
 - `SANDBOX_PROVIDERS=true` (default em `.env.example`, `docker-compose.yml` e `make dev`) instrui a API/worker a usar `SandboxProviderConnector`, que não realiza chamadas HTTP externas.

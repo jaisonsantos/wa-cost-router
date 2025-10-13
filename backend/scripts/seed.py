@@ -65,6 +65,10 @@ DEFAULT_SMS_FROM_NUMBER = "+15558675309"
 DEFAULT_SMS_WEBHOOK_TOKEN = "demo-sms-webhook-token"
 DEFAULT_SMS_UNIT_COST_MINOR = 140
 
+DEFAULT_CRM_PROVIDER_NAME = "HubSpot Sandbox"
+DEFAULT_CRM_PROVIDER_SLUG = "hubspot"
+DEFAULT_CRM_ACCESS_TOKEN = "sandbox-crm-access-token"
+
 DEFAULT_CONTACT_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")
 DEFAULT_CONTACT_EMAIL = "dana.customer@example.com"
 DEFAULT_CONTACT_PHONE = "+5511987654321"
@@ -295,6 +299,72 @@ def seed():
                     currency="USD",
                 )
             )
+
+        crm_provider = (
+            db.query(Provider)
+            .filter(
+                Provider.org_id == org.id,
+                Provider.name == DEFAULT_CRM_PROVIDER_NAME,
+            )
+            .first()
+        )
+
+        crm_meta = {"slug": DEFAULT_CRM_PROVIDER_SLUG}
+
+        if not crm_provider:
+            crm_provider = Provider(
+                org_id=org.id,
+                name=DEFAULT_CRM_PROVIDER_NAME,
+                type="crm",
+                status="active",
+                meta=crm_meta,
+            )
+            db.add(crm_provider)
+            db.flush()
+        else:
+            merged_meta = dict(crm_provider.meta or {})
+            merged_meta.update(crm_meta)
+            crm_provider.status = "active"
+            crm_provider.meta = merged_meta
+
+        crm_credentials_payload = {
+            "access_token": DEFAULT_CRM_ACCESS_TOKEN,
+            "seed_contacts": [
+                {
+                    "id": "hubspot-sandbox-contact",
+                    "properties": {
+                        "firstname": "Taylor",
+                        "lastname": "Sandbox",
+                        "email": "crm.sandbox@example.com",
+                        "phone": "+15550000000",
+                        "lastmodifieddate": int(now.timestamp() * 1000),
+                    },
+                }
+            ],
+        }
+
+        crm_credentials = (
+            db.query(ProviderCredential)
+            .filter(
+                ProviderCredential.org_id == org.id,
+                ProviderCredential.provider_id == crm_provider.id,
+            )
+            .first()
+        )
+
+        if not crm_credentials:
+            crm_credentials = ProviderCredential(
+                org_id=org.id,
+                provider_id=crm_provider.id,
+                credentials_encrypted=encrypt_credentials(crm_credentials_payload),
+                is_active=True,
+            )
+            db.add(crm_credentials)
+        else:
+            crm_credentials.credentials_encrypted = encrypt_credentials(
+                crm_credentials_payload
+            )
+            crm_credentials.is_active = True
 
         sms_provider = (
             db.query(Provider)

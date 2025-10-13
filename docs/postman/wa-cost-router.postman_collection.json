@@ -709,10 +709,14 @@
                 "type": "text/javascript",
                 "exec": [
                   "(() => {",
+                  "  pm.test(\"Messages send accepted for async processing\", function () {",
+                  "    pm.response.to.have.status(202);",
+                  "  });",
                   "  let body = null;",
                   "  try { body = pm.response.json(); } catch (err) { body = null; }",
                   "  if (body && body.job_id) {",
                   "    pm.environment.set('job_id', body.job_id);",
+                  "    pm.environment.unset('last_message_status');",
                   "  }",
                   "})();"
                 ]
@@ -739,6 +743,84 @@
               "path": [
                 "messages",
                 "send"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Messages - Await Job Completion",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(() => {",
+                  "  const jobId = pm.environment.get('job_id');",
+                  "  pm.test('Job id captured from /messages/send', function () {",
+                  "    pm.expect(jobId, 'job_id').to.be.ok;",
+                  "  });",
+                  "  if (!jobId) {",
+                  "    return;",
+                  "  }",
+                  "  const baseUrl = pm.environment.get('base_url');",
+                  "  const authHeader = pm.request.headers.get('Authorization');",
+                  "  const poll = (attempt = 1) => {",
+                  "    pm.sendRequest({",
+                  "      url: `${baseUrl}/messages/jobs/${jobId}`,",
+                  "      method: 'GET',",
+                  "      header: authHeader ? [{ key: 'Authorization', value: authHeader }] : []",
+                  "    }, function (err, res) {",
+                  "      pm.test('Job status fetch succeeds', function () {",
+                  "        pm.expect(err).to.be.null;",
+                  "        pm.expect(res).to.have.property('code', 200);",
+                  "      });",
+                  "      if (err || !res) {",
+                  "        return;",
+                  "      }",
+                  "      let body = null;",
+                  "      try { body = res.json(); } catch (jsonErr) { body = null; }",
+                  "      const status = body && body.status;",
+                  "      if (status && !['pending', 'processing'].includes(status)) {",
+                  "        pm.environment.set('last_message_status', status);",
+                  "        pm.test('Job finished', function () {",
+                  "          pm.expect(['delivered', 'delivered_with_fallback', 'failed_final']).to.include(status);",
+                  "        });",
+                  "        return;",
+                  "      }",
+                  "      if (attempt >= 5) {",
+                  "        pm.test('Job finished within timeout', function () {",
+                  "          pm.expect.fail('Job still pending ap\u00f3s 5 tentativas');",
+                  "        });",
+                  "        return;",
+                  "      }",
+                  "      setTimeout(() => poll(attempt + 1), 200);",
+                  "    });",
+                  "  };",
+                  "  poll();",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/messages/jobs/{{job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "jobs",
+                "{{job_id}}"
               ]
             }
           }
@@ -2976,6 +3058,11 @@
           "  pm.request.headers.upsert({ key: 'Authorization', value: `Bearer ${token}` });",
           "} else {",
           "  pm.request.headers.remove('Authorization');",
+          "}",
+          "const orgId = pm.environment.get('org_id');",
+          "const crmOrgId = pm.environment.get('crm_org_id');",
+          "if (orgId && !crmOrgId) {",
+          "  pm.environment.set('crm_org_id', orgId);",
           "}"
         ]
       }

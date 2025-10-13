@@ -261,3 +261,108 @@ def test_crm_poll_endpoint_returns_sync_summary(monkeypatch, client, db_session)
         "since": None,
         "page_size": 25,
     }
+
+
+def test_sandbox_mode_auto_provisions_provider(monkeypatch, client, db_session):
+    monkeypatch.setattr(settings, "SANDBOX_PROVIDERS", True)
+
+    org = Organization(id=uuid.uuid4(), name="Sandbox Org")
+    db_session.add(org)
+    db_session.flush()
+
+    response = client.post(
+        "/integrations/crm/hubspot/poll",
+        params={"org_id": str(org.id)},
+        json={},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["processed_contacts"] >= 1
+    assert body["origin"] == "polling"
+
+    db_session.expire_all()
+
+    provider = (
+        db_session.query(Provider)
+        .filter(Provider.org_id == org.id, Provider.type == "crm")
+        .one()
+    )
+    assert provider.meta.get("slug") == "hubspot"
+
+    credential = (
+        db_session.query(ProviderCredential)
+        .filter(
+            ProviderCredential.org_id == org.id,
+            ProviderCredential.provider_id == provider.id,
+        )
+        .one_or_none()
+    )
+    assert credential is not None
+    assert credential.is_active is True
+
+    contacts = db_session.query(Contact).filter(Contact.org_id == org.id).all()
+    assert contacts
+    assert all(contact.source == "crm_sync" for contact in contacts)
+
+
+def test_sandbox_mode_webhook_creates_provider(monkeypatch, client, db_session):
+    monkeypatch.setattr(settings, "SANDBOX_PROVIDERS", True)
+
+    org = Organization(id=uuid.uuid4(), name="Webhook Org")
+    db_session.add(org)
+    db_session.flush()
+
+    payload = {
+        "events": [
+            {
+                "objectType": "contact.propertyChange",
+                "objectId": "sandbox-1",
+                "occurredAt": "2024-12-01T12:00:00Z",
+                "properties": {
+                    "firstname": "Web",
+                    "lastname": "Hook",
+                    "email": "webhook@example.com",
+                },
+                "eventId": "evt-sandbox",
+            }
+        ]
+    }
+
+    signature = _build_signature("test-secret", payload)
+
+    response = client.post(
+        "/integrations/crm/hubspot/webhook",
+        params={"org_id": str(org.id)},
+        data=json.dumps(payload),
+        headers={
+            "Content-Type": "application/json",
+            "X-HubSpot-Signature": signature,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["processed_contacts"] == 1
+
+    db_session.expire_all()
+
+    provider = (
+        db_session.query(Provider)
+        .filter(Provider.org_id == org.id, Provider.type == "crm")
+        .one()
+    )
+    assert provider.meta.get("slug") == "hubspot"
+
+    credential = (
+        db_session.query(ProviderCredential)
+        .filter(
+            ProviderCredential.org_id == org.id,
+            ProviderCredential.provider_id == provider.id,
+        )
+        .one_or_none()
+    )
+    assert credential is not None
+    assert credential.is_active is True
+
+    contact = db_session.query(Contact).filter(Contact.org_id == org.id).one()
+    assert contact.external_id == "sandbox-1"
