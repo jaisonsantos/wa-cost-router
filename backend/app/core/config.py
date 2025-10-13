@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -61,13 +61,23 @@ class Settings(BaseSettings):
     METRICS_AUTH_HEADER_NAME: str = "X-Admin-Token"
     METRICS_AUTH_LOCAL_TOKEN: str = "local-admin-metrics-token"
 
+    @staticmethod
+    def _normalize_cors_origins(value: Any) -> list[str] | Any:
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def _preprocess_cors_origins(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "API_CORS_ORIGINS" in data:
+            data["API_CORS_ORIGINS"] = cls._normalize_cors_origins(data["API_CORS_ORIGINS"])
+        return data
+
     @field_validator("API_CORS_ORIGINS", mode="before")
     @classmethod
     def _split_cors_origins(cls, value: Any) -> list[str] | Any:
-        if isinstance(value, str):
-            origins = [origin.strip() for origin in value.split(",") if origin.strip()]
-            return origins
-        return value
+        return cls._normalize_cors_origins(value)
 
     def model_post_init(self, __context: Any) -> None:  # pragma: no cover - exercised via settings singleton
         super().model_post_init(__context)

@@ -23,3 +23,21 @@ def test_custom_cors_origins_are_applied():
         "https://app.example.com",
         "https://admin.example.com",
     ]
+
+
+def test_empty_string_cors_origins_does_not_crash():
+    settings = Settings(
+        _env_file=None,
+        API_CORS_ORIGINS="",
+        ENVIRONMENT="production",
+    )
+
+    app = create_app(settings=settings)
+
+    cors_middleware = next(
+        (middleware for middleware in app.user_middleware if middleware.cls is CORSMiddleware),
+        None,
+    )
+
+    assert cors_middleware is not None
+    assert cors_middleware.kwargs["allow_origins"] == []
