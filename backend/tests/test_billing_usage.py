@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -198,6 +199,80 @@ def test_mark_message_billable_generates_window_id(db_session, organization, mon
     )
     assert generated, "expected uuid.uuid4 to be invoked"
     assert str(window.id) == str(generated[0])
+
+
+def test_mark_message_billable_handles_pending_event(db_session, organization, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_USAGE_GRACE_MINUTES", 0)
+    monkeypatch.setattr(settings, "BILLING_USAGE_LOOKBACK_DAYS", 1)
+    occurred_at = datetime.now(timezone.utc)
+
+    event = MessageEvent(
+        id=uuid.uuid4(),
+        org_id=organization.id,
+        message_job_id=None,
+        connection_id=None,
+        channel="whatsapp",
+        channel_address="+123456789",
+        contact_id=None,
+        provider_event_id=str(uuid.uuid4()),
+        direction="outbound",
+        template_name="welcome",
+        category="marketing",
+        country_iso="ES",
+        timestamp_provider=occurred_at,
+        delivery_status="delivered",
+        unit_cost_minor=10,
+        baseline_cost_minor=12,
+        currency="eur",
+        attributes={},
+    )
+    db_session.add(event)
+
+    service = BillingUsageService(db_session)
+    service.mark_message_billable(message_event_id=event.id)
+    db_session.commit()
+
+    db_session.refresh(event)
+    assert event.is_billable is True
+
+    window = (
+        db_session.query(BillingUsageWindow)
+        .filter(BillingUsageWindow.org_id == organization.id)
+        .one()
+    )
+    assert window.status == BillingUsageWindowStatusEnum.pending
+
+
+def test_mark_message_billable_recovers_from_integrity_error(db_session, organization, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_USAGE_GRACE_MINUTES", 0)
+    monkeypatch.setattr(settings, "BILLING_USAGE_LOOKBACK_DAYS", 1)
+    event = _create_message_event(
+        db_session,
+        org_id=organization.id,
+        occurred_at=datetime.now(timezone.utc),
+    )
+
+    service = BillingUsageService(db_session)
+
+    def boom(*args, **kwargs):  # noqa: ANN001
+        raise IntegrityError("insert", {}, Exception("duplicate key"))
+
+    monkeypatch.setattr(service, "_ensure_window", boom)
+
+    service.mark_message_billable(message_event_id=event.id)
+
+    # commit should not fail even though ensure_window raised
+    db_session.commit()
+
+    refreshed = db_session.get(MessageEvent, event.id)
+    assert refreshed.is_billable is True
+
+    windows = (
+        db_session.query(BillingUsageWindow)
+        .filter(BillingUsageWindow.org_id == organization.id)
+        .all()
+    )
+    assert windows == []
 
 
 def test_sync_due_windows_sends_usage_and_updates_state(db_session, organization, monkeypatch):

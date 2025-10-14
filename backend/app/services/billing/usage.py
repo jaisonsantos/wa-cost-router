@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, func
-from sqlalchemy.orm import Session
-from stripe import error as stripe_error
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+from stripe import error as stripe_error
 
 from app.core.config import settings
 from app.metrics import record_billing_usage_sync
@@ -65,7 +66,16 @@ class BillingUsageService:
 
         event = self.db.get(MessageEvent, message_event_id)
         if event is None:
-            return
+            event = next(
+                (
+                    pending
+                    for pending in self.db.new
+                    if isinstance(pending, MessageEvent) and pending.id == message_event_id
+                ),
+                None,
+            )
+            if event is None:
+                return
 
         if not event.timestamp_provider:
             event.timestamp_provider = datetime.now(timezone.utc)
@@ -76,8 +86,39 @@ class BillingUsageService:
         if not event.is_billable:
             event.is_billable = True
 
-        window = self._ensure_window(org_id=event.org_id, reference=timestamp)
-        self._mark_window_pending(window, reference=timestamp)
+        try:
+            with self.db.begin_nested():
+                window = self._ensure_window(org_id=event.org_id, reference=timestamp)
+                if window is None:
+                    logger.warning(
+                        "Unable to ensure billing usage window",  # pragma: no cover - defensive guard
+                        extra={
+                            "event": "billing_usage_window_missing",
+                            "org_id": str(event.org_id),
+                            "message_event_id": str(event.id),
+                        },
+                    )
+                    return
+                self._mark_window_pending(window, reference=timestamp)
+        except SQLAlchemyError as exc:  # pragma: no cover - nested rollback keeps outer tx valid
+            logger.warning(
+                "Failed to enqueue billing usage window", 
+                extra={
+                    "event": "billing_usage_window_error",
+                    "org_id": str(event.org_id),
+                    "message_event_id": str(event.id),
+                },
+                exc_info=exc,
+            )
+        except Exception:  # pragma: no cover - usage marking must not break delivery
+            logger.exception(
+                "Unexpected error marking message as billable",
+                extra={
+                    "event": "billing_usage_mark_error",
+                    "org_id": str(event.org_id),
+                    "message_event_id": str(event.id),
+                },
+            )
 
     def ensure_backfill(self, *, now: datetime | None = None) -> None:
         """Ensure usage windows exist for the lookback horizon for all orgs."""
