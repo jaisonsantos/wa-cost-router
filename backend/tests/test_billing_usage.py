@@ -28,6 +28,7 @@ from app.models.models import (  # noqa: E402
     MessageEvent,
     Organization,
 )  # noqa: E402
+import app.services.billing.usage as usage_module  # noqa: E402
 from app.services.billing.usage import BillingUsageService, UsageSyncResult  # noqa: E402
 from app.workers.billing_usage import (  # noqa: E402
     enqueue_billing_usage_sync,
@@ -165,6 +166,38 @@ def test_mark_message_billable_is_idempotent_for_same_window(db_session, organiz
     )
     assert len(windows) == 1
     assert windows[0].status == BillingUsageWindowStatusEnum.pending
+
+
+def test_mark_message_billable_generates_window_id(db_session, organization, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_USAGE_GRACE_MINUTES", 0)
+    monkeypatch.setattr(settings, "BILLING_USAGE_LOOKBACK_DAYS", 1)
+    event = _create_message_event(
+        db_session,
+        org_id=organization.id,
+        occurred_at=datetime.now(timezone.utc),
+    )
+
+    original_uuid4 = usage_module.uuid.uuid4
+    generated: list[uuid.UUID] = []
+
+    def fake_uuid4() -> uuid.UUID:
+        value = original_uuid4()
+        generated.append(value)
+        return value
+
+    monkeypatch.setattr(usage_module.uuid, "uuid4", fake_uuid4)
+
+    service = BillingUsageService(db_session)
+    service.mark_message_billable(message_event_id=event.id)
+    db_session.commit()
+
+    window = (
+        db_session.query(BillingUsageWindow)
+        .filter(BillingUsageWindow.org_id == organization.id)
+        .one()
+    )
+    assert generated, "expected uuid.uuid4 to be invoked"
+    assert str(window.id) == str(generated[0])
 
 
 def test_sync_due_windows_sends_usage_and_updates_state(db_session, organization, monkeypatch):

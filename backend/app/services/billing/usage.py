@@ -292,6 +292,7 @@ class BillingUsageService:
         if window is None:
             dialect = (self.db.bind.dialect.name if self.db.bind else "postgresql").lower()
             values = {
+                "id": uuid.uuid4(),
                 "org_id": org_id,
                 "period_start": period_start,
                 "period_end": period_end,
