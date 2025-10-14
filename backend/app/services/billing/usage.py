@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 from stripe import error as stripe_error
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.core.config import settings
 from app.metrics import record_billing_usage_sync
@@ -288,16 +290,40 @@ class BillingUsageService:
         )
 
         if window is None:
-            window = BillingUsageWindow(
-                org_id=org_id,
-                period_start=period_start,
-                period_end=period_end,
-                status=BillingUsageWindowStatusEnum.pending,
-                retry_count=0,
-                next_run_at=self._next_due_at(period_end, reference),
+            dialect = (self.db.bind.dialect.name if self.db.bind else "postgresql").lower()
+            values = {
+                "org_id": org_id,
+                "period_start": period_start,
+                "period_end": period_end,
+            }
+
+            if dialect == "postgresql":
+                statement = (
+                    pg_insert(BillingUsageWindow)
+                    .values(**values)
+                    .on_conflict_do_nothing(
+                        index_elements=["org_id", "period_start", "period_end"],
+                    )
+                )
+                self.db.execute(statement)
+                self.db.flush()
+            elif dialect == "sqlite":
+                statement = sqlite_insert(BillingUsageWindow).values(**values)
+                statement = statement.prefix_with("OR IGNORE")
+                self.db.execute(statement)
+                self.db.flush()
+
+            window = (
+                self.db.query(BillingUsageWindow)
+                .filter(
+                    and_(
+                        BillingUsageWindow.org_id == org_id,
+                        BillingUsageWindow.period_start == period_start,
+                        BillingUsageWindow.period_end == period_end,
+                    )
+                )
+                .first()
             )
-            self.db.add(window)
-            self.db.flush([window])
 
         return window
 

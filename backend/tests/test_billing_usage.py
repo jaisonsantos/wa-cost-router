@@ -146,6 +146,27 @@ def test_mark_message_billable_creates_window(db_session, organization, monkeypa
     assert window_start <= event_time < window_end
 
 
+def test_mark_message_billable_is_idempotent_for_same_window(db_session, organization, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_USAGE_GRACE_MINUTES", 0)
+    monkeypatch.setattr(settings, "BILLING_USAGE_LOOKBACK_DAYS", 1)
+    moment = datetime.now(timezone.utc)
+    first = _create_message_event(db_session, org_id=organization.id, occurred_at=moment)
+    second = _create_message_event(db_session, org_id=organization.id, occurred_at=moment + timedelta(minutes=5))
+
+    service = BillingUsageService(db_session)
+    service.mark_message_billable(message_event_id=first.id)
+    service.mark_message_billable(message_event_id=second.id)
+    db_session.commit()
+
+    windows = (
+        db_session.query(BillingUsageWindow)
+        .filter(BillingUsageWindow.org_id == organization.id)
+        .all()
+    )
+    assert len(windows) == 1
+    assert windows[0].status == BillingUsageWindowStatusEnum.pending
+
+
 def test_sync_due_windows_sends_usage_and_updates_state(db_session, organization, monkeypatch):
     monkeypatch.setattr(settings, "BILLING_USAGE_GRACE_MINUTES", 0)
     monkeypatch.setattr(settings, "BILLING_USAGE_LOOKBACK_DAYS", 1)
