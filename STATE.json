@@ -20,9 +20,14 @@
     },
     {
       "name": "Stripe Billing",
-      "description": "Endpoints de checkout e webhook que atualizam BillingSubscription e expõem resumo para o frontend.",
-      "status": "parcial",
-      "references": ["backend/app/api/billing.py#L116-L320", "src/pages/Settings.tsx#L764-L856"]
+      "description": "Checkout, webhooks e sincronização de usage records (UsageRecord) com janelas idempotentes e métricas Prometheus.",
+      "status": "estável",
+      "references": [
+        "backend/app/api/billing.py#L1-L360",
+        "backend/app/services/billing/usage.py#L1-L220",
+        "backend/app/workers/billing_usage.py#L1-L120",
+        "docs/pricing/PRICING_BILLING.md#L1-L140"
+      ]
     },
     {
       "name": "Template Catalog",
@@ -38,6 +43,13 @@
       "responsibility": "Executa entregas, aplica retries e registra métricas de mensagens.",
       "status": "produção",
       "references": ["backend/app/workers/message_send.py#L33-L118", "backend/app/services/messages/delivery.py#L321-L707"]
+    },
+    {
+      "name": "billing_usage",
+      "queue": "billing_usage",
+      "responsibility": "Consolida mensagens faturáveis por janela diária e envia UsageRecord para o Stripe com retries e métricas.",
+      "status": "beta",
+      "references": ["backend/app/workers/billing_usage.py#L1-L120", "backend/app/services/billing/usage.py#L1-L220"]
     },
     {
       "name": "crm_sync",
@@ -76,16 +88,24 @@
       "path": "/billing/checkout",
       "purpose": "Cria sessão de checkout Stripe com metadados da organização.",
       "status": "beta",
-      "notes": "Depende de Stripe configurado e ainda não envia usage records.",
-      "references": ["backend/app/api/billing.py#L116-L197"]
+      "notes": "Depende de Stripe configurado; vincula price selecionado para cálculo de quotas/usage.",
+      "references": ["backend/app/api/billing.py#L1-L200"]
     },
     {
       "method": "POST",
       "path": "/billing/webhook",
       "purpose": "Processa eventos Stripe (subscription/invoice) e atualiza BillingSubscription.",
       "status": "beta",
-      "notes": "Requer `STRIPE_WEBHOOK_SECRET`; falta job de uso metered.",
-      "references": ["backend/app/api/billing.py#L300-L320"]
+      "notes": "Requer `STRIPE_WEBHOOK_SECRET`; persiste subscription item, quotas e invoices para o billing usage.",
+      "references": ["backend/app/api/billing.py#L200-L360"]
+    },
+    {
+      "method": "POST",
+      "path": "/billing/usage/sync",
+      "purpose": "Agenda sincronização de usage records (UsageRecord) para o Stripe.",
+      "status": "beta",
+      "notes": "Retorna job enfileirado na fila `billing_usage`; respeita flag `BILLING_USAGE_SYNC_ENABLED`.",
+      "references": ["backend/app/api/billing.py#L320-L360", "backend/app/workers/billing_usage.py#L1-L120"]
     },
     {
       "method": "GET",
@@ -125,9 +145,9 @@
     },
     {
       "name": "Billing recorrente",
-      "status": "parcial",
-      "notes": "Checkout/webhook ativos, mas falta uso metered e portal do cliente.",
-      "references": ["backend/app/api/billing.py#L116-L320", "docs/pricing/PRICING_BILLING.md#L10-L23"]
+      "status": "concluído",
+      "notes": "Checkout, webhooks e usage metered funcionando com janelas idempotentes; portal do cliente segue fora do escopo atual.",
+      "references": ["backend/app/api/billing.py#L1-L360", "backend/app/services/billing/usage.py#L1-L220", "docs/pricing/PRICING_BILLING.md#L1-L140"]
     },
     {
       "name": "Consentimento multicanal",
@@ -142,16 +162,16 @@
       "pricing_model": "definido no Stripe; nickname, moeda e quota vêm do webhook",
       "base_price_minor": "varia",
       "quota": "message_quota de metadata",
-      "references": ["backend/app/api/billing.py#L214-L251", "backend/tests/test_billing_api.py#L142-L220"]
+      "references": ["backend/app/api/billing.py#L1-L320", "backend/tests/test_billing_api.py#L1-L240"]
     }
   ],
   "risks": [
     {
       "id": "R1",
       "area": "Billing",
-      "severity": "alto",
-      "description": "Ausência de UsageRecord/Stripe Tax pode gerar divergência financeira em planos metered.",
-      "references": ["docs/pricing/PRICING_BILLING.md#L10-L23", "backend/app/api/billing.py#L116-L320"]
+      "severity": "médio",
+      "description": "UsageRecord implementado; monitorar reconciliacão com Stripe Tax e validar métricas em produção.",
+      "references": ["docs/pricing/PRICING_BILLING.md#L1-L140", "backend/app/services/billing/usage.py#L1-L220"]
     },
     {
       "id": "R2",

@@ -26,18 +26,21 @@
    • Branch sugerida: `chore/message-send-dlq`  
    • Título PR sugerido: `chore: adicionar DLQ e alarmes para message_send`
 
-3. **Registrar uso metered no Stripe Billing**  
-   • Prioridade: P0  
-   • Área: BE  
-   • Dependências: Nenhuma  
-   • Estimativa: M  
-   • Risco/Impacto: Sem usage records, faturamento não reflete mensagens reais.  
+3. **Registrar uso metered no Stripe Billing** — ✅ Concluída em 2025-10-14
+   • Prioridade: P0
+   • Área: BE
+   • Dependências: Nenhuma
+   • Estimativa: M
+   • Risco/Impacto: Sem usage records, faturamento não reflete mensagens reais.
    • DoD:
      - Implementar job/worker que envia `stripe.UsageRecord.create` para cada `MessageJob` concluído.
      - Cobrir retries idempotentes e logs de falha.
      - Atualizar testes de billing simulando invoice com consumo.
-   • Branch sugerida: `feat/stripe-usage-record`  
+   • Branch sugerida: `feat/stripe-usage-record`
    • Título PR sugerido: `feat: registrar consumo metered no Stripe`
+   • Resumo: billing_usage worker criado com janelas idempotentes, métricas Prometheus e endpoint `/billing/usage/sync`; message delivery marca eventos faturáveis sem bloquear fluxo.
+   • Commits/arquivos-chave: backend/app/services/billing/usage.py, backend/app/workers/billing_usage.py, backend/tests/test_billing_usage.py, backend/alembic/versions/016_billing_usage.py, docs/pricing/PRICING_BILLING.md.
+   • Notas de migração/rollback: aplicar `alembic upgrade head` para criar `billing_usage_window`/colunas novas; rollback via `alembic downgrade 015_routed_action_dry_run_flag` remove tabela e campos.
 
 4. **Formalizar sanitização retroativa de PII**  
    • Prioridade: P0  

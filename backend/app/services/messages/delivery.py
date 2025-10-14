@@ -30,6 +30,7 @@ from app.models.models import (
 from app.services.conversations import ConversationLifecycleService
 from app.services.provider_connectors import get_connector
 from app.services.routing_engine import RoutingEngine
+from app.services.billing.usage import BillingUsageService
 
 
 logger = logging.getLogger(__name__)
@@ -511,6 +512,22 @@ class MessageDeliveryService:
                         attributes=event_attributes or None,
                     )
                     self.db.add(message_event)
+
+                    try:
+                        usage_service = BillingUsageService(self.db)
+                        usage_service.mark_message_billable(
+                            message_event_id=message_event.id,
+                            occurred_at=message_event.timestamp_provider,
+                        )
+                    except Exception:  # pragma: no cover - usage marking must not break delivery
+                        logger.exception(
+                            "Failed to flag message event for billing usage",
+                            extra={
+                                "event": "billing_usage_mark_error",
+                                "org_id": str(job.org_id),
+                                "message_event_id": str(message_event.id),
+                            },
+                        )
 
                     lifecycle_service = ConversationLifecycleService(self.db)
                     lifecycle_service.handle_outbound(

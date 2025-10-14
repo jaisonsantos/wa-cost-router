@@ -38,6 +38,25 @@ class StripeGateway:
     def retrieve_payment_method(self, payment_method_id: str) -> Any:
         return self._client.payment_methods.retrieve(payment_method_id)
 
+    def create_usage_record(
+        self,
+        *,
+        subscription_item_id: str,
+        quantity: int,
+        timestamp: int,
+        action: str = "set",
+        idempotency_key: str | None = None,
+    ) -> Any:
+        payload: dict[str, Any] = {
+            "subscription_item": subscription_item_id,
+            "quantity": quantity,
+            "timestamp": timestamp,
+            "action": action,
+        }
+        if idempotency_key:
+            payload["idempotency_key"] = idempotency_key
+        return self._client.usage_records.create(**payload)
+
 
 @lru_cache(maxsize=1)
 def get_stripe_gateway() -> StripeGateway:

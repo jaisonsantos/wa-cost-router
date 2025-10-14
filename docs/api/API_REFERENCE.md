@@ -74,6 +74,26 @@ Retorna metadados da organização ativa do token.
 ```
 Erros: `404 Not Found` se a organização não existir (token inválido ou órfão).
 
+## Billing
+
+### `POST /billing/usage/sync`
+Agenda a sincronização das janelas de uso faturável com o Stripe. Disponível apenas quando `BILLING_USAGE_SYNC_ENABLED=true`.
+
+**Headers obrigatórios**
+- `Authorization: Bearer <token>`
+
+**Resposta 202**
+```json
+{
+  "job_id": "rq:job:usage:1a2b3c",
+  "status": "enqueued"
+}
+```
+
+O job é executado na fila `billing_usage` e respeita o batch configurado via `BILLING_USAGE_BATCH_SIZE`. Acompanhe o progresso pelo dashboard do RQ ou pelos logs (`event=billing_usage_batch`).
+
+Erros: `503 Service Unavailable` quando a flag estiver desabilitada; demais erros seguem o padrão FastAPI.
+
 ## Contatos
 
 ### `GET /contacts`

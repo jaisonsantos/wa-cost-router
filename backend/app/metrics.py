@@ -35,6 +35,12 @@ SLA_FIRST_RESPONSE_TARGET_SECONDS = Gauge(
     labelnames=["channel"],
 )
 
+BILLING_USAGE_RECORDS_COUNTER = Counter(
+    "billing_usage_records_total",
+    "Total de chamadas Stripe UsageRecord por status",
+    labelnames=["org_id", "status"],
+)
+
 
 def record_first_response_latency(
     channel: str,
@@ -61,4 +67,16 @@ def record_first_response_latency(
         logger.exception(
             "Failed to record first response SLA metrics",
             extra={"event": "metrics_error", "metric": "sla_first_response"},
+        )
+
+
+def record_billing_usage_sync(org_id: str, status: str) -> None:
+    """Incrementa contadores de usage record enviados ao Stripe."""
+
+    try:
+        BILLING_USAGE_RECORDS_COUNTER.labels(org_id=org_id, status=status).inc()
+    except Exception:  # pragma: no cover - métricas não devem quebrar o fluxo
+        logger.exception(
+            "Failed to record billing usage metric",
+            extra={"event": "metrics_error", "metric": "billing_usage_records", "org_id": org_id, "status": status},
         )
