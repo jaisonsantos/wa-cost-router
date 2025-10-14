@@ -458,6 +458,17 @@ Retorna a trilha de decisões (`RoutedAction`) gravada durante o envio, incluind
 ```json
 {
   "job_id": "<uuid>",
+  "latest_simulation": {
+    "rule_id": "<uuid>",
+    "rule_name": "route-sms-1a2b3c",
+    "provider_id": "<uuid>",
+    "provider_name": "Twilio Primary",
+    "estimated_cost_minor": 180,
+    "baseline_cost_minor": 220,
+    "fallback_chain": [
+      {"provider_id": "<uuid>", "provider_name": "Fallback Nexmo"}
+    ]
+  },
   "actions": [
     {
       "id": "<uuid>",
@@ -470,7 +481,11 @@ Retorna a trilha de decisões (`RoutedAction`) gravada durante o envio, incluind
       "cost_minor": 320,
       "connector_response": null,
       "created_at": "2025-10-09T11:21:00+00:00",
-      "message_event_id": null
+      "message_event_id": null,
+      "dry_run": false,
+      "estimated_cost_minor": null,
+      "baseline_cost_minor": null,
+      "fallback_chain": []
     },
     {
       "id": "<uuid>",
@@ -483,7 +498,11 @@ Retorna a trilha de decisões (`RoutedAction`) gravada durante o envio, incluind
       "cost_minor": 175,
       "connector_response": {"status": "ok"},
       "created_at": "2025-10-09T11:21:02+00:00",
-      "message_event_id": "<uuid>"
+      "message_event_id": "<uuid>",
+      "dry_run": false,
+      "estimated_cost_minor": null,
+      "baseline_cost_minor": null,
+      "fallback_chain": []
     }
   ]
 }
@@ -497,6 +516,17 @@ Simula novamente o roteamento do job sem alterar estado, registrando um `RoutedA
 ```json
 {
   "job_id": "<uuid>",
+  "latest_simulation": {
+    "rule_id": "<uuid>",
+    "rule_name": "route-sms-1a2b3c",
+    "provider_id": "<uuid>",
+    "provider_name": "Twilio Primary",
+    "estimated_cost_minor": 180,
+    "baseline_cost_minor": 220,
+    "fallback_chain": [
+      {"provider_id": "<uuid>", "provider_name": "Fallback Nexmo"}
+    ]
+  },
   "actions": [
     {
       "id": "<uuid>",
@@ -510,7 +540,12 @@ Simula novamente o roteamento do job sem alterar estado, registrando um `RoutedA
       "connector_response": null,
       "created_at": "2025-10-09T11:21:05+00:00",
       "message_event_id": null,
-      "dry_run": true
+      "dry_run": true,
+      "estimated_cost_minor": 180,
+      "baseline_cost_minor": 220,
+      "fallback_chain": [
+        {"provider_id": "<uuid>", "provider_name": "Fallback Nexmo"}
+      ]
     }
   ]
 }
@@ -520,6 +555,7 @@ Erros: `400 Bad Request` quando nenhuma rota elegível é encontrada, `403 Forbi
 Observações:
 - A simulação registra um novo item na cadeia com `dry_run: true`, preservando status original do job e suas tentativas reais.
 - O payload associado ao `RoutedAction` é sanitizado (`fallback_chain`, `provider_id`, `provider_name`) e serve apenas para auditoria.
+- O resumo `latest_simulation` replica os campos do último dry-run (custos estimado/baseline e fallback) para consumo rápido pelo frontend.
 
 ## Eventos
 

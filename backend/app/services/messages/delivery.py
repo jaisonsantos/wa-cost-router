@@ -99,6 +99,15 @@ class DeliveryResult:
     channel: Optional[str]
 
 
+@dataclass
+class DryRunResult:
+    """Representa o resultado de uma simulação de entrega."""
+
+    context: "DeliveryContext"
+    payload: Dict[str, Any]
+    routed_action: RoutedAction
+
+
 class DryRunNoRouteAvailable(RuntimeError):
     """Raised when the routing engine cannot determine a provider for the job."""
 
@@ -114,7 +123,7 @@ class MessageDeliveryDryRunService:
         self.db = db
         self.circuit_breaker = circuit_breaker
 
-    def simulate(self, *, job: MessageJob) -> DeliveryContext:
+    def simulate(self, *, job: MessageJob) -> DryRunResult:
         engine = RoutingEngine(
             self.db,
             job.org_id,
@@ -200,7 +209,11 @@ class MessageDeliveryDryRunService:
         except Exception:  # pragma: no cover - refresh best effort for defaults
             logger.exception("Failed to refresh dry-run routed action %s", dry_run_action.id)
 
-        return context
+        return DryRunResult(
+            context=context,
+            payload=dry_run_payload,
+            routed_action=dry_run_action,
+        )
 
     def _normalize_fallback_chain(self, fallback_chain: Any) -> list[str]:
         if fallback_chain in (None, ""):
