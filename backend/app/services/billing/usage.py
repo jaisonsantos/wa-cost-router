@@ -417,11 +417,20 @@ class BillingUsageService:
     def _yield_aux_sessions(self) -> Iterator[Session | None]:
         factory = self._session_factory
         if factory is None:
-            bind = self.db.get_bind()
+            bind = getattr(self.db, "bind", None)
+            if bind is None:
+                bind = self.db.get_bind()
             if bind is None:
                 yield None
                 return
-            factory = sessionmaker(bind=bind, expire_on_commit=False, autoflush=False, autocommit=False)
+
+            engine = getattr(bind, "engine", bind)
+            factory = sessionmaker(
+                bind=engine,
+                expire_on_commit=False,
+                autoflush=False,
+                autocommit=False,
+            )
             self._session_factory = factory
 
         session = factory()
