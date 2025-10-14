@@ -6,12 +6,13 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Callable, Iterator
 
 from sqlalchemy import and_, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from stripe import error as stripe_error
 
 from app.core.config import settings
@@ -49,9 +50,16 @@ class UsageSyncResult:
 class BillingUsageService:
     """Coordinates metered usage collection and synchronization with Stripe."""
 
-    def __init__(self, db: Session, stripe_gateway: StripeGateway | None = None) -> None:
+    def __init__(
+        self,
+        db: Session,
+        stripe_gateway: StripeGateway | None = None,
+        *,
+        session_factory: Callable[[], Session] | None = None,
+    ) -> None:
         self.db = db
         self._stripe_gateway = stripe_gateway
+        self._session_factory = session_factory
 
     # ------------------------------------------------------------------
     # Public API
@@ -87,22 +95,14 @@ class BillingUsageService:
             event.is_billable = True
 
         try:
-            with self.db.begin_nested():
-                window = self._ensure_window(org_id=event.org_id, reference=timestamp)
-                if window is None:
-                    logger.warning(
-                        "Unable to ensure billing usage window",  # pragma: no cover - defensive guard
-                        extra={
-                            "event": "billing_usage_window_missing",
-                            "org_id": str(event.org_id),
-                            "message_event_id": str(event.id),
-                        },
-                    )
-                    return
-                self._mark_window_pending(window, reference=timestamp)
-        except SQLAlchemyError as exc:  # pragma: no cover - nested rollback keeps outer tx valid
+            self._ensure_window_async(
+                org_id=event.org_id,
+                reference=timestamp,
+                message_event_id=event.id,
+            )
+        except SQLAlchemyError as exc:  # pragma: no cover - isolated session rollback
             logger.warning(
-                "Failed to enqueue billing usage window", 
+                "Failed to enqueue billing usage window",
                 extra={
                     "event": "billing_usage_window_error",
                     "org_id": str(event.org_id),
@@ -133,7 +133,7 @@ class BillingUsageService:
             org_id = subscription.org_id
             cursor = start_day
             while cursor < end_day:
-                window = self._ensure_window(org_id=org_id, reference=cursor)
+                window = self._ensure_window(session=self.db, org_id=org_id, reference=cursor)
                 if (
                     window.next_run_at is None
                     and window.status not in {
@@ -305,21 +305,33 @@ class BillingUsageService:
             window.next_run_at = now + timedelta(seconds=backoff_seconds)
         self.db.flush()
 
-    def _mark_window_pending(self, window: BillingUsageWindow, *, reference: datetime) -> None:
+    def _mark_window_pending(
+        self,
+        *,
+        session: Session,
+        window: BillingUsageWindow,
+        reference: datetime,
+    ) -> None:
         window.status = BillingUsageWindowStatusEnum.pending
         window.retry_count = 0
         window.last_error = None
         window.next_run_at = self._next_due_at(window.period_end, reference)
         window.updated_at = reference
-        self.db.flush()
+        session.flush()
 
-    def _ensure_window(self, *, org_id: uuid.UUID, reference: datetime) -> BillingUsageWindow:
+    def _ensure_window(
+        self,
+        *,
+        session: Session,
+        org_id: uuid.UUID,
+        reference: datetime,
+    ) -> BillingUsageWindow:
         reference = self._ensure_tz(reference)
         period_start = self._start_of_day(reference)
         period_end = period_start + timedelta(days=1)
 
         window = (
-            self.db.query(BillingUsageWindow)
+            session.query(BillingUsageWindow)
             .filter(
                 and_(
                     BillingUsageWindow.org_id == org_id,
@@ -331,7 +343,8 @@ class BillingUsageService:
         )
 
         if window is None:
-            dialect = (self.db.bind.dialect.name if self.db.bind else "postgresql").lower()
+            bind = session.get_bind()
+            dialect = (bind.dialect.name if bind is not None else "postgresql").lower()
             values = {
                 "id": uuid.uuid4(),
                 "org_id": org_id,
@@ -347,16 +360,16 @@ class BillingUsageService:
                         index_elements=["org_id", "period_start", "period_end"],
                     )
                 )
-                self.db.execute(statement)
-                self.db.flush()
+                session.execute(statement)
+                session.flush()
             elif dialect == "sqlite":
                 statement = sqlite_insert(BillingUsageWindow).values(**values)
                 statement = statement.prefix_with("OR IGNORE")
-                self.db.execute(statement)
-                self.db.flush()
+                session.execute(statement)
+                session.flush()
 
             window = (
-                self.db.query(BillingUsageWindow)
+                session.query(BillingUsageWindow)
                 .filter(
                     and_(
                         BillingUsageWindow.org_id == org_id,
@@ -365,9 +378,64 @@ class BillingUsageService:
                     )
                 )
                 .first()
-            )
+        )
 
         return window
+
+    def _ensure_window_async(
+        self,
+        *,
+        org_id: uuid.UUID,
+        reference: datetime,
+        message_event_id: uuid.UUID | None = None,
+    ) -> None:
+        for session in self._yield_aux_sessions():
+            if session is None:
+                logger.warning(
+                    "Unable to obtain auxiliary session for billing usage window",
+                    extra={
+                        "event": "billing_usage_session_missing",
+                        "org_id": str(org_id),
+                        "message_event_id": str(message_event_id) if message_event_id else None,
+                    },
+                )
+                return
+
+            window = self._ensure_window(session=session, org_id=org_id, reference=reference)
+            if window is None:
+                logger.warning(
+                    "Unable to ensure billing usage window",
+                    extra={
+                        "event": "billing_usage_window_missing",
+                        "org_id": str(org_id),
+                        "message_event_id": str(message_event_id) if message_event_id else None,
+                    },
+                )
+                return
+            self._mark_window_pending(session=session, window=window, reference=reference)
+
+    def _yield_aux_sessions(self) -> Iterator[Session | None]:
+        factory = self._session_factory
+        if factory is None:
+            bind = self.db.get_bind()
+            if bind is None:
+                yield None
+                return
+            factory = sessionmaker(bind=bind, expire_on_commit=False, autoflush=False, autocommit=False)
+            self._session_factory = factory
+
+        session = factory()
+        try:
+            yield session
+            session.commit()
+        except SQLAlchemyError:
+            session.rollback()
+            raise
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     def _calculate_quantity(
         self,
