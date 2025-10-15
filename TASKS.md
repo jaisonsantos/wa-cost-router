@@ -185,15 +185,31 @@
     • Branch sugerida: `chore/provider-alerts`  
     • Título PR sugerido: `chore: configurar alertas por provedor de mensagem`
 
-15. **Refinar importação de contatos com idempotência expandida**  
-    • Prioridade: P2  
-    • Área: BE  
-    • Dependências: Nenhuma  
-    • Estimativa: M  
-    • Risco/Impacto: CSVs repetidos podem gerar duplicidade parcial e ruído de consentimento.  
+15. **Refinar importação de contatos com idempotência expandida**
+    • Prioridade: P2
+    • Área: BE
+    • Dependências: Nenhuma
+    • Estimativa: M
+    • Risco/Impacto: CSVs repetidos podem gerar duplicidade parcial e ruído de consentimento.
     • DoD:
       - Adicionar chave idempotente por arquivo (`hash`) evitando reprocessamentos acidentais.
       - Melhorar relatório de erros destacando linhas ignoradas por duplicidade.
       - Criar teste cobrindo reenvio do mesmo arquivo.
-    • Branch sugerida: `feat/contact-import-idempotency`  
+    • Branch sugerida: `feat/contact-import-idempotency`
     • Título PR sugerido: `feat: reforçar idempotência na importação de contatos`
+
+16. **Stripe Tax automático + reconciliação diária de invoices** — ✅ Concluída em 2025-10-16
+    • Prioridade: P0
+    • Área: BE
+    • Dependências: Nenhuma
+    • Estimativa: M
+    • Risco/Impacto: Sem Stripe Tax as notas fiscais não contemplavam impostos e divergências com Stripe passavam despercebidas.
+    • DoD:
+      - Habilitar `automatic_tax` em checkout/portal.
+      - Persistir impostos agregados em `billing_invoice` e acumular por organização.
+      - Criar worker diário de reconciliação com métricas e alertas.
+    • Branch sugerida: `feat/stripe-tax-reconciliation`
+    • Título PR sugerido: `feat: habilitar Stripe Tax e reconciliação de invoices`
+    • Resumo: checkout/portal agora enviam Stripe Tax, webhooks persistem `tax_amount_total_minor`, novo worker `billing_reconcile` compara invoices locais × Stripe e expõe métricas `billing_tax_applied_total`/`billing_reconcile_drift`.
+    • Commits/arquivos-chave: backend/app/api/billing.py, backend/app/models/models.py, backend/app/workers/billing_reconcile.py, backend/tests/test_billing_tax.py, backend/tests/test_billing_reconcile.py, docs/pricing/PRICING_BILLING.md, docs/runbooks/billing.md.
+    • Notas de migração/rollback: aplicar `alembic upgrade head` para criar `billing_invoice` e novos campos; rollback via `alembic downgrade 016_billing_usage` remove tabela/colunas.

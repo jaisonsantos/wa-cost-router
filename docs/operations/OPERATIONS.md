@@ -68,10 +68,12 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 ## Billing & Stripe
 
 - Defina `STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` no `.env` do backend antes de habilitar o checkout. Sem esses valores a API responde `503` ao iniciar um fluxo de assinatura.
-- `POST /billing/checkout` cria uma sessão de assinatura no Stripe. Informe `price_id`, `success_url` e `cancel_url`. O backend garante idempotência por `org_id` reaproveitando o `customer` existente.
-- `POST /billing/webhook` processa eventos `checkout.session.completed`, `customer.subscription.updated/deleted` e `invoice.paid`. O payload precisa carregar `metadata.org_id` para vincular a organização.
+- `POST /billing/checkout` cria uma sessão de assinatura no Stripe com Stripe Tax habilitado (`automatic_tax`). Informe `price_id`, `success_url` e `cancel_url`. O backend garante idempotência por `org_id` reaproveitando o `customer` existente e pré-cria o registro em `billing_invoice`.
+- `POST /billing/portal` abre o Stripe Customer Portal com `automatic_tax` forçado para `true`, permitindo que o cliente ajuste plano/pagamento mantendo o cálculo fiscal automático.
+- `POST /billing/webhook` processa eventos `checkout.session.completed`, `customer.subscription.updated/deleted` e `invoice.paid`. O payload precisa carregar `metadata.org_id` para vincular a organização e atualiza `billing_invoice.tax_amount_total_minor`, `billing_subscription.tax_amount_total_minor` e links de invoice.
 - `GET /billing/summary` expõe o plano atual, limites de mensagens e status de pagamento. A aba *Billing* em `Settings` consome esse endpoint para exibir preço, próxima fatura e método de pagamento mascarado.
-- Para testes locais use os fixtures do Stripe (`backend/tests/test_billing_api.py`) ou sobrescreva `verify_webhook_event` via monkeypatch. As assinaturas simuladas atualizam a tabela `billing_subscription` sem necessidade de chamadas externas.
+- Worker `billing_usage` continua responsável pelos UsageRecords; o novo worker `billing_reconcile` (fila `billing_reconcile`) compara invoices locais × Stripe diariamente, emitindo logs `event=billing_reconcile_item` e populando a métrica `billing_reconcile_drift{org_id}`.
+- Para testes locais use os fixtures do Stripe (`backend/tests/test_billing_api.py`, `backend/tests/test_billing_tax.py`) ou sobrescreva `verify_webhook_event` via monkeypatch. As assinaturas simuladas atualizam as tabelas `billing_subscription` e `billing_invoice` sem necessidade de chamadas externas.
 
 ## Circuit breaker de provedores
 

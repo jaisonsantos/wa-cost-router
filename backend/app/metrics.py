@@ -41,6 +41,18 @@ BILLING_USAGE_RECORDS_COUNTER = Counter(
     labelnames=["org_id", "status"],
 )
 
+BILLING_TAX_APPLIED_TOTAL = Gauge(
+    "billing_tax_applied_total",
+    "Total acumulado (em minor units) de impostos cobrados por organização",
+    labelnames=["org_id"],
+)
+
+BILLING_RECONCILE_DRIFT = Gauge(
+    "billing_reconcile_drift",
+    "Último percentual de divergência detectado na reconciliação de invoices",
+    labelnames=["org_id"],
+)
+
 
 def record_first_response_latency(
     channel: str,
@@ -79,4 +91,38 @@ def record_billing_usage_sync(org_id: str, status: str) -> None:
         logger.exception(
             "Failed to record billing usage metric",
             extra={"event": "metrics_error", "metric": "billing_usage_records", "org_id": org_id, "status": status},
+        )
+
+
+def record_billing_tax_total(org_id: str, amount_minor: int) -> None:
+    """Atualiza o total acumulado de impostos aplicados para uma organização."""
+
+    try:
+        BILLING_TAX_APPLIED_TOTAL.labels(org_id=org_id).set(float(amount_minor))
+    except Exception:  # pragma: no cover - métricas não devem quebrar o fluxo
+        logger.exception(
+            "Failed to record billing tax metric",
+            extra={
+                "event": "metrics_error",
+                "metric": "billing_tax_applied_total",
+                "org_id": org_id,
+                "amount_minor": amount_minor,
+            },
+        )
+
+
+def record_billing_reconcile_drift(org_id: str, drift_pct: float) -> None:
+    """Registra o último drift percentual encontrado na reconciliação de invoices."""
+
+    try:
+        BILLING_RECONCILE_DRIFT.labels(org_id=org_id).set(float(drift_pct))
+    except Exception:  # pragma: no cover - métricas não devem quebrar o fluxo
+        logger.exception(
+            "Failed to record billing reconcile drift",
+            extra={
+                "event": "metrics_error",
+                "metric": "billing_reconcile_drift",
+                "org_id": org_id,
+                "drift_pct": drift_pct,
+            },
         )

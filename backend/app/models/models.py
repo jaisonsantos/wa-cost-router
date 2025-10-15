@@ -61,6 +61,12 @@ class BillingSubscription(Base):
     price_id = Column(String)
     currency = Column(String)
     amount_minor = Column(Integer)
+    tax_behavior = Column(String)
+    tax_amount_total_minor = Column(
+        Integer,
+        default=0,
+        server_default=expression.literal_column("0"),
+    )
     message_quota = Column(Integer)
     message_usage = Column(Integer, default=0)
     cancel_at_period_end = Column(Boolean, default=False)
@@ -70,6 +76,41 @@ class BillingSubscription(Base):
     stripe_subscription_item_id = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class BillingInvoice(Base):
+    __tablename__ = "billing_invoice"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stripe_invoice_id = Column(String, nullable=False, unique=True)
+    stripe_customer_id = Column(String, nullable=False, index=True)
+    status = Column(String)
+    currency = Column(String)
+    subtotal_minor = Column(Integer)
+    tax_amount_total_minor = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=expression.literal_column("0"),
+    )
+    total_minor = Column(Integer)
+    tax_behavior = Column(String)
+    period_start = Column(DateTime(timezone=True))
+    period_end = Column(DateTime(timezone=True))
+    issued_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
 
 
 class BillingUsageWindowStatusEnum(str, enum.Enum):
