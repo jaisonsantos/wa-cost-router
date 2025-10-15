@@ -563,13 +563,11 @@ class BillingUsageService:
         period_end: datetime,
         quantity: int,
     ) -> str:
-        return (
-            "usage:"
-            f"{org_id}:"
-            f"{BillingUsageService._ensure_tz(period_start).isoformat()}:"
-            f"{BillingUsageService._ensure_tz(period_end).isoformat()}:"
-            f"{int(quantity)}"
-        )
+        """Gera uma chave idempotente determinística para o registro de uso no Stripe."""
+        start_iso = BillingUsageService._ensure_tz(period_start).isoformat()
+        end_iso = BillingUsageService._ensure_tz(period_end).isoformat()
+        return f"usage:{org_id}:{start_iso}:{end_iso}:{int(quantity)}"
+
 
 
 __all__ = [
