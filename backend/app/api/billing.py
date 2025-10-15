@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from stripe import error as stripe_error
 
 from app.api.dependencies import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.models import BillingStatusEnum, BillingSubscription, Organization, User
 from app.services.billing import (
@@ -17,6 +18,7 @@ from app.services.billing import (
     get_stripe_gateway,
     verify_webhook_event,
 )
+from app.workers.billing_usage import enqueue_billing_usage_sync
 
 router = APIRouter()
 
@@ -44,6 +46,11 @@ class BillingSummaryResponse(BaseModel):
     message_usage: int | None = None
     latest_invoice_url: HttpUrl | None = None
     price_id: str | None = None
+
+
+class UsageSyncTriggerResponse(BaseModel):
+    job_id: str
+    status: str
 
 
 def _as_dict(value: Any) -> dict[str, Any] | None:
@@ -246,6 +253,9 @@ def _update_from_subscription_payload(
                         subscription.message_quota = int(quota)
                     except (TypeError, ValueError):
                         pass
+        item_id = item_list[0].get("id")
+        if isinstance(item_id, str):
+            subscription.stripe_subscription_item_id = item_id
         quantity = item_list[0].get("quantity")
         if isinstance(quantity, int):
             subscription.message_usage = quantity
@@ -348,3 +358,17 @@ async def handle_webhook(request: Request, db: Session = Depends(get_db)) -> dic
         _handle_invoice_paid(db, data_object)
 
     return {"received": "ok"}
+
+
+@router.post("/usage/sync", response_model=UsageSyncTriggerResponse, status_code=status.HTTP_202_ACCEPTED)
+def trigger_usage_sync(
+    current_user: dict = Depends(get_current_user),
+) -> UsageSyncTriggerResponse:
+    if not settings.BILLING_USAGE_SYNC_ENABLED or not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Billing usage sync is disabled",
+        )
+
+    job_id = enqueue_billing_usage_sync()
+    return UsageSyncTriggerResponse(job_id=job_id, status="enqueued")

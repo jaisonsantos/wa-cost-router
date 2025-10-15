@@ -21,6 +21,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.api.dependencies import get_current_user  # noqa: E402
+from app.core.config import settings  # noqa: E402
 from app.core.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.models import (  # noqa: E402
@@ -166,6 +167,7 @@ def test_webhook_updates_subscription(client, db_session, monkeypatch):
                 "items": {
                     "data": [
                         {
+                            "id": "si_123",
                             "quantity": 250,
                             "price": {
                                 "id": "price_456",
@@ -233,6 +235,7 @@ def test_webhook_updates_subscription(client, db_session, monkeypatch):
     assert subscription.message_quota == 1000
     assert subscription.message_usage == 300
     assert subscription.current_period_end is not None
+    assert subscription.stripe_subscription_item_id == "si_123"
     normalized_period_end = subscription.current_period_end.replace(
         tzinfo=subscription.current_period_end.tzinfo or timezone.utc,
     )
@@ -248,3 +251,27 @@ def test_webhook_updates_subscription(client, db_session, monkeypatch):
     assert summary["message_usage"] == 300
     assert summary["message_quota"] == 1000
     assert summary["payment_method_last4"] == "4242"
+
+
+def test_usage_sync_endpoint_requires_flag(client, monkeypatch):
+    test_client, org_id, user_id = client
+
+    monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", True)
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_usage")
+
+    monkeypatch.setattr("app.api.billing.enqueue_billing_usage_sync", lambda: "job-usage")
+
+    response = test_client.post("/billing/usage/sync")
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["job_id"] == "job-usage"
+    assert payload["status"] == "enqueued"
+
+
+def test_usage_sync_endpoint_returns_503_when_disabled(client, monkeypatch):
+    test_client, org_id, user_id = client
+
+    monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", False)
+
+    response = test_client.post("/billing/usage/sync")
+    assert response.status_code == 503

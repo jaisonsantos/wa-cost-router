@@ -3,41 +3,54 @@
 
 ## Objetivo
 
-Implementar cobrança recorrente com medição de uso (mensagens enviadas) e impostos internacionais via Stripe Billing + Stripe Tax.
+Registrar consumo metered de mensagens WhatsApp/SMS no Stripe Billing usando `UsageRecord`, garantindo idempotência por janela diária, retries com backoff e observabilidade operacional.
 
 ## Componentes
 
 1. **Produtos/Planos**
-   - Plano base (mensal) com franquia de mensagens.
-   - Excedentes cobrados via metered billing (`usage_type=metered`).
+   - Planos mensais com franquia (`price.metadata.message_quota`).
+   - Excedentes faturados como `usage_type=metered` vinculados a `subscription_item_id` persistido em `billing_subscription.stripe_subscription_item_id`.
 2. **Eventos de Uso**
-   - Registrar cada `MessageJob` (status != failed) como unidade de uso.
-   - Endpoint worker ou cron que envia `stripe.UsageRecord.create(...)`.
-3. **Webhooks Stripe**
-   - Eventos: `invoice.created`, `invoice.paid`, `customer.subscription.updated`, `customer.subscription.deleted`, `checkout.session.completed`.
-   - Assinar com `STRIPE_WEBHOOK_SECRET` (config em `Settings`).
-4. **Integração Backend**
-   - Configurar `STRIPE_SECRET_KEY`.
-   - Rotas: `POST /billing/checkout`, `POST /billing/webhook` (a criar).
-   - Persistir mapping `organization_id -> stripe_customer_id`.
-5. **Impostos**
-   - Ativar Stripe Tax; coletar endereço fiscal da org.
-   - Aplicar `automatic_tax={"enabled": true}` em invoices.
+   - Cada `MessageEvent` outbound bem-sucedido é marcado como `is_billable` pelo `MessageDeliveryService`.
+   - Janelas diárias são materializadas em `billing_usage_window` com status (`pending`, `processing`, `succeeded`, `failed`) e `retry_count`.
+3. **Worker `billing_usage`**
+   - Processa até `BILLING_USAGE_BATCH_SIZE` janelas por execução.
+   - Chama `stripe.UsageRecord.create` com `action=set` e `idempotency_key=usage:<org>:<period_start>:<period_end>`.
+   - Retries calculados via `BILLING_USAGE_RETRY_BASE_SECONDS`/`BILLING_USAGE_RETRY_MAX_SECONDS` (exponential backoff) até `BILLING_USAGE_MAX_RETRIES`.
+   - Métrica Prometheus `billing_usage_records_total{org_id,status}` e logs estruturados (`billing_usage_synced`, `billing_usage_sync_failure`).
+4. **Interface Operacional**
+   - Endpoint `POST /billing/usage/sync` agenda sincronização manual.
+   - Flag de feature `BILLING_USAGE_SYNC_ENABLED` desliga o worker em ambientes sem Stripe real.
+5. **Webhooks Stripe**
+   - `customer.subscription.updated` atualiza `stripe_subscription_item_id`, quotas e `current_period_end`.
+   - `invoice.paid` sincroniza consumo (para conferência com UsageRecord).
 
-## Passos
+## Fluxo
 
-1. Criar produtos e preços no dashboard Stripe.
-2. Gerar chaves (secret + webhook).
-3. Implementar rotas de checkout/billing.
-4. Criar job periódico que consolida uso e envia para Stripe.
-5. Validar fluxo end-to-end (checkout → envio → invoice).
-6. Configurar notificações de pagamento (e-mail/Slack).
+1. Entrega de mensagem → `MessageEvent` criado → serviço marca `is_billable=True` e agenda a janela.
+2. Worker (`rq queue billing_usage`) ou endpoint manual invoca `process_billing_usage_sync`.
+3. Serviço `BillingUsageService` agrega eventos por janela (`count(MessageEvent.id)`), envia UsageRecord com `action=set` e atualiza `billing_usage_window`.
+4. Falhas transitórias mantêm a janela em `failed` com `next_run_at` calculado; falhas permanentes após `BILLING_USAGE_MAX_RETRIES` requerem intervenção manual.
+5. Métricas expostas em `/admin/metrics` permitem dashboards/alertas.
 
-## Considerações
+## Configuração
 
-- Lidar com retries de webhook (idempotência com `event_id`).
-- Sincronizar status do cliente (bloquear envios em caso de inadimplência).
-- Armazenar `price_table_version` utilizado para auditorias de cobrança.
+| Variável | Padrão | Descrição |
+| --- | --- | --- |
+| `STRIPE_SECRET_KEY` | `""` | Obrigatório para enviar UsageRecord; se vazio o worker permanece desabilitado. |
+| `BILLING_USAGE_SYNC_ENABLED` | `false` | Habilita o worker e o endpoint de sincronização. |
+| `BILLING_USAGE_LOOKBACK_DAYS` | `7` | Janelas diárias criadas retroativamente a partir do `now`. |
+| `BILLING_USAGE_GRACE_MINUTES` | `30` | Delay após `period_end` antes de tentar sincronizar (evita reprocessar o dia em curso). |
+| `BILLING_USAGE_BATCH_SIZE` | `100` | Limite de janelas processadas por job. |
+| `BILLING_USAGE_MAX_RETRIES` | `5` | Tentativas antes de marcar janela como falha permanente. |
+| `BILLING_USAGE_RETRY_BASE_SECONDS` | `120` | Delay inicial para retries exponenciais. |
+| `BILLING_USAGE_RETRY_MAX_SECONDS` | `3600` | Teto do backoff exponencial. |
+
+## Considerações Operacionais
+
+- Janelas em `failed` com `next_run_at=NULL` indicam necessidade de correção manual (ex.: configurar `stripe_subscription_item_id`).
+- `POST /billing/usage/sync` retorna `202` com `job_id` — consultar RQ dashboard para progresso.
+- Para auditoria, consultar `billing_usage_window.last_synced_quantity` + Stripe `Upcoming Invoice`.
 
 ## Veja também
 

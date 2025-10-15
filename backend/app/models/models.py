@@ -67,8 +67,42 @@ class BillingSubscription(Base):
     current_period_end = Column(DateTime(timezone=True))
     latest_invoice_url = Column(String)
     default_payment_method = Column(JSON)
+    stripe_subscription_item_id = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class BillingUsageWindowStatusEnum(str, enum.Enum):
+    pending = "pending"
+    processing = "processing"
+    succeeded = "succeeded"
+    failed = "failed"
+
+
+class BillingUsageWindow(Base):
+    __tablename__ = "billing_usage_window"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    period_start = Column(DateTime(timezone=True), nullable=False)
+    period_end = Column(DateTime(timezone=True), nullable=False)
+    status = Column(Enum(BillingUsageWindowStatusEnum), nullable=False, default=BillingUsageWindowStatusEnum.pending)
+    retry_count = Column(Integer, nullable=False, default=0)
+    next_run_at = Column(DateTime(timezone=True), index=True)
+    last_synced_quantity = Column(Integer, nullable=False, default=0)
+    last_synced_at = Column(DateTime(timezone=True))
+    last_error = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "period_start", "period_end", name="uq_billing_usage_window_org_period"),
+    )
 
 class User(Base):
     __tablename__ = "user"
@@ -143,6 +177,7 @@ class MessageEvent(Base):
     baseline_cost_minor = Column(Integer)  # Custo sem otimização (mais caro)
     currency = Column(String)
     attributes = Column(JSON)
+    is_billable = Column(Boolean, nullable=False, default=False, server_default=expression.false())
 
 class RateCard(Base):
     __tablename__ = "rate_card"

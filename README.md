@@ -28,6 +28,13 @@ Comandos úteis:
 - `make test-backend` – executa a suíte Pytest localizada em `backend/tests`.
 - `npm run test:e2e` – executa a suíte Playwright contra a stack sandbox (requer serviços do `make dev` ativos).
 
+### Billing Usage (Stripe)
+
+- Habilite `BILLING_USAGE_SYNC_ENABLED=true` e garanta `STRIPE_SECRET_KEY` configurado no `.env` para que o worker publique `UsageRecord` agregando as mensagens faturáveis por dia.
+- O worker `billing_usage` roda na fila dedicada (já adicionada ao `backend/worker.py`) e respeita `BILLING_USAGE_BATCH_SIZE` por execução.
+- Retries aplicam `exponential backoff` configurável via `BILLING_USAGE_RETRY_BASE_SECONDS`/`BILLING_USAGE_RETRY_MAX_SECONDS`; falhas e sucessos são expostos na métrica Prometheus `billing_usage_records_total{org_id,status}`.
+- Para disparo manual, utilize `POST /billing/usage/sync` (retorna o `job_id` enfileirado) — útil para reprocessar janelas específicas em homologação.
+
 ### Recriando seeds após novas migrations
 
 Sempre que o modelo de dados for alterado por uma migration, aplique o schema atualizado e regenere os dados sandbox para manter a base consistente:
