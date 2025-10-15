@@ -180,7 +180,12 @@ class BillingUsageService:
             period_end=window.period_end,
         )
         usage_timestamp = self._usage_timestamp(window.period_end)
-        idempotency_key = self._build_idempotency_key(org_id, window.period_start, window.period_end)
+        idempotency_key = self._build_idempotency_key(
+            org_id,
+            window.period_start,
+            window.period_end,
+            quantity,
+        )
 
         try:
             gateway.create_usage_record(
@@ -344,8 +349,15 @@ class BillingUsageService:
         return moment.astimezone(timezone.utc)
 
     @staticmethod
-    def _build_idempotency_key(org_id: uuid.UUID, period_start: datetime, period_end: datetime) -> str:
-        return f"usage:{org_id}:{BillingUsageService._ensure_tz(period_start).isoformat()}:{BillingUsageService._ensure_tz(period_end).isoformat()}"
+    def _build_idempotency_key(
+        org_id: uuid.UUID,
+        period_start: datetime,
+        period_end: datetime,
+        quantity: int,
+    ) -> str:
+        start_iso = BillingUsageService._ensure_tz(period_start).isoformat()
+        end_iso = BillingUsageService._ensure_tz(period_end).isoformat()
+        return f"usage:{org_id}:{start_iso}:{end_iso}:{int(quantity)}"
 
 
 __all__ = [

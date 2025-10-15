@@ -238,6 +238,58 @@ def test_sync_due_windows_handles_retry(db_session, organization, monkeypatch):
     assert window.last_synced_quantity == 1
 
 
+def test_sync_due_windows_refreshes_idempotency_key_when_quantity_changes(
+    db_session, organization, monkeypatch
+):
+    monkeypatch.setattr(settings, "BILLING_USAGE_GRACE_MINUTES", 0)
+    monkeypatch.setattr(settings, "BILLING_USAGE_LOOKBACK_DAYS", 1)
+
+    subscription = BillingSubscription(
+        org_id=organization.id,
+        stripe_customer_id="cus_delta",
+        stripe_subscription_id="sub_delta",
+        status="active",
+        stripe_subscription_item_id="si_delta",
+    )
+    db_session.add(subscription)
+    db_session.commit()
+
+    occurred_at = datetime(2025, 1, 2, 9, 0, tzinfo=timezone.utc)
+    first_event = _create_message_event(
+        db_session, org_id=organization.id, occurred_at=occurred_at
+    )
+
+    gateway = DummyGateway()
+    service = BillingUsageService(db_session, stripe_gateway=gateway)
+    service.mark_message_billable(
+        message_event_id=first_event.id, occurred_at=occurred_at
+    )
+
+    first_now = datetime(2025, 1, 3, 0, 10, tzinfo=timezone.utc)
+    service.sync_due_windows(now=first_now)
+
+    assert len(gateway.calls) == 1
+    first_idempotency_key = gateway.calls[0]["idempotency_key"]
+
+    second_event = _create_message_event(
+        db_session,
+        org_id=organization.id,
+        occurred_at=datetime(2025, 1, 2, 18, 0, tzinfo=timezone.utc),
+    )
+    service.mark_message_billable(
+        message_event_id=second_event.id,
+        occurred_at=datetime(2025, 1, 2, 18, 0, tzinfo=timezone.utc),
+    )
+
+    second_now = datetime(2025, 1, 3, 1, 0, tzinfo=timezone.utc)
+    service.sync_due_windows(now=second_now)
+
+    assert len(gateway.calls) == 2
+    second_idempotency_key = gateway.calls[1]["idempotency_key"]
+    assert second_idempotency_key != first_idempotency_key
+    assert gateway.calls[1]["quantity"] == 2
+
+
 def test_process_billing_usage_sync_disabled(monkeypatch):
     monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", False)
     response = process_billing_usage_sync(now=datetime.now(timezone.utc))
