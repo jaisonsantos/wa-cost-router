@@ -23,8 +23,9 @@ Quando o GitHub bloqueia os workflows com a mensagem `The job was not started be
    - Atualize o cartão/forma de pagamento ou quite a fatura pendente pelo botão **Pay invoice**.
    - Caso o spending limit esteja zerado, ajuste o valor conforme a projeção de minutos/armazenamento necessária para o mês.
 4. **Mitigação temporária (enquanto o bloqueio persiste):**
-   - Execute `make ci-lite` para rodar lint/build/testes sem Docker. O comando gera logs e `artifacts/ci-lite/summary.json` com o status de cada etapa.
-   - Anexe o relatório ao PR/ticket impactado como evidência de validação manual até que o Actions volte a processar jobs.
+   - Execute `make ci-lite` para rodar lint/build/testes sem Docker. O comando gera logs e `artifacts/ci-lite/{summary.json,summary.md}` com o status de cada etapa.
+   - Publique o resultado manual no PR com `make ci-lite-publish repo=<owner/repo> pr=<número> comment=1` (ou chamando `scripts/ci_lite_publish.py` diretamente) para registrar um check run e comentário explicando a mitigação.
+   - Anexe artefatos adicionais (`artifacts/ci-lite/*.log`) ao PR/ticket impactado como evidência complementar até que o Actions volte a processar jobs.
    - Se algum passo falhar localmente, trate a correção na branch antes de retentar o fluxo no GitHub.
 5. **Confirmar reativação:**
    - Na mesma tela de Billing, certifique-se de que a caixa *Actions* exibe o status **All workflows enabled**.

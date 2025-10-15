@@ -28,7 +28,8 @@ Restaurar a execução automática dos workflows GitHub Actions (`ci.yml`) após
    - Acessar `Settings › Billing & plans` (usuário/organização) e exportar histórico de cobranças.
    - Identificar invoices vencidas ou spending limit zerado; registrar IDs no ticket operacional.
 3. **+2h – Mitigação técnica**
-   - Executar `make ci-lite` para cada PR crítico; armazenar resultados em `artifacts/ci-lite/` e anexar ao PR/ticket.
+   - Executar `make ci-lite` para cada PR crítico; armazenar resultados em `artifacts/ci-lite/` (incluindo `summary.md`).
+   - Publicar manualmente o status no GitHub via `make ci-lite-publish repo=<owner/repo> pr=<número> comment=1` para registrar check run e comentário apontando a mitigação.
    - Se necessário, complementar com `make postman-test` ou testes específicos solicitados pelo revisor.
 4. **+4h – Regularização financeira**
    - Atualizar método de pagamento ou efetuar quitação manual da fatura.
@@ -72,3 +73,4 @@ Restaurar a execução automática dos workflows GitHub Actions (`ci.yml`) após
 - [Runbook – Desbloqueio do GitHub Actions](../runbooks/ci_billing.md)
 - [Guia Operacional da Pipeline CI](./CI.md)
 - [Script de mitigação local (`ci_lite`)](../../scripts/ci_lite.py)
+- [Publicação manual de resultados (`ci_lite_publish`)](../../scripts/ci_lite_publish.py)

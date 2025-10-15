@@ -79,7 +79,8 @@ Ele é dividido em três jobs principais:
 - **e2e** – sobe a stack via Docker Compose e executa os testes Postman/Newman contra o backend publicado.
 
 Use `make ci` para replicar localmente a sequência de checks descrita em [Operações › Pipeline CI](docs/operations/OPERATIONS.md#pipeline-ci).
-Caso o GitHub Actions esteja bloqueado (ex.: billing pendente), execute `make ci-lite` para rodar o fallback sem Docker — o comando gera relatórios estruturados em `artifacts/ci-lite` para anexar ao PR.
+Caso o GitHub Actions esteja bloqueado (ex.: billing pendente), execute `make ci-lite` para rodar o fallback sem Docker — o comando gera relatórios estruturados em `artifacts/ci-lite`.
+Utilize `make ci-lite-publish repo=<owner/repo> pr=<número>` (ou diretamente `scripts/ci_lite_publish.py`) para publicar um check run/manual comment no PR com o resultado do fallback enquanto o bloqueio persistir.
 Siga o [runbook de billing do Actions](docs/runbooks/ci_billing.md) para regularizar o acesso e volte a usar `make ci`/`Re-run jobs` assim que o desbloqueio for confirmado.
 
 ### Auto-fix do Codex após falhas

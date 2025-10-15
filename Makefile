@@ -188,7 +188,19 @@ postman-env: ## Show Postman collection and environment paths
 ci: ci-backend test-backend-multichannel ci-frontend test-frontend ci-e2e ## Run backend, frontend and E2E checks sequentially
 
 ci-lite: ## Run local CI fallback (sem Docker) e gerar relatório em artifacts/ci-lite
-scripts/ci_lite.py
+	scripts/ci_lite.py
+
+ci-lite-publish: ## Publicar resultado manual do CI Lite no GitHub (repo=<owner/name> [pr=123] [comment=1])
+	@if [ -z "$(repo)" ]; then echo "Missing repo=owner/name (use repo=org/proj)"; exit 1; fi
+	@sha_value="$(if $(sha),$(sha),$(shell git rev-parse HEAD))"; \
+	cmd="scripts/ci_lite_publish.py --repo \"$(repo)\" --sha \"$$sha_value\""; \
+	if [ -n "$(summary)" ]; then cmd="$$cmd --summary \"$(summary)\""; fi; \
+	if [ -n "$(details_url)" ]; then cmd="$$cmd --details-url \"$(details_url)\""; fi; \
+	if [ -n "$(pr)" ]; then cmd="$$cmd --pr $(pr)"; fi; \
+	if [ -n "$(comment)" ]; then cmd="$$cmd --comment"; fi; \
+	if [ -n "$(token)" ]; then cmd="GITHUB_TOKEN=$(token) $$cmd"; fi; \
+	echo $$cmd; \
+	eval $$cmd
 
 ci-backend: ## Build backend images and verify migrations
 	$(DC) build api worker

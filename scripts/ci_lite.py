@@ -252,6 +252,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     report_path = ARTIFACTS_DIR / "summary.json"
     report_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
+    markdown_path = ARTIFACTS_DIR / "summary.md"
+    markdown_path.write_text(_to_markdown(summary), encoding="utf-8")
+
     _print_summary(summary)
     return 1 if failed else 0
 
@@ -274,6 +277,48 @@ def _print_summary(summary: Dict[str, object]) -> None:
             print(f"    error: {entry['metadata']['error']}")
     print(f"\nOverall status: {summary['status'].upper()}")
     print(f"Report: {ARTIFACTS_DIR.relative_to(REPO_ROOT) / Path('summary.json')}")
+
+
+def _to_markdown(summary: Dict[str, object]) -> str:
+    lines = ["# CI Lite", ""]
+    lines.append(f"Status: **{summary['status'].upper()}**")
+    lines.append("")
+    lines.append("| Etapa | Status | Duração (s) | Obrigatória | Observações |")
+    lines.append("|-------|--------|-------------|-------------|-------------|")
+    for entry in summary["results"]:
+        name = entry["name"]
+        status = entry["status"].upper()
+        duration = f"{entry['duration_seconds']:.2f}" if entry["duration_seconds"] else "-"
+        required = "Sim" if entry.get("required", True) else "Não"
+        notes: List[str] = []
+        if entry.get("skip_reason"):
+            notes.append(f"Skipped: {entry['skip_reason']}")
+        if entry.get("log_path"):
+            notes.append(f"Log: `{entry['log_path']}`")
+        if entry.get("metadata", {}).get("error"):
+            notes.append(f"Erro: {entry['metadata']['error']}")
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    name,
+                    status,
+                    duration,
+                    required,
+                    "<br />".join(notes) if notes else "",
+                ]
+            )
+            + " |"
+        )
+
+    lines.append("")
+    lines.append(
+        "Gere este relatório executando `scripts/ci_lite.py` sempre que o GitHub Actions"
+        " estiver indisponível. O arquivo `summary.json` correspondente contém os"
+        " mesmos dados em formato estruturado."
+    )
+    lines.append("")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
