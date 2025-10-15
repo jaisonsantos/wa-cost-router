@@ -6,9 +6,13 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Callable, Iterator
 
 from sqlalchemy import and_, func
-from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import SQLAlchemyError, InvalidRequestError
+from sqlalchemy.orm import Session, sessionmaker
 from stripe import error as stripe_error
 
 from app.core.config import settings
@@ -46,9 +50,24 @@ class UsageSyncResult:
 class BillingUsageService:
     """Coordinates metered usage collection and synchronization with Stripe."""
 
-    def __init__(self, db: Session, stripe_gateway: StripeGateway | None = None) -> None:
+    def __init__(
+        self,
+        db: Session,
+        stripe_gateway: StripeGateway | None = None,
+        *,
+        session_factory: Callable[[], Session] | None = None,
+    ) -> None:
         self.db = db
         self._stripe_gateway = stripe_gateway
+        self._session_factory = session_factory
+        self._session_factory_uses_connection = False
+        self._sync_enabled = bool(
+            settings.BILLING_USAGE_SYNC_ENABLED and settings.STRIPE_SECRET_KEY
+        )
+
+    @property
+    def sync_enabled(self) -> bool:
+        return self._sync_enabled
 
     # ------------------------------------------------------------------
     # Public API
@@ -63,7 +82,16 @@ class BillingUsageService:
 
         event = self.db.get(MessageEvent, message_event_id)
         if event is None:
-            return
+            event = next(
+                (
+                    pending
+                    for pending in self.db.new
+                    if isinstance(pending, MessageEvent) and pending.id == message_event_id
+                ),
+                None,
+            )
+            if event is None:
+                return
 
         if not event.timestamp_provider:
             event.timestamp_provider = datetime.now(timezone.utc)
@@ -74,11 +102,40 @@ class BillingUsageService:
         if not event.is_billable:
             event.is_billable = True
 
-        window = self._ensure_window(org_id=event.org_id, reference=timestamp)
-        self._mark_window_pending(window, reference=timestamp)
+        if not self._sync_enabled:
+            return
+
+        try:
+            self._ensure_window_async(
+                org_id=event.org_id,
+                reference=timestamp,
+                message_event_id=event.id,
+            )
+        except SQLAlchemyError as exc:  # pragma: no cover - isolated session rollback
+            logger.warning(
+                "Failed to enqueue billing usage window",
+                extra={
+                    "event": "billing_usage_window_error",
+                    "org_id": str(event.org_id),
+                    "message_event_id": str(event.id),
+                },
+                exc_info=exc,
+            )
+        except Exception:  # pragma: no cover - usage marking must not break delivery
+            logger.exception(
+                "Unexpected error marking message as billable",
+                extra={
+                    "event": "billing_usage_mark_error",
+                    "org_id": str(event.org_id),
+                    "message_event_id": str(event.id),
+                },
+            )
 
     def ensure_backfill(self, *, now: datetime | None = None) -> None:
         """Ensure usage windows exist for the lookback horizon for all orgs."""
+
+        if not self._sync_enabled:
+            return
 
         current_time = self._ensure_tz(now or datetime.now(timezone.utc))
         lookback_days = max(int(settings.BILLING_USAGE_LOOKBACK_DAYS), 1)
@@ -90,7 +147,7 @@ class BillingUsageService:
             org_id = subscription.org_id
             cursor = start_day
             while cursor < end_day:
-                window = self._ensure_window(org_id=org_id, reference=cursor)
+                window = self._ensure_window(session=self.db, org_id=org_id, reference=cursor)
                 if (
                     window.next_run_at is None
                     and window.status not in {
@@ -112,6 +169,13 @@ class BillingUsageService:
 
         current_time = self._ensure_tz(now or datetime.now(timezone.utc))
         result = UsageSyncResult()
+
+        if not self._sync_enabled:
+            logger.info(
+                "Billing usage sync invoked while disabled",
+                extra={"event": "billing_usage_disabled"},
+            )
+            return result
 
         self.ensure_backfill(now=current_time)
 
@@ -267,21 +331,33 @@ class BillingUsageService:
             window.next_run_at = now + timedelta(seconds=backoff_seconds)
         self.db.flush()
 
-    def _mark_window_pending(self, window: BillingUsageWindow, *, reference: datetime) -> None:
+    def _mark_window_pending(
+        self,
+        *,
+        session: Session,
+        window: BillingUsageWindow,
+        reference: datetime,
+    ) -> None:
         window.status = BillingUsageWindowStatusEnum.pending
         window.retry_count = 0
         window.last_error = None
         window.next_run_at = self._next_due_at(window.period_end, reference)
         window.updated_at = reference
-        self.db.flush()
+        session.flush()
 
-    def _ensure_window(self, *, org_id: uuid.UUID, reference: datetime) -> BillingUsageWindow:
+    def _ensure_window(
+        self,
+        *,
+        session: Session,
+        org_id: uuid.UUID,
+        reference: datetime,
+    ) -> BillingUsageWindow:
         reference = self._ensure_tz(reference)
         period_start = self._start_of_day(reference)
         period_end = period_start + timedelta(days=1)
 
         window = (
-            self.db.query(BillingUsageWindow)
+            session.query(BillingUsageWindow)
             .filter(
                 and_(
                     BillingUsageWindow.org_id == org_id,
@@ -293,18 +369,150 @@ class BillingUsageService:
         )
 
         if window is None:
-            window = BillingUsageWindow(
-                org_id=org_id,
-                period_start=period_start,
-                period_end=period_end,
-                status=BillingUsageWindowStatusEnum.pending,
-                retry_count=0,
-                next_run_at=self._next_due_at(period_end, reference),
-            )
-            self.db.add(window)
-            self.db.flush([window])
+            bind = session.get_bind()
+            dialect = (bind.dialect.name if bind is not None else "postgresql").lower()
+            values = {
+                "id": uuid.uuid4(),
+                "org_id": org_id,
+                "period_start": period_start,
+                "period_end": period_end,
+            }
+
+            if dialect == "postgresql":
+                statement = (
+                    pg_insert(BillingUsageWindow)
+                    .values(**values)
+                    .on_conflict_do_nothing(
+                        index_elements=["org_id", "period_start", "period_end"],
+                    )
+                )
+                session.execute(statement)
+                session.flush()
+            elif dialect == "sqlite":
+                statement = sqlite_insert(BillingUsageWindow).values(**values)
+                statement = statement.prefix_with("OR IGNORE")
+                session.execute(statement)
+                session.flush()
+
+            window = (
+                session.query(BillingUsageWindow)
+                .filter(
+                    and_(
+                        BillingUsageWindow.org_id == org_id,
+                        BillingUsageWindow.period_start == period_start,
+                        BillingUsageWindow.period_end == period_end,
+                    )
+                )
+                .first()
+        )
 
         return window
+
+    def _ensure_window_async(
+        self,
+        *,
+        org_id: uuid.UUID,
+        reference: datetime,
+        message_event_id: uuid.UUID | None = None,
+    ) -> None:
+        if self._can_use_current_session():
+            try:
+                with self.db.begin_nested():
+                    window = self._ensure_window(
+                        session=self.db, org_id=org_id, reference=reference
+                    )
+                    if window is None:
+                        return
+                    self._mark_window_pending(
+                        session=self.db, window=window, reference=reference
+                    )
+                    self.db.flush()
+                return
+            except InvalidRequestError:
+                # Session is not in a transactional state; fall back to aux sessions.
+                pass
+
+        for session in self._yield_aux_sessions():
+            if session is None:
+                logger.warning(
+                    "Unable to obtain auxiliary session for billing usage window",
+                    extra={
+                        "event": "billing_usage_session_missing",
+                        "org_id": str(org_id),
+                        "message_event_id": str(message_event_id) if message_event_id else None,
+                    },
+                )
+                return
+
+            window = self._ensure_window(session=session, org_id=org_id, reference=reference)
+            if window is None:
+                logger.warning(
+                    "Unable to ensure billing usage window",
+                    extra={
+                        "event": "billing_usage_window_missing",
+                        "org_id": str(org_id),
+                        "message_event_id": str(message_event_id) if message_event_id else None,
+                    },
+                )
+                return
+            self._mark_window_pending(session=session, window=window, reference=reference)
+
+    def _yield_aux_sessions(self) -> Iterator[Session | None]:
+        factory = self._session_factory
+        if factory is None:
+            bind = getattr(self.db, "bind", None)
+            if bind is None:
+                bind = self.db.get_bind()
+            if bind is None:
+                yield None
+                return
+
+            uses_connection = False
+            target = bind
+            in_transaction = False
+            if hasattr(bind, "in_transaction"):
+                try:
+                    in_transaction = bool(bind.in_transaction())
+                except Exception:  # pragma: no cover - defensive guard
+                    in_transaction = False
+
+            if in_transaction:
+                uses_connection = True
+            else:
+                target = getattr(bind, "engine", bind)
+
+            factory = sessionmaker(
+                bind=target,
+                expire_on_commit=False,
+                autoflush=False,
+                autocommit=False,
+            )
+            self._session_factory = factory
+            self._session_factory_uses_connection = uses_connection
+
+        session = factory()
+        try:
+            yield session
+            if self._session_factory_uses_connection:
+                session.flush()
+            else:
+                session.commit()
+        except SQLAlchemyError:
+            session.rollback()
+            raise
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def _can_use_current_session(self) -> bool:
+        if not hasattr(self.db, "in_transaction"):
+            return False
+        try:
+            return bool(self.db.in_transaction())
+        except Exception:  # pragma: no cover - defensive guard
+            return False
 
     def _calculate_quantity(
         self,
@@ -355,9 +563,11 @@ class BillingUsageService:
         period_end: datetime,
         quantity: int,
     ) -> str:
+        """Gera uma chave idempotente determinística para o registro de uso no Stripe."""
         start_iso = BillingUsageService._ensure_tz(period_start).isoformat()
         end_iso = BillingUsageService._ensure_tz(period_end).isoformat()
         return f"usage:{org_id}:{start_iso}:{end_iso}:{int(quantity)}"
+
 
 
 __all__ = [

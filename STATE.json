@@ -22,10 +22,10 @@
       "name": "Stripe Billing",
       "description": "Checkout, webhooks e sincronização de usage records (UsageRecord) com janelas idempotentes e métricas Prometheus.",
       "status": "estável",
-      "references": [
+        "references": [
         "backend/app/api/billing.py#L1-L360",
-        "backend/app/services/billing/usage.py#L1-L220",
-        "backend/app/workers/billing_usage.py#L1-L120",
+        "backend/app/services/billing/usage.py#L1-L240",
+        "backend/app/workers/billing_usage.py#L1-L140",
         "docs/pricing/PRICING_BILLING.md#L1-L140"
       ]
     },
@@ -49,7 +49,7 @@
       "queue": "billing_usage",
       "responsibility": "Consolida mensagens faturáveis por janela diária e envia UsageRecord para o Stripe com retries e métricas.",
       "status": "beta",
-      "references": ["backend/app/workers/billing_usage.py#L1-L120", "backend/app/services/billing/usage.py#L1-L220"]
+      "references": ["backend/app/workers/billing_usage.py#L1-L140", "backend/app/services/billing/usage.py#L1-L240"]
     },
     {
       "name": "crm_sync",
@@ -104,8 +104,8 @@
       "path": "/billing/usage/sync",
       "purpose": "Agenda sincronização de usage records (UsageRecord) para o Stripe.",
       "status": "beta",
-      "notes": "Retorna job enfileirado na fila `billing_usage`; respeita flag `BILLING_USAGE_SYNC_ENABLED`.",
-      "references": ["backend/app/api/billing.py#L320-L360", "backend/app/workers/billing_usage.py#L1-L120"]
+      "notes": "Retorna job enfileirado na fila `billing_usage`; requer flag `BILLING_USAGE_SYNC_ENABLED` e `STRIPE_SECRET_KEY`.",
+      "references": ["backend/app/api/billing.py#L320-L360", "backend/app/workers/billing_usage.py#L1-L140"]
     },
     {
       "method": "GET",

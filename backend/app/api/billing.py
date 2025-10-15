@@ -364,7 +364,7 @@ async def handle_webhook(request: Request, db: Session = Depends(get_db)) -> dic
 def trigger_usage_sync(
     current_user: dict = Depends(get_current_user),
 ) -> UsageSyncTriggerResponse:
-    if not settings.BILLING_USAGE_SYNC_ENABLED:
+    if not settings.BILLING_USAGE_SYNC_ENABLED or not settings.STRIPE_SECRET_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Billing usage sync is disabled",

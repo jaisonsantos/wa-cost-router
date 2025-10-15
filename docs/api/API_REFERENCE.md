@@ -77,7 +77,7 @@ Erros: `404 Not Found` se a organização não existir (token inválido ou órf�
 ## Billing
 
 ### `POST /billing/usage/sync`
-Agenda a sincronização das janelas de uso faturável com o Stripe. Disponível apenas quando `BILLING_USAGE_SYNC_ENABLED=true`.
+Agenda a sincronização das janelas de uso faturável com o Stripe. Disponível apenas quando `BILLING_USAGE_SYNC_ENABLED=true` e `STRIPE_SECRET_KEY` estiver configurado.
 
 **Headers obrigatórios**
 - `Authorization: Bearer <token>`
