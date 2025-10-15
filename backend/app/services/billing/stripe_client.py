@@ -32,11 +32,17 @@ class StripeGateway:
     def create_checkout_session(self, **kwargs: Any) -> Any:
         return self._client.checkout.sessions.create(**kwargs)
 
+    def create_billing_portal_session(self, **kwargs: Any) -> Any:
+        return self._client.billing_portal.sessions.create(**kwargs)
+
     def retrieve_subscription(self, subscription_id: str) -> Any:
         return self._client.subscriptions.retrieve(subscription_id)
 
     def retrieve_payment_method(self, payment_method_id: str) -> Any:
         return self._client.payment_methods.retrieve(payment_method_id)
+
+    def retrieve_invoice(self, invoice_id: str) -> Any:
+        return self._client.invoices.retrieve(invoice_id)
 
     def create_usage_record(
         self,

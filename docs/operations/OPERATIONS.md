@@ -68,10 +68,12 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
 ## Billing & Stripe
 
 - Defina `STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` no `.env` do backend antes de habilitar o checkout. Sem esses valores a API responde `503` ao iniciar um fluxo de assinatura.
-- `POST /billing/checkout` cria uma sessão de assinatura no Stripe. Informe `price_id`, `success_url` e `cancel_url`. O backend garante idempotência por `org_id` reaproveitando o `customer` existente.
-- `POST /billing/webhook` processa eventos `checkout.session.completed`, `customer.subscription.updated/deleted` e `invoice.paid`. O payload precisa carregar `metadata.org_id` para vincular a organização.
+- `POST /billing/checkout` cria uma sessão de assinatura no Stripe com Stripe Tax habilitado (`automatic_tax`). Informe `price_id`, `success_url` e `cancel_url`. O backend garante idempotência por `org_id` reaproveitando o `customer` existente e pré-cria o registro em `billing_invoice`.
+- `POST /billing/portal` abre o Stripe Customer Portal com `automatic_tax` forçado para `true`, permitindo que o cliente ajuste plano/pagamento mantendo o cálculo fiscal automático.
+- `POST /billing/webhook` processa eventos `checkout.session.completed`, `customer.subscription.updated/deleted` e `invoice.paid`. O payload precisa carregar `metadata.org_id` para vincular a organização e atualiza `billing_invoice.tax_amount_total_minor`, `billing_subscription.tax_amount_total_minor` e links de invoice.
 - `GET /billing/summary` expõe o plano atual, limites de mensagens e status de pagamento. A aba *Billing* em `Settings` consome esse endpoint para exibir preço, próxima fatura e método de pagamento mascarado.
-- Para testes locais use os fixtures do Stripe (`backend/tests/test_billing_api.py`) ou sobrescreva `verify_webhook_event` via monkeypatch. As assinaturas simuladas atualizam a tabela `billing_subscription` sem necessidade de chamadas externas.
+- Worker `billing_usage` continua responsável pelos UsageRecords; o novo worker `billing_reconcile` (fila `billing_reconcile`) compara invoices locais × Stripe diariamente, emitindo logs `event=billing_reconcile_item` e populando a métrica `billing_reconcile_drift{org_id}`.
+- Para testes locais use os fixtures do Stripe (`backend/tests/test_billing_api.py`, `backend/tests/test_billing_tax.py`) ou sobrescreva `verify_webhook_event` via monkeypatch. As assinaturas simuladas atualizam as tabelas `billing_subscription` e `billing_invoice` sem necessidade de chamadas externas.
 
 ## Circuit breaker de provedores
 
@@ -130,6 +132,9 @@ Os comandos herdados de `docker-compose` continuam válidos, mas os alvos do Mak
   2. `frontend` — instala dependências com `npm ci`, roda `npm run lint` e `npm run build`, publicando o artefato `frontend-dist` com a pasta `dist/`.
   3. `e2e` — depende dos jobs anteriores, sobe a stack com Docker Compose, reaproveita os seeds demo e executa os testes Postman/Newman (ver [guia](../postman/README.md)). O relatório JUnit (`newman-report.xml`) é enviado como artefato para inspeção.
 - **Depuração**: reexecute jobs individuais pelo GitHub (`Re-run failed jobs`) para validar correções rápidas. Para reproduzir localmente, utilize `make ci`, que encadeia `ci-backend`, `ci-frontend` e `ci-e2e` com os mesmos comandos do pipeline. Falhas no passo E2E geralmente aparecem no relatório Newman; baixe o artefato ou rode `make ci-e2e` para gerar um novo.
+- **Falhas por billing**: se o GitHub Actions exibir `The job was not started because recent account payments have failed or your spending limit needs to be increased`, nenhum job é executado — trata-se de bloqueio administrativo do GitHub. Siga o [runbook de desbloqueio](../runbooks/ci_billing.md) para regularizar pagamentos, confirmar o status **All workflows enabled** e só então reexecutar o workflow.
+- **Plano de recuperação**: quando o bloqueio impactar múltiplos PRs, siga o [plano de correção](./CI_RECOVERY_PLAN.md) para coordenar diagnóstico, mitigação (`make ci-lite`), regularização financeira e comunicação com stakeholders.
+- **Validação manual temporária**: enquanto o Actions estiver bloqueado, rode `make ci-lite` para executar lint/build/pytest sem Docker e gere `artifacts/ci-lite/summary.json`. Publique o resultado no PR usando `make ci-lite-publish repo=<owner/repo> pr=<n>` (opcionalmente com `comment=1`) para registrar o check manual; anexe logs adicionais (`make postman-test`) quando necessário.
 - **Limites de taxa no CI**: o workflow exporta `RATE_LIMIT_MESSAGES_PER_MIN=120` e `RATE_LIMIT_LOGIN_PER_MIN=20` garantindo que a suíte Newman opere dentro do teto padrão; ajuste via secrets caso ambientes gerenciados exijam limites distintos.
 - **Referências**: detalhes de secrets, variáveis e troubleshooting ampliado em [CI avançado](./CI.md).
 

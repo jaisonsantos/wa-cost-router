@@ -40,6 +40,8 @@ Os alvos adicionados no [Makefile](../../Makefile) permitem reproduzir cada etap
 
 ## Troubleshooting
 
+- **Bloqueio administrativo (billing)**: se o workflow não iniciar e exibir a mensagem sobre pagamentos recentes/spending limit, execute `make ci-lite` como mitigação temporária e siga o [plano de correção da pipeline](./CI_RECOVERY_PLAN.md) para coordenar desbloqueio financeiro e comunicação. Publique o resultado manual com `make ci-lite-publish repo=<owner/repo> pr=<n>` (ou `scripts/ci_lite_publish.py`) para registrar o status no PR enquanto o Actions estiver indisponível.
+
 - **Falhas no `ci-backend`**: normalmente apontam migrations inválidas ou requirements quebrados. Rode `make ci-backend` localmente e
   verifique os logs do comando `alembic upgrade head`.
 - **Falhas no `ci-frontend`**: cheque alterações em lint rules (`eslint.config.js`) ou se o build Vite quebrou. Execute `npm run lint`
