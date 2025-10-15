@@ -166,9 +166,10 @@
     • Estimativa: S
     • Risco/Impacto: Pipelines não executam enquanto o bloqueio persistir, impedindo validação de builds/PRs.
     • DoD:
-      - Acessar *Settings › Billing & plans* (org/repo) e quitar cobranças pendentes ou ajustar o spending limit.
+      - Seguir o [runbook de desbloqueio](docs/runbooks/ci_billing.md) para quitar cobranças pendentes ou ajustar o spending limit.
       - Confirmar reativação do GitHub Actions (status "All workflows enabled") nas configurações.
-      - Reexecutar workflow (`Re-run jobs`) para validar que os pipelines voltaram a iniciar.
+      - Reexecutar workflow (`Re-run jobs`) para validar que os pipelines voltaram a iniciar e anexar recibos/evidências no ticket operacional.
+      - Enquanto o bloqueio persistir, rodar `make ci` localmente e anexar o log nos PRs críticos como mitigação temporária.
     • Branch sugerida: `ops/github-actions-billing`
     • Título PR sugerido: `ops: desbloquear billing do GitHub Actions`
 
