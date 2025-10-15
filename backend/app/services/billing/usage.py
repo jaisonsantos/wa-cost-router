@@ -95,6 +95,9 @@ class BillingUsageService:
         if not event.is_billable:
             event.is_billable = True
 
+        if not settings.BILLING_USAGE_SYNC_ENABLED:
+            return
+
         try:
             self._ensure_window_async(
                 org_id=event.org_id,

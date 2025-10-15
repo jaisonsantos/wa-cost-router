@@ -45,6 +45,14 @@ TEST_ENGINE = create_engine(
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=TEST_ENGINE)
 
 
+@pytest.fixture(autouse=True)
+def enable_usage_sync(monkeypatch):
+    """Ensure billing usage features are enabled for tests by default."""
+
+    monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", True)
+    yield
+
+
 @compiles(PGUUID, "sqlite")
 def compile_uuid(element, compiler, **kw):
     return "CHAR(36)"
