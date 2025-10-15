@@ -60,6 +60,7 @@ class BillingUsageService:
         self.db = db
         self._stripe_gateway = stripe_gateway
         self._session_factory = session_factory
+        self._session_factory_uses_connection = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -424,19 +425,36 @@ class BillingUsageService:
                 yield None
                 return
 
-            engine = getattr(bind, "engine", bind)
+            uses_connection = False
+            target = bind
+            in_transaction = False
+            if hasattr(bind, "in_transaction"):
+                try:
+                    in_transaction = bool(bind.in_transaction())
+                except Exception:  # pragma: no cover - defensive guard
+                    in_transaction = False
+
+            if in_transaction:
+                uses_connection = True
+            else:
+                target = getattr(bind, "engine", bind)
+
             factory = sessionmaker(
-                bind=engine,
+                bind=target,
                 expire_on_commit=False,
                 autoflush=False,
                 autocommit=False,
             )
             self._session_factory = factory
+            self._session_factory_uses_connection = uses_connection
 
         session = factory()
         try:
             yield session
-            session.commit()
+            if self._session_factory_uses_connection:
+                session.flush()
+            else:
+                session.commit()
         except SQLAlchemyError:
             session.rollback()
             raise
