@@ -43,6 +43,9 @@ venv/
 coverage.xml
 htmlcov/
 
+# Coverage report directory
+coverage/
+
 # ---- Env / Segredos
 .env
 *.env
