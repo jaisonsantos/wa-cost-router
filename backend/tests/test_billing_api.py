@@ -257,6 +257,7 @@ def test_usage_sync_endpoint_requires_flag(client, monkeypatch):
     test_client, org_id, user_id = client
 
     monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", True)
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_usage")
 
     monkeypatch.setattr("app.api.billing.enqueue_billing_usage_sync", lambda: "job-usage")
 

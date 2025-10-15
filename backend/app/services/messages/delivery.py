@@ -512,13 +512,15 @@ class MessageDeliveryService:
                         attributes=event_attributes or None,
                     )
                     self.db.add(message_event)
+                    message_event.is_billable = True
 
                     try:
                         usage_service = BillingUsageService(self.db)
-                        usage_service.mark_message_billable(
-                            message_event_id=message_event.id,
-                            occurred_at=message_event.timestamp_provider,
-                        )
+                        if usage_service.sync_enabled:
+                            usage_service.mark_message_billable(
+                                message_event_id=message_event.id,
+                                occurred_at=message_event.timestamp_provider,
+                            )
                     except Exception:  # pragma: no cover - usage marking must not break delivery
                         logger.exception(
                             "Failed to flag message event for billing usage",

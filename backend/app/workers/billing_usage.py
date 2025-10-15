@@ -50,6 +50,19 @@ def process_billing_usage_sync(
 
     try:
         service = BillingUsageService(db_session)
+        if not service.sync_enabled:
+            logger.info(
+                "Billing usage sync disabled (flag or missing Stripe secret)",
+                extra={"event": "billing_usage_disabled"},
+            )
+            return {
+                "processed": 0,
+                "succeeded": 0,
+                "failed": 0,
+                "skipped": 0,
+                "status": "disabled",
+            }
+
         batch_limit = limit or settings.BILLING_USAGE_BATCH_SIZE
         result = service.sync_due_windows(
             now=now or datetime.now(timezone.utc),

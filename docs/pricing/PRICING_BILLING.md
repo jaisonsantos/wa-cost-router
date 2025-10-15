@@ -37,6 +37,7 @@ Registrar consumo metered de mensagens WhatsApp/SMS no Stripe Billing usando `Us
 
 | Variável | Padrão | Descrição |
 | --- | --- | --- |
+| `STRIPE_SECRET_KEY` | `""` | Obrigatório para enviar UsageRecord; se vazio o worker permanece desabilitado. |
 | `BILLING_USAGE_SYNC_ENABLED` | `false` | Habilita o worker e o endpoint de sincronização. |
 | `BILLING_USAGE_LOOKBACK_DAYS` | `7` | Janelas diárias criadas retroativamente a partir do `now`. |
 | `BILLING_USAGE_GRACE_MINUTES` | `30` | Delay após `period_end` antes de tentar sincronizar (evita reprocessar o dia em curso). |

@@ -61,6 +61,13 @@ class BillingUsageService:
         self._stripe_gateway = stripe_gateway
         self._session_factory = session_factory
         self._session_factory_uses_connection = False
+        self._sync_enabled = bool(
+            settings.BILLING_USAGE_SYNC_ENABLED and settings.STRIPE_SECRET_KEY
+        )
+
+    @property
+    def sync_enabled(self) -> bool:
+        return self._sync_enabled
 
     # ------------------------------------------------------------------
     # Public API
@@ -95,7 +102,7 @@ class BillingUsageService:
         if not event.is_billable:
             event.is_billable = True
 
-        if not settings.BILLING_USAGE_SYNC_ENABLED:
+        if not self._sync_enabled:
             return
 
         try:
@@ -126,6 +133,9 @@ class BillingUsageService:
 
     def ensure_backfill(self, *, now: datetime | None = None) -> None:
         """Ensure usage windows exist for the lookback horizon for all orgs."""
+
+        if not self._sync_enabled:
+            return
 
         current_time = self._ensure_tz(now or datetime.now(timezone.utc))
         lookback_days = max(int(settings.BILLING_USAGE_LOOKBACK_DAYS), 1)
@@ -159,6 +169,13 @@ class BillingUsageService:
 
         current_time = self._ensure_tz(now or datetime.now(timezone.utc))
         result = UsageSyncResult()
+
+        if not self._sync_enabled:
+            logger.info(
+                "Billing usage sync invoked while disabled",
+                extra={"event": "billing_usage_disabled"},
+            )
+            return result
 
         self.ensure_backfill(now=current_time)
 

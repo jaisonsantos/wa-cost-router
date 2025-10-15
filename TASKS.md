@@ -38,7 +38,7 @@
      - Atualizar testes de billing simulando invoice com consumo.
    • Branch sugerida: `feat/stripe-usage-record`
    • Título PR sugerido: `feat: registrar consumo metered no Stripe`
-   • Resumo: billing_usage worker criado com janelas idempotentes, métricas Prometheus e endpoint `/billing/usage/sync`; message delivery marca eventos faturáveis sem bloquear fluxo.
+   • Resumo: billing_usage worker criado com janelas idempotentes, métricas Prometheus e endpoint `/billing/usage/sync`; message delivery marca eventos faturáveis sem bloquear fluxo e o feature flag só ativa o worker quando `STRIPE_SECRET_KEY` está configurado.
    • Commits/arquivos-chave: backend/app/services/billing/usage.py, backend/app/workers/billing_usage.py, backend/tests/test_billing_usage.py, backend/alembic/versions/016_billing_usage.py, docs/pricing/PRICING_BILLING.md.
    • Notas de migração/rollback: aplicar `alembic upgrade head` para criar `billing_usage_window`/colunas novas; rollback via `alembic downgrade 015_routed_action_dry_run_flag` remove tabela e campos.
 

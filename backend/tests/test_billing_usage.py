@@ -50,6 +50,7 @@ def enable_usage_sync(monkeypatch):
     """Ensure billing usage features are enabled for tests by default."""
 
     monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", True)
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_usage")
     yield
 
 
@@ -413,6 +414,7 @@ def test_process_billing_usage_sync_disabled(monkeypatch):
 
 def test_process_billing_usage_sync_runs(monkeypatch, db_session):
     monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", True)
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_usage")
 
     called = {}
 
@@ -426,6 +428,15 @@ def test_process_billing_usage_sync_runs(monkeypatch, db_session):
     assert result["processed"] == 1
     assert result["status"] == "completed"
     assert called["limit"] == 5
+
+
+def test_service_disabled_without_stripe_secret(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", True)
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "")
+
+    service = BillingUsageService(db_session)
+
+    assert service.sync_enabled is False
 
 
 def test_enqueue_billing_usage_sync(monkeypatch):
