@@ -33,7 +33,9 @@ import app.services.billing.usage as usage_module  # noqa: E402
 from app.services.billing.usage import BillingUsageService, UsageSyncResult  # noqa: E402
 from app.workers.billing_usage import (  # noqa: E402
     enqueue_billing_usage_sync,
+    enqueue_usage_window_event,
     process_billing_usage_sync,
+    process_usage_window_event,
 )  # noqa: E402
 
 
@@ -155,6 +157,40 @@ def test_mark_message_billable_creates_window(db_session, organization, monkeypa
     window_start = BillingUsageService._ensure_tz(window.period_start)
     window_end = BillingUsageService._ensure_tz(window.period_end)
     assert window_start <= event_time < window_end
+
+
+def test_process_usage_window_event_marks_billable(db_session, organization, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_USAGE_GRACE_MINUTES", 0)
+    event_time = datetime.now(timezone.utc)
+    event = _create_message_event(db_session, org_id=organization.id, occurred_at=event_time)
+
+    result = process_usage_window_event(
+        message_event_id=str(event.id),
+        occurred_at=event_time,
+        db_session=db_session,
+    )
+
+    assert result["status"] == "queued"
+    refreshed = db_session.get(MessageEvent, event.id)
+    assert refreshed.is_billable is True
+
+
+def test_process_usage_window_event_skips_when_disabled(db_session, organization, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", False)
+    event_time = datetime.now(timezone.utc)
+    event = _create_message_event(db_session, org_id=organization.id, occurred_at=event_time)
+    event.is_billable = True
+    db_session.commit()
+
+    result = process_usage_window_event(
+        message_event_id=str(event.id),
+        occurred_at=event_time,
+        db_session=db_session,
+    )
+
+    assert result["status"] == "disabled"
+    refreshed = db_session.get(MessageEvent, event.id)
+    assert refreshed.is_billable is True
 
 
 def test_mark_message_billable_is_idempotent_for_same_window(db_session, organization, monkeypatch):
