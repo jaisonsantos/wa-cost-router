@@ -11,7 +11,7 @@ from typing import Callable, Iterator
 from sqlalchemy import and_, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, InvalidRequestError
 from sqlalchemy.orm import Session, sessionmaker
 from stripe import error as stripe_error
 
@@ -390,6 +390,23 @@ class BillingUsageService:
         reference: datetime,
         message_event_id: uuid.UUID | None = None,
     ) -> None:
+        if self._can_use_current_session():
+            try:
+                with self.db.begin_nested():
+                    window = self._ensure_window(
+                        session=self.db, org_id=org_id, reference=reference
+                    )
+                    if window is None:
+                        return
+                    self._mark_window_pending(
+                        session=self.db, window=window, reference=reference
+                    )
+                    self.db.flush()
+                return
+            except InvalidRequestError:
+                # Session is not in a transactional state; fall back to aux sessions.
+                pass
+
         for session in self._yield_aux_sessions():
             if session is None:
                 logger.warning(
@@ -463,6 +480,14 @@ class BillingUsageService:
             raise
         finally:
             session.close()
+
+    def _can_use_current_session(self) -> bool:
+        if not hasattr(self.db, "in_transaction"):
+            return False
+        try:
+            return bool(self.db.in_transaction())
+        except Exception:  # pragma: no cover - defensive guard
+            return False
 
     def _calculate_quantity(
         self,
