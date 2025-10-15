@@ -146,20 +146,33 @@
     • Branch sugerida: `feat/crm-sync-dashboard`  
     • Título PR sugerido: `feat: publicar status operacional de crm_sync`
 
-12. **Atualizar documentação de API e pricing**  
-    • Prioridade: P1  
-    • Área: DOC  
-    • Dependências: Tarefas 3 e 5  
-    • Estimativa: S  
-    • Risco/Impacto: Clientes e equipe interna operam com informações desatualizadas.  
+12. **Atualizar documentação de API e pricing**
+    • Prioridade: P1
+    • Área: DOC
+    • Dependências: Tarefas 3 e 5
+    • Estimativa: S
+    • Risco/Impacto: Clientes e equipe interna operam com informações desatualizadas.
     • DoD:
       - Adicionar seções de billing/admin metrics na referência de API.
       - Sincronizar `docs/pricing/PRICING_BILLING.md` com features atuais (ou marcar como roadmap).
       - Atualizar README com comandos e novas métricas.
-    • Branch sugerida: `docs/update-api-pricing`  
+    • Branch sugerida: `docs/update-api-pricing`
     • Título PR sugerido: `docs: alinhar referência de API e pricing`
 
-13. **Testes E2E para fluxo de billing frontend**  
+13. **Regularizar billing do GitHub Actions** — 🚫 Bloqueada (aguardando financeiro)
+    • Prioridade: P0
+    • Área: OPS
+    • Dependências: Nenhuma
+    • Estimativa: S
+    • Risco/Impacto: Pipelines não executam enquanto o bloqueio persistir, impedindo validação de builds/PRs.
+    • DoD:
+      - Acessar *Settings › Billing & plans* (org/repo) e quitar cobranças pendentes ou ajustar o spending limit.
+      - Confirmar reativação do GitHub Actions (status "All workflows enabled") nas configurações.
+      - Reexecutar workflow (`Re-run jobs`) para validar que os pipelines voltaram a iniciar.
+    • Branch sugerida: `ops/github-actions-billing`
+    • Título PR sugerido: `ops: desbloquear billing do GitHub Actions`
+
+14. **Testes E2E para fluxo de billing frontend**
     • Prioridade: P1  
     • Área: FE  
     • Dependências: Tarefa 3  
@@ -172,7 +185,7 @@
     • Branch sugerida: `test/billing-e2e`  
     • Título PR sugerido: `test: cobrir fluxo de billing no frontend`
 
-14. **Instrumentar métricas por provedor com alertas**  
+15. **Instrumentar métricas por provedor com alertas**
     • Prioridade: P2  
     • Área: INF  
     • Dependências: Tarefas 1 e 2  
@@ -185,7 +198,7 @@
     • Branch sugerida: `chore/provider-alerts`  
     • Título PR sugerido: `chore: configurar alertas por provedor de mensagem`
 
-15. **Refinar importação de contatos com idempotência expandida**
+16. **Refinar importação de contatos com idempotência expandida**
     • Prioridade: P2
     • Área: BE
     • Dependências: Nenhuma
@@ -198,7 +211,7 @@
     • Branch sugerida: `feat/contact-import-idempotency`
     • Título PR sugerido: `feat: reforçar idempotência na importação de contatos`
 
-16. **Stripe Tax automático + reconciliação diária de invoices** — ✅ Concluída em 2025-10-16
+17. **Stripe Tax automático + reconciliação diária de invoices** — ✅ Concluída em 2025-10-16
     • Prioridade: P0
     • Área: BE
     • Dependências: Nenhuma

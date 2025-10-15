@@ -210,6 +210,13 @@
       "severity": "médio",
       "description": "Workers não possuem DLQ dedicada, dificultando recuperação de falhas crônicas.",
       "references": ["backend/app/workers/message_send.py#L33-L118", "backend/app/services/crm/worker.py#L53-L145"]
+    },
+    {
+      "id": "R5",
+      "area": "Operações",
+      "severity": "alto",
+      "description": "Workflows do GitHub Actions bloqueados por pendências de billing; pipelines não iniciam até regularização.",
+      "references": ["docs/operations/OPERATIONS.md#L120-L150", "TASKS.md#L170-L210"]
     }
   ]
 }
