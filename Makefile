@@ -187,6 +187,9 @@ postman-env: ## Show Postman collection and environment paths
 # Aggregator CI target (no recipe) → runs modular steps
 ci: ci-backend test-backend-multichannel ci-frontend test-frontend ci-e2e ## Run backend, frontend and E2E checks sequentially
 
+ci-lite: ## Run local CI fallback (sem Docker) e gerar relatório em artifacts/ci-lite
+scripts/ci_lite.py
+
 ci-backend: ## Build backend images and verify migrations
 	$(DC) build api worker
 	$(DC) run --rm api alembic upgrade head

@@ -79,7 +79,8 @@ Ele é dividido em três jobs principais:
 - **e2e** – sobe a stack via Docker Compose e executa os testes Postman/Newman contra o backend publicado.
 
 Use `make ci` para replicar localmente a sequência de checks descrita em [Operações › Pipeline CI](docs/operations/OPERATIONS.md#pipeline-ci).
-Se o GitHub Actions bloquear a execução por pendências de pagamento, siga o [runbook de billing do Actions](docs/runbooks/ci_billing.md) e anexe o log local enquanto o desbloqueio não é concluído.
+Caso o GitHub Actions esteja bloqueado (ex.: billing pendente), execute `make ci-lite` para rodar o fallback sem Docker — o comando gera relatórios estruturados em `artifacts/ci-lite` para anexar ao PR.
+Siga o [runbook de billing do Actions](docs/runbooks/ci_billing.md) para regularizar o acesso e volte a usar `make ci`/`Re-run jobs` assim que o desbloqueio for confirmado.
 
 ### Auto-fix do Codex após falhas
 

@@ -215,8 +215,8 @@
       "id": "R5",
       "area": "Operações",
       "severity": "alto",
-      "description": "Workflows do GitHub Actions bloqueados por pendências de billing; pipelines não iniciam até regularização.",
-      "references": ["docs/operations/OPERATIONS.md#L120-L155", "docs/runbooks/ci_billing.md#L1-L120", "TASKS.md#L170-L215"]
+      "description": "Workflows do GitHub Actions bloqueados por pendências de billing; pipelines não iniciam até regularização. Mitigação temporária via `make ci-lite` gera relatórios locais para revisão de PRs.",
+      "references": ["docs/operations/OPERATIONS.md#L120-L160", "docs/runbooks/ci_billing.md#L1-L160", "scripts/ci_lite.py#L1-L210", "TASKS.md#L170-L225"]
     }
   ]
 }
