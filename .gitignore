@@ -34,12 +34,17 @@ __pycache__/
 .eggs/
 .venv/
 venv/
+.venv*
+.venv-ci/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
 coverage.xml
 htmlcov/
+
+# Coverage report directory
+coverage/
 
 # ---- Env / Segredos
 .env
