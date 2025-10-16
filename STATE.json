@@ -13,5 +13,225 @@
     "docs/api/API_REFERENCE.md",
     "README.md",
     "TASKS.md"
+  ],
+  "components": [
+    {
+      "name": "FastAPI backend",
+      "description": "Orquestra routers de auth, mensagens, integrações, billing, relatórios e contatos com CORS configurável.",
+      "status": "estável",
+      "references": ["backend/app/main.py#L4-L103", "backend/app/core/config.py#L34-L176"]
+    },
+    {
+      "name": "Routing & Delivery Service",
+      "description": "Seleciona provedores com circuit breaker, fallback chain e registra RoutedAction/DeliveryAttempt.",
+      "status": "estável",
+      "references": ["backend/app/services/messages/delivery.py#L321-L707"]
+    },
+    {
+      "name": "CRM Sync Service",
+      "description": "Sincronização incremental via webhooks e polling para HubSpot/Pipedrive com métricas Prometheus.",
+      "status": "beta",
+      "references": ["backend/app/api/integrations_crm.py#L71-L154", "backend/app/services/crm/sync.py#L34-L166", "backend/app/services/crm/pipedrive.py#L17-L188"]
+    },
+    {
+      "name": "Stripe Billing",
+      "description": "Checkout, portal e webhooks com Stripe Tax automático, sincronização de usage records e reconciliação diária com métricas Prometheus.",
+      "status": "estável",
+      "references": [
+        "backend/app/api/billing.py#L1-L360",
+        "backend/app/models/models.py#L44-L120",
+        "backend/app/workers/billing_usage.py#L1-L140",
+        "backend/app/workers/billing_reconcile.py#L1-L170",
+        "docs/pricing/PRICING_BILLING.md#L1-L160",
+        "docs/runbooks/billing.md#L1-L120"
+      ]
+    },
+    {
+      "name": "Template Catalog",
+      "description": "CRUD e sincronização de templates WhatsApp com filtragem por idioma/status.",
+      "status": "estável",
+      "references": ["backend/app/api/templates.py#L87-L312", "src/pages/Templates.tsx#L10-L167"]
+    }
+  ],
+  "workers": [
+    {
+      "name": "message_send",
+      "queue": "message_send",
+      "responsibility": "Executa entregas, aplica retries e registra métricas de mensagens.",
+      "status": "produção",
+      "references": ["backend/app/workers/message_send.py#L33-L118", "backend/app/services/messages/delivery.py#L321-L707"]
+    },
+    {
+      "name": "billing_usage",
+      "queue": "billing_usage",
+      "responsibility": "Consolida mensagens faturáveis por janela diária e envia UsageRecord para o Stripe com retries e métricas.",
+      "status": "beta",
+      "references": ["backend/app/workers/billing_usage.py#L1-L140", "backend/app/services/billing/usage.py#L1-L240"]
+    },
+    {
+      "name": "billing_reconcile",
+      "queue": "billing_reconcile",
+      "responsibility": "Reconcilia totais de invoices com Stripe Tax, calcula drift percentual e registra métricas/alertas.",
+      "status": "beta",
+      "references": ["backend/app/workers/billing_reconcile.py#L1-L170", "docs/runbooks/billing.md#L40-L110"]
+    },
+    {
+      "name": "crm_sync",
+      "queue": "crm_sync",
+      "responsibility": "Agenda polling incremental para provedores CRM e respeita intervalo mínimo.",
+      "status": "beta",
+      "references": ["backend/app/services/crm/worker.py#L53-L145"]
+    },
+    {
+      "name": "contact_import",
+      "queue": "default",
+      "responsibility": "Processa uploads CSV, normaliza contatos e gera relatório de erros.",
+      "status": "produção",
+      "references": ["backend/app/services/contacts/import_worker.py#L28-L198"]
+    }
+  ],
+  "endpoints": [
+    {
+      "method": "POST",
+      "path": "/messages/send",
+      "purpose": "Cria MessageJob, verifica consentimento e enfileira entrega assíncrona.",
+      "status": "produção",
+      "notes": "Aplica rate limit por organização e retorna job idempotente.",
+      "references": ["backend/app/api/messages.py#L218-L450"]
+    },
+    {
+      "method": "GET",
+      "path": "/messages/jobs/{job_id}/routing",
+      "purpose": "Consulta cadeia de RoutedAction para auditoria de roteamento.",
+      "status": "produção",
+      "notes": "Retorna apenas ações da organização solicitante.",
+      "references": ["backend/app/api/messages.py#L484-L515"]
+    },
+    {
+      "method": "POST",
+      "path": "/billing/checkout",
+      "purpose": "Cria sessão de checkout Stripe (Stripe Tax habilitado) com metadados da organização.",
+      "status": "beta",
+      "notes": "Depende de Stripe configurado; vincula price selecionado, habilita `automatic_tax` e pré-registra invoice.",
+      "references": ["backend/app/api/billing.py#L120-L210", "docs/api/API_REFERENCE.md#billing"]
+    },
+    {
+      "method": "POST",
+      "path": "/billing/portal",
+      "purpose": "Abre sessão do Stripe Customer Portal mantendo Stripe Tax habilitado.",
+      "status": "beta",
+      "notes": "Requer assinatura ativa com `stripe_customer_id`; configura `automatic_tax` como padrão em atualizações.",
+      "references": ["backend/app/api/billing.py#L210-L270", "docs/api/API_REFERENCE.md#billing"]
+    },
+    {
+      "method": "POST",
+      "path": "/billing/webhook",
+      "purpose": "Processa eventos Stripe (subscription/invoice) e atualiza BillingSubscription/BillingInvoice.",
+      "status": "beta",
+      "notes": "Requer `STRIPE_WEBHOOK_SECRET`; sincroniza quotas, impostos (`tax_amount_total_minor`) e links de invoice.",
+      "references": ["backend/app/api/billing.py#L210-L360", "backend/tests/test_billing_tax.py#L1-L200"]
+    },
+    {
+      "method": "POST",
+      "path": "/billing/usage/sync",
+      "purpose": "Agenda sincronização de usage records (UsageRecord) para o Stripe.",
+      "status": "beta",
+      "notes": "Retorna job enfileirado na fila `billing_usage`; requer flag `BILLING_USAGE_SYNC_ENABLED` e `STRIPE_SECRET_KEY`.",
+      "references": ["backend/app/api/billing.py#L320-L360", "backend/app/workers/billing_usage.py#L1-L140"]
+    },
+    {
+      "method": "GET",
+      "path": "/reports/summary/export",
+      "purpose": "Exporta métricas de economia em CSV ou JSON.",
+      "status": "produção",
+      "notes": "Aceita `format=csv|json`; similar para provider/channel/queues.",
+      "references": ["backend/app/api/reports.py#L491-L518"]
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/crm/{slug}/webhook",
+      "purpose": "Recebe eventos HubSpot (com HMAC) e aciona CRMIncrementalSyncService.",
+      "status": "beta",
+      "notes": "Retorna 401 se assinatura inválida ou provedor desconhecido.",
+      "references": ["backend/app/api/integrations_crm.py#L71-L122"]
+    }
+  ],
+  "use_cases": [
+    {
+      "name": "Onboarding multicanal",
+      "status": "parcial",
+      "notes": "WhatsApp, SMS e Email ativos; Telegram pendente de implementação real.",
+      "references": ["backend/app/api/integrations.py#L78-L446", "backend/app/services/provider_connectors.py#L977-L999"]
+    },
+    {
+      "name": "Motor de roteamento com fallback",
+      "status": "concluído",
+      "notes": "Fallback chain, retries e circuit breaker persistem auditoria completa.",
+      "references": ["backend/app/services/messages/delivery.py#L321-L707"]
+    },
+    {
+      "name": "Catálogo de templates",
+      "status": "concluído",
+      "notes": "CRUD e sync multi-provedor com UI React e filtros por idioma/status.",
+      "references": ["backend/app/api/templates.py#L87-L312", "src/pages/Templates.tsx#L10-L167"]
+    },
+    {
+      "name": "Billing recorrente",
+      "status": "concluído",
+      "notes": "Checkout/portal com Stripe Tax automático, webhooks persistindo impostos e usage metered com reconciliação diária.",
+      "references": ["backend/app/api/billing.py#L1-L360", "backend/app/workers/billing_reconcile.py#L1-L170", "docs/pricing/PRICING_BILLING.md#L1-L160", "docs/runbooks/billing.md#L1-L120"]
+    },
+    {
+      "name": "Consentimento multicanal",
+      "status": "concluído",
+      "notes": "Opt-ins versionados, bloqueio inbound sem consentimento e auditoria de revogação.",
+      "references": ["backend/app/api/integrations.py#L693-L809", "backend/app/services/routing/preferences.py#L52-L175"]
+    }
+  ],
+  "plans": [
+    {
+      "name": "Stripe plan (dinâmico)",
+      "pricing_model": "definido no Stripe; nickname, moeda e quota vêm do webhook",
+      "base_price_minor": "varia",
+      "quota": "message_quota de metadata",
+      "references": ["backend/app/api/billing.py#L1-L320", "backend/tests/test_billing_api.py#L1-L320", "backend/tests/test_billing_tax.py#L1-L200"]
+    }
+  ],
+  "risks": [
+    {
+      "id": "R1",
+      "area": "Billing",
+      "severity": "baixo",
+      "description": "Stripe Tax habilitado e reconciliação diária ativa; monitorar `billing_reconcile_drift` e `billing_tax_applied_total` para detectar desvios.",
+      "references": ["docs/pricing/PRICING_BILLING.md#L1-L160", "backend/app/workers/billing_reconcile.py#L1-L170", "docs/runbooks/billing.md#L1-L120"]
+    },
+    {
+      "id": "R2",
+      "area": "Compliance",
+      "severity": "alto",
+      "description": "Logs históricos com PII ainda não foram sanitizados conforme plano do ciclo.",
+      "references": ["docs/current-cycle/NEXT_IMPLEMENTATION_PLAN.md#L45-L69"]
+    },
+    {
+      "id": "R3",
+      "area": "Multicanal",
+      "severity": "médio",
+      "description": "Canal Telegram aparece na UI sem suporte real, causando expectativas incorretas.",
+      "references": ["backend/app/api/integrations.py#L78-L112", "src/pages/Settings.tsx#L551-L856"]
+    },
+    {
+      "id": "R4",
+      "area": "Operações",
+      "severity": "médio",
+      "description": "Workers não possuem DLQ dedicada, dificultando recuperação de falhas crônicas.",
+      "references": ["backend/app/workers/message_send.py#L33-L118", "backend/app/services/crm/worker.py#L53-L145"]
+    },
+    {
+      "id": "R5",
+      "area": "Operações",
+      "severity": "alto",
+      "description": "Workflows do GitHub Actions bloqueados por pendências de billing; pipelines não iniciam até regularização. Mitigação temporária via `make ci-lite` + publicação manual (`ci_lite_publish`) mantém rastreabilidade dos PRs.",
+      "references": ["docs/operations/OPERATIONS.md#L120-L160", "docs/runbooks/ci_billing.md#L1-L200", "scripts/ci_lite.py#L1-L220", "scripts/ci_lite_publish.py#L1-L220", "TASKS.md#L170-L240"]
+    }
   ]
 }

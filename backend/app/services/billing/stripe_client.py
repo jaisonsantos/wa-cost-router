@@ -32,26 +32,46 @@ class StripeGateway:
     def create_checkout_session(self, **kwargs: Any) -> Any:
         return self._client.checkout.sessions.create(**kwargs)
 
+    def create_billing_portal_session(self, **kwargs: Any) -> Any:
+        return self._client.billing_portal.sessions.create(**kwargs)
+
     def retrieve_subscription(self, subscription_id: str) -> Any:
         return self._client.subscriptions.retrieve(subscription_id)
 
     def retrieve_payment_method(self, payment_method_id: str) -> Any:
         return self._client.payment_methods.retrieve(payment_method_id)
 
-    def create_billing_portal_session(self, **kwargs: Any) -> Any:
-        return self._client.billing_portal.sessions.create(**kwargs)
+    def retrieve_invoice(self, invoice_id: str) -> Any:
+        return self._client.invoices.retrieve(invoice_id)
+
+    def create_usage_record(
+        self,
+        *,
+        subscription_item_id: str,
+        quantity: int,
+        timestamp: int,
+        action: str = "set",
+        idempotency_key: str | None = None,
+    ) -> Any:
+        payload: dict[str, Any] = {
+            "subscription_item": subscription_item_id,
+            "quantity": quantity,
+            "timestamp": timestamp,
+            "action": action,
+        }
+        if idempotency_key:
+            payload["idempotency_key"] = idempotency_key
+        return self._client.usage_records.create(**payload)
 
 
 @lru_cache(maxsize=1)
 def get_stripe_gateway() -> StripeGateway:
     """Return a cached :class:`StripeGateway` instance."""
-
     return StripeGateway(settings.STRIPE_SECRET_KEY)
 
 
 def verify_webhook_event(payload: bytes, signature: str | None) -> Any:
     """Validate a Stripe webhook payload and return the parsed event."""
-
     secret = settings.STRIPE_WEBHOOK_SECRET
     if not secret:
         raise StripeConfigurationError("STRIPE_WEBHOOK_SECRET is not configured")

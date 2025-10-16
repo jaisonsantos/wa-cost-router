@@ -74,6 +74,74 @@ Retorna metadados da organização ativa do token.
 ```
 Erros: `404 Not Found` se a organização não existir (token inválido ou órfão).
 
+## Billing
+
+### `POST /billing/checkout`
+Cria uma sessão de checkout Stripe para assinar o plano selecionado, habilitando Stripe Tax automaticamente.
+
+**Payload**
+```json
+{
+  "price_id": "price_123",
+  "success_url": "https://app.local/billing/success",
+  "cancel_url": "https://app.local/billing/cancel"
+}
+```
+
+**Resposta 200**
+```json
+{
+  "checkout_url": "https://checkout.stripe.com/c/pay/cs_test_..."
+}
+```
+
+- `automatic_tax` é enviado como `{"enabled": true}` tanto no `CheckoutSession` quanto no `subscription_data`, garantindo cálculo automático de impostos.
+- O webhook `checkout.session.completed` já registra/atualiza `billing_invoice` com `amount_total`, `amount_subtotal` e `tax_amount_total_minor`.
+
+### `POST /billing/portal`
+Gera uma sessão do Stripe Customer Portal com Stripe Tax ativado para o tenant autenticado.
+
+**Payload**
+```json
+{
+  "return_url": "https://app.local/settings/billing"
+}
+```
+
+**Resposta 200**
+```json
+{
+  "portal_url": "https://billing.stripe.com/p/login/test_..."
+}
+```
+
+- Disponível apenas quando há `BillingSubscription` ativo com `stripe_customer_id`.
+- A sessão é criada com `flow_data.subscription_update.default_values.automatic_tax.enabled = true`, garantindo que alterações futuras mantenham o cálculo automático.
+
+### `POST /billing/usage/sync`
+Agenda a sincronização das janelas de uso faturável com o Stripe. Disponível apenas quando `BILLING_USAGE_SYNC_ENABLED=true` e `STRIPE_SECRET_KEY` estiver configurado.
+
+**Headers obrigatórios**
+- `Authorization: Bearer <token>`
+
+**Resposta 202**
+```json
+{
+  "job_id": "rq:job:usage:1a2b3c",
+  "status": "enqueued"
+}
+```
+
+O job é executado na fila `billing_usage` e respeita o batch configurado via `BILLING_USAGE_BATCH_SIZE`. Acompanhe o progresso pelo dashboard do RQ ou pelos logs (`event=billing_usage_batch`).
+
+### Reconciliação e métricas
+
+- Webhooks `invoice.paid` e `checkout.session.completed` persistem registros em `billing_invoice` (incluindo `tax_amount_total_minor`, `subtotal_minor`, `total_minor`, períodos e comportamento fiscal) e atualizam `billing_subscription.tax_amount_total_minor`.
+- A métrica `billing_tax_applied_total{org_id}` representa o acumulado de impostos (minor units) por organização.
+- O worker `billing_reconcile` roda diariamente (fila `billing_reconcile`) e registra `billing_reconcile_drift{org_id}` com o último `drift_pct` observado. Logs `event=billing_reconcile_item` detalham cada invoice reconciliada.
+
+Erros: `503 Service Unavailable` quando a flag estiver desabilitada; demais erros seguem o padrão FastAPI.
+
 ## Contatos
 
 ### `GET /contacts`

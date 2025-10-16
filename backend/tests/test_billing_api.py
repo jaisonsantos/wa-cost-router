@@ -21,6 +21,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.api.dependencies import get_current_user  # noqa: E402
+from app.core.config import settings  # noqa: E402
 from app.core.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.models import (  # noqa: E402
@@ -92,6 +93,7 @@ class DummyGateway:
     def __init__(self):
         self.checkout_payloads: list[dict[str, object]] = []
         self.created_customers: list[dict[str, object]] = []
+        self.portal_payloads: list[dict[str, object]] = []
 
     def create_customer(self, **kwargs):
         self.created_customers.append(kwargs)
@@ -100,6 +102,10 @@ class DummyGateway:
     def create_checkout_session(self, **kwargs):
         self.checkout_payloads.append(kwargs)
         return SimpleNamespace(url="https://stripe.test/checkout")
+
+    def create_billing_portal_session(self, **kwargs):
+        self.portal_payloads.append(kwargs)
+        return SimpleNamespace(url="https://stripe.test/portal")
 
 
 def test_checkout_creates_customer_and_session(client, db_session, monkeypatch):
@@ -137,6 +143,8 @@ def test_checkout_creates_customer_and_session(client, db_session, monkeypatch):
     checkout_payload = gateway.checkout_payloads[0]
     assert checkout_payload["customer"] == "cus_test"
     assert checkout_payload["metadata"]["org_id"] == str(org_id)
+    assert checkout_payload["automatic_tax"] == {"enabled": True}
+    assert checkout_payload["subscription_data"]["automatic_tax"] == {"enabled": True}
 
 
 def test_webhook_updates_subscription(client, db_session, monkeypatch):
@@ -166,6 +174,7 @@ def test_webhook_updates_subscription(client, db_session, monkeypatch):
                 "items": {
                     "data": [
                         {
+                            "id": "si_123",
                             "quantity": 250,
                             "price": {
                                 "id": "price_456",
@@ -233,6 +242,7 @@ def test_webhook_updates_subscription(client, db_session, monkeypatch):
     assert subscription.message_quota == 1000
     assert subscription.message_usage == 300
     assert subscription.current_period_end is not None
+    assert subscription.stripe_subscription_item_id == "si_123"
     normalized_period_end = subscription.current_period_end.replace(
         tzinfo=subscription.current_period_end.tzinfo or timezone.utc,
     )
@@ -248,3 +258,74 @@ def test_webhook_updates_subscription(client, db_session, monkeypatch):
     assert summary["message_usage"] == 300
     assert summary["message_quota"] == 1000
     assert summary["payment_method_last4"] == "4242"
+
+
+def test_usage_sync_endpoint_requires_flag(client, monkeypatch):
+    test_client, org_id, user_id = client
+
+    monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", True)
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_usage")
+
+    monkeypatch.setattr("app.api.billing.enqueue_billing_usage_sync", lambda: "job-usage")
+
+    response = test_client.post("/billing/usage/sync")
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["job_id"] == "job-usage"
+    assert payload["status"] == "enqueued"
+
+
+def test_usage_sync_endpoint_returns_503_when_disabled(client, monkeypatch):
+    test_client, org_id, user_id = client
+
+    monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", False)
+
+    response = test_client.post("/billing/usage/sync")
+    assert response.status_code == 503
+
+
+def test_portal_session_requires_active_subscription(client, db_session, monkeypatch):
+    test_client, org_id, user_id = client
+
+    organization = Organization(id=org_id, name="Portal Org")
+    user = User(id=user_id, email="owner@example.com", password_hash="x")
+    subscription = BillingSubscription(
+        org_id=org_id,
+        stripe_customer_id="cus_portal",
+        status=BillingStatusEnum.active,
+    )
+    db_session.add_all([organization, user, subscription])
+    db_session.commit()
+
+    gateway = DummyGateway()
+    monkeypatch.setattr("app.api.billing.get_stripe_gateway", lambda: gateway)
+
+    response = test_client.post(
+        "/billing/portal",
+        json={"return_url": "https://app.local/settings"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["portal_url"] == "https://stripe.test/portal"
+    assert gateway.portal_payloads
+    portal_payload = gateway.portal_payloads[0]
+    assert portal_payload["customer"] == "cus_portal"
+    assert portal_payload["flow_data"]["subscription_update"]["default_values"]["automatic_tax"] == {"enabled": True}
+
+
+def test_portal_session_returns_404_without_subscription(client, db_session, monkeypatch):
+    test_client, org_id, user_id = client
+
+    organization = Organization(id=org_id, name="Portal Missing")
+    user = User(id=user_id, email="owner@example.com", password_hash="x")
+    db_session.add_all([organization, user])
+    db_session.commit()
+
+    gateway = DummyGateway()
+    monkeypatch.setattr("app.api.billing.get_stripe_gateway", lambda: gateway)
+
+    response = test_client.post(
+        "/billing/portal",
+        json={"return_url": "https://app.local/settings"},
+    )
+    assert response.status_code == 404

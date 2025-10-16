@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.circuit_breaker import CircuitBreakerStore, CircuitState
+from app.core.config import settings
 from app.core.pii import sanitize_provider_payload
 from app.core.security import decrypt_credentials
 from app.models.models import (
@@ -30,6 +31,7 @@ from app.models.models import (
 from app.services.conversations import ConversationLifecycleService
 from app.services.provider_connectors import get_connector
 from app.services.routing_engine import RoutingEngine
+from app.workers.billing_usage import enqueue_usage_window_event
 
 
 logger = logging.getLogger(__name__)
@@ -524,6 +526,23 @@ class MessageDeliveryService:
                         attributes=event_attributes or None,
                     )
                     self.db.add(message_event)
+                    message_event.is_billable = True
+
+                    try:
+                        if settings.BILLING_USAGE_SYNC_ENABLED and settings.STRIPE_SECRET_KEY:
+                            enqueue_usage_window_event(
+                                message_event_id=message_event.id,
+                                occurred_at=message_event.timestamp_provider,
+                            )
+                    except Exception:  # pragma: no cover - usage marking must not break delivery
+                        logger.exception(
+                            "Failed to enqueue billing usage window event",
+                            extra={
+                                "event": "billing_usage_enqueue_error",
+                                "org_id": str(job.org_id),
+                                "message_event_id": str(message_event.id),
+                            },
+                        )
 
                     lifecycle_service = ConversationLifecycleService(self.db)
                     lifecycle_service.handle_outbound(

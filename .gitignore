@@ -32,33 +32,24 @@ __pycache__/
 *.pyd
 *.egg-info/
 .eggs/
-.venv/
 venv/
+.venv/
+.venv*
+.venv-ci/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# ---- Coverage
 .coverage
+coverage/
 coverage.xml
 htmlcov/
 
-# Local virtualenvs used in CI/dev
-.venv-ci/
-.venv*
-
-# Python bytecode
-*.pyc
-
-# Cache / build
+# ---- Cache / Build
 .cache/
 build/
 tmp/
-
-# OS files
-.DS_Store
-
-# IDEs
-.idea/
-.vscode/
 
 # ---- Env / Segredos
 .env

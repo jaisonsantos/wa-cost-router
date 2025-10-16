@@ -28,6 +28,16 @@ Comandos úteis:
 - `make test-backend` – executa a suíte Pytest localizada em `backend/tests`.
 - `npm run test:e2e` – executa a suíte Playwright contra a stack sandbox (requer serviços do `make dev` ativos).
 
+### Billing (Stripe)
+
+- Checkout e portal já enviam `automatic_tax={"enabled": true}`; os webhooks populam `billing_invoice` com impostos agregados por invoice e atualizam `billing_subscription.tax_amount_total_minor`.
+- A métrica `billing_tax_applied_total{org_id}` expõe o acumulado de impostos (em minor units) consumido pela organização.
+- Habilite `BILLING_USAGE_SYNC_ENABLED=true` e garanta `STRIPE_SECRET_KEY` configurado no `.env` para que o worker publique `UsageRecord` agregando as mensagens faturáveis por dia.
+- O worker `billing_usage` roda na fila dedicada (já adicionada ao `backend/worker.py`) e respeita `BILLING_USAGE_BATCH_SIZE` por execução.
+- Retries aplicam `exponential backoff` configurável via `BILLING_USAGE_RETRY_BASE_SECONDS`/`BILLING_USAGE_RETRY_MAX_SECONDS`; falhas e sucessos são expostos na métrica Prometheus `billing_usage_records_total{org_id,status}`.
+- O worker `billing_reconcile` (fila `billing_reconcile`) compara invoices locais × Stripe diariamente e registra `billing_reconcile_drift{org_id}`; configure alertas para valores >1.
+- Para disparo manual de usage, utilize `POST /billing/usage/sync` (retorna o `job_id` enfileirado) — útil para reprocessar janelas específicas em homologação.
+
 ### Recriando seeds após novas migrations
 
 Sempre que o modelo de dados for alterado por uma migration, aplique o schema atualizado e regenere os dados sandbox para manter a base consistente:
@@ -69,6 +79,9 @@ Ele é dividido em três jobs principais:
 - **e2e** – sobe a stack via Docker Compose e executa os testes Postman/Newman contra o backend publicado.
 
 Use `make ci` para replicar localmente a sequência de checks descrita em [Operações › Pipeline CI](docs/operations/OPERATIONS.md#pipeline-ci).
+Caso o GitHub Actions esteja bloqueado (ex.: billing pendente), execute `make ci-lite` para rodar o fallback sem Docker — o comando gera relatórios estruturados em `artifacts/ci-lite`.
+Utilize `make ci-lite-publish repo=<owner/repo> pr=<número>` (ou diretamente `scripts/ci_lite_publish.py`) para publicar um check run/manual comment no PR com o resultado do fallback enquanto o bloqueio persistir.
+Siga o [runbook de billing do Actions](docs/runbooks/ci_billing.md) para regularizar o acesso e volte a usar `make ci`/`Re-run jobs` assim que o desbloqueio for confirmado.
 
 ### Auto-fix do Codex após falhas
 

@@ -2,7 +2,7 @@ import redis
 from rq import Worker, Queue, Connection
 from app.core.config import settings
 
-listen = ["default", "message_send", "crm_sync"]
+listen = ["default", "message_send", "crm_sync", "billing_usage", "billing_reconcile"]
 
 redis_conn = redis.from_url(settings.REDIS_URL)
 

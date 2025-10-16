@@ -1224,6 +1224,53 @@ def test_send_message_handles_job_commit_failure(client, db_session, monkeypatch
     assert db_session.query(MessageEvent).count() == 0
 
 
+def test_send_message_enqueues_billing_usage_job(client, db_session, monkeypatch):
+    test_client, org_id = client
+    _bootstrap_routing_stack(db_session, org_id)
+
+    monkeypatch.setattr(settings, "BILLING_USAGE_SYNC_ENABLED", True)
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_usage")
+
+    usage_calls: list[dict[str, object]] = []
+
+    def capture_usage_enqueue(*, message_event_id, occurred_at):
+        usage_calls.append(
+            {
+                "message_event_id": message_event_id,
+                "occurred_at": occurred_at,
+            }
+        )
+        return "usage-job"
+
+    monkeypatch.setattr(delivery_module, "enqueue_usage_window_event", capture_usage_enqueue)
+
+    payload = {
+        "idempotency_key": "usage-hook",
+        "channel": "whatsapp",
+        "channel_address": DEFAULT_NUMBER,
+        "template_id": "welcome",
+        "template_category": "MARKETING",
+        "variables": {"body_params": ["Yara"]},
+    }
+
+    response = test_client.post("/messages/send", json=payload)
+    assert response.status_code == 202
+
+    _process_enqueued_jobs(test_client, db_session)
+
+    assert usage_calls, "billing usage enqueue should be invoked when feature is enabled"
+
+    job_id = uuid.UUID(response.json()["job_id"])
+    event = (
+        db_session.query(MessageEvent)
+        .filter(MessageEvent.message_job_id == job_id)
+        .order_by(MessageEvent.timestamp_provider.desc())
+        .first()
+    )
+    assert event is not None
+    assert usage_calls[0]["message_event_id"] == event.id
+
+
 def test_send_message_handles_non_iterable_fallback_chain(client, db_session, monkeypatch):
     test_client, org_id = client
     provider, _ = _bootstrap_routing_stack(db_session, org_id)
