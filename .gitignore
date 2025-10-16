@@ -83,3 +83,7 @@ blob-report/
 *.sqlite
 *.db
 *.db-journal
+
+# Genkit (artefatos locais do Gemini CLI)
+.genkit/
+.genkit/**
