@@ -40,12 +40,6 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
-# ---- Coverage
-.coverage
-coverage/
-coverage.xml
-htmlcov/
-
 # ---- Cache / Build
 .cache/
 build/
@@ -57,6 +51,7 @@ tmp/
 *.env.local
 .env.*.local
 backend/.env
+.envrc
 
 # ---- Alembic/Build/Artifacts
 artifacts/
@@ -70,3 +65,21 @@ newman-report.xml
 test-results/
 playwright-report/
 blob-report/
+
+# ---- Coverage (qualquer lugar do repo)
+**/.coverage
+**/coverage/
+**/coverage.xml
+**/htmlcov/
+**/lcov-report/
+**/lcov.info
+
+# ---- (Opcional) Extras úteis
+.python-version
+.tox/
+.hypothesis/
+.ipynb_checkpoints/
+.history/
+*.sqlite
+*.db
+*.db-journal
