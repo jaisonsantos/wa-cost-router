@@ -157,8 +157,13 @@ DEFAULT_NUMBER = "+5511999999999"
 
 
 def _bootstrap_routing_stack(db_session, org_id, *, to_number: str = DEFAULT_NUMBER):
-    organization = Organization(id=org_id, name="Test Org")
-    db_session.add(organization)
+    # Ensure organization exists (some tests create it beforehand)
+    existing_org = (
+        db_session.query(Organization).filter(Organization.id == org_id).first()
+    )
+    if existing_org is None:
+        organization = Organization(id=org_id, name="Test Org")
+        db_session.add(organization)
 
     provider = Provider(
         org_id=org_id,
