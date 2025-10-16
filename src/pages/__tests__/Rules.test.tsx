@@ -27,6 +27,7 @@ vi.mock("@/hooks/useApi", () => ({
   useUpdateRule: () => useUpdateRuleMock(),
   useProviders: () => useProvidersMock(),
   useDashboardMetrics: () => useDashboardMetricsMock(),
+  useCreateBillingPortal: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/components/AdvancedSimulator", () => ({

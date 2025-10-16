@@ -90,6 +90,15 @@ temporário com as correções para revisão humana.
 
 ## Documentação
 
+## Billing / Stripe
+
+To enable billing flows (checkout and customer portal) configure the following environment variables in `backend/.env`:
+
+- `STRIPE_SECRET_KEY` – secret key from Stripe (starts with `sk_`).
+- `STRIPE_WEBHOOK_SECRET` – webhook signing secret for validating Stripe webhooks.
+
+When these values are missing, endpoints that interact with Stripe will respond with `503 Service Unavailable`.
+
 - [Ciclo atual (roadmap, plano e governança)](docs/current-cycle/README.md)
 - [Histórico de ciclos anteriores](docs/history/2024-cycle-mvp/README.md)
 - [Matriz de casos de uso e rastreabilidade](docs/current-cycle/USE_CASE_TRACEABILITY.md)

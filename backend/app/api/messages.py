@@ -191,11 +191,6 @@ class RoutedActionItem(BaseModel):
     fallback_chain: list[Dict[str, Optional[str]]] = Field(default_factory=list)
 
 
-class RoutedActionChainResponse(BaseModel):
-    job_id: UUID
-    actions: list[RoutedActionItem]
-    latest_simulation: Optional["DryRunSimulationSummary"] = None
-
 
 class DryRunSimulationSummary(BaseModel):
     rule_id: Optional[UUID]
@@ -205,6 +200,12 @@ class DryRunSimulationSummary(BaseModel):
     estimated_cost_minor: int
     baseline_cost_minor: int
     fallback_chain: list[Dict[str, Optional[str]]] = Field(default_factory=list)
+
+
+class RoutedActionChainResponse(BaseModel):
+    job_id: UUID
+    actions: list[RoutedActionItem]
+    latest_simulation: Optional[DryRunSimulationSummary] = None
 
 
 def _serialize_routed_action(

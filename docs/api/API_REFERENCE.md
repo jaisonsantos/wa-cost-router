@@ -159,6 +159,27 @@ Importa CSV. Payload `multipart/form-data` com campo `upload` (arquivo). Respond
 }
 ```
 
+## Cobrança (Billing)
+
+### `GET /billing/portal`
+
+Abre uma sessão do Stripe Customer Portal para o cliente vinculado à organização autenticada.
+
+Cabeçalho: `Authorization: Bearer <token>`
+
+**Resposta 200**
+```json
+{
+  "url": "https://billing.stripe.com/session_..."
+}
+```
+
+Erros:
+- `400 Bad Request` – quando a organização não possui um Stripe customer configurado.
+- `502 Bad Gateway` – erro ao comunicar com o Stripe.
+
+Observabilidade: o backend registra um log estruturado com `action=portal.opened`, `org_id` e `user_id` e incrementa a métrica `billing_portal_open_total{org_id}` quando disponível.
+
 Jobs finalizados expõem `processed_rows`, `error_rows` e `error_report_uri`. Consulte `/contacts/imports/{job_id}` para status. Erros: `400` (arquivo inválido) e `500` (falha ao agendar job).
 
 ## Provedores

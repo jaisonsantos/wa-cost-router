@@ -11,6 +11,7 @@ const useConnectionsMock = vi.fn();
 const useTestConnectionMock = vi.fn();
 const useBillingSummaryMock = vi.fn();
 const useCreateBillingCheckoutMock = vi.fn();
+const useCreateBillingPortalMock = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
@@ -29,6 +30,7 @@ vi.mock("@/hooks/useApi", () => ({
   useTestConnection: () => useTestConnectionMock(),
   useBillingSummary: () => useBillingSummaryMock(),
   useCreateBillingCheckout: () => useCreateBillingCheckoutMock(),
+  useCreateBillingPortal: () => useCreateBillingPortalMock(),
 }));
 
 const renderSettings = () =>
@@ -52,6 +54,7 @@ describe("Settings connections", () => {
     useCreateBillingCheckoutMock.mockReset();
     useBillingSummaryMock.mockReturnValue({ data: null, isLoading: false });
     useCreateBillingCheckoutMock.mockReturnValue({ mutate: vi.fn(), isPending: false });
+  useCreateBillingPortalMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     useConnectionsMock.mockReset();
   });
 

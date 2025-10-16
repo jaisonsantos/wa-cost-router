@@ -38,6 +38,9 @@ class StripeGateway:
     def retrieve_payment_method(self, payment_method_id: str) -> Any:
         return self._client.payment_methods.retrieve(payment_method_id)
 
+    def create_billing_portal_session(self, **kwargs: Any) -> Any:
+        return self._client.billing_portal.sessions.create(**kwargs)
+
 
 @lru_cache(maxsize=1)
 def get_stripe_gateway() -> StripeGateway:

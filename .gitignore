@@ -41,6 +41,25 @@ venv/
 coverage.xml
 htmlcov/
 
+# Local virtualenvs used in CI/dev
+.venv-ci/
+.venv*
+
+# Python bytecode
+*.pyc
+
+# Cache / build
+.cache/
+build/
+tmp/
+
+# OS files
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+
 # ---- Env / Segredos
 .env
 *.env

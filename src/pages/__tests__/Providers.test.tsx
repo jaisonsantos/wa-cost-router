@@ -15,6 +15,7 @@ vi.mock("@/hooks/useApi", () => ({
   useProviders: () => useProvidersMock(),
   useSetProviderCredentials: () => useSetProviderCredentialsMock(),
   useHealthCheckProvider: () => useHealthCheckProviderMock(),
+  useCreateBillingPortal: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({

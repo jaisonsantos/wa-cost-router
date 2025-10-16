@@ -1,0 +1,17 @@
+{
+  "task": "Customer Portal (Stripe) backend + botão na UI",
+  "branch": "feat/billing-customer-portal",
+  "completed": true,
+  "files_changed": [
+    "backend/app/api/billing.py",
+    "backend/app/services/billing/stripe_client.py",
+    "backend/tests/test_billing_portal.py",
+    "src/lib/api.ts",
+    "src/hooks/useApi.ts",
+    "src/pages/Settings.tsx",
+    "tests/e2e/billing-portal.spec.ts",
+    "docs/api/API_REFERENCE.md",
+    "README.md",
+    "TASKS.md"
+  ]
+}

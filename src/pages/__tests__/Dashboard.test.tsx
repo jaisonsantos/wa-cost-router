@@ -21,6 +21,7 @@ vi.mock("@/hooks/useApi", () => ({
   useProviderMetrics: () => useProviderMetricsMock(),
   useChannelMetrics: () => useChannelMetricsMock(),
   useQueueMetrics: () => useQueueMetricsMock(),
+  useCreateBillingPortal: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 const renderDashboard = () =>
