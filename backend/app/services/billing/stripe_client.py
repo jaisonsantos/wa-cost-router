@@ -67,13 +67,11 @@ class StripeGateway:
 @lru_cache(maxsize=1)
 def get_stripe_gateway() -> StripeGateway:
     """Return a cached :class:`StripeGateway` instance."""
-
     return StripeGateway(settings.STRIPE_SECRET_KEY)
 
 
 def verify_webhook_event(payload: bytes, signature: str | None) -> Any:
     """Validate a Stripe webhook payload and return the parsed event."""
-
     secret = settings.STRIPE_WEBHOOK_SECRET
     if not secret:
         raise StripeConfigurationError("STRIPE_WEBHOOK_SECRET is not configured")

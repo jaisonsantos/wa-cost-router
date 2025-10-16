@@ -18,6 +18,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 vi.mock("@/hooks/useApi", () => ({
   useMessageJobs: (params?: unknown) => useMessageJobsMock(params),
   useMessageJobDetails: (jobId: string, params?: unknown) => useMessageJobDetailsMock(jobId, params),
+  useCreateBillingPortal: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 beforeAll(() => {

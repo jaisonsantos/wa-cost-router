@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -186,21 +186,40 @@ class RoutedActionItem(BaseModel):
     created_at: datetime
     message_event_id: Optional[UUID]
     dry_run: bool = False
+    estimated_cost_minor: Optional[int] = None
+    baseline_cost_minor: Optional[int] = None
+    fallback_chain: list[Dict[str, Optional[str]]] = Field(default_factory=list)
+
+
+
+class DryRunSimulationSummary(BaseModel):
+    rule_id: Optional[UUID]
+    rule_name: Optional[str]
+    provider_id: Optional[UUID]
+    provider_name: Optional[str]
+    estimated_cost_minor: int
+    baseline_cost_minor: int
+    fallback_chain: list[Dict[str, Optional[str]]] = Field(default_factory=list)
 
 
 class RoutedActionChainResponse(BaseModel):
     job_id: UUID
     actions: list[RoutedActionItem]
+    latest_simulation: Optional[DryRunSimulationSummary] = None
 
 
 def _serialize_routed_action(
     *, job_id: UUID, action: RoutedAction
-) -> Optional[RoutedActionItem]:
+) -> Tuple[Optional[RoutedActionItem], Optional[Dict[str, Any]]]:
     payload = action.provider_response or {}
     if payload.get("job_id") != str(job_id):
-        return None
+        return None, None
 
-    return RoutedActionItem(
+    fallback_chain = _normalize_fallback_chain_payload(payload.get("fallback_chain"))
+    estimated_cost = _coerce_int(payload.get("estimated_cost_minor"))
+    baseline_cost = _coerce_int(payload.get("baseline_cost_minor"))
+
+    item = RoutedActionItem(
         id=action.id,
         rule_id=action.rule_id,
         rule_name=payload.get("rule_name"),
@@ -213,6 +232,107 @@ def _serialize_routed_action(
         created_at=action.created_at,
         message_event_id=action.message_event_id,
         dry_run=bool(action.dry_run),
+        estimated_cost_minor=estimated_cost,
+        baseline_cost_minor=baseline_cost,
+        fallback_chain=fallback_chain,
+    )
+    return item, payload
+
+
+def _normalize_fallback_chain_payload(
+    value: Any,
+) -> list[Dict[str, Optional[str]]]:
+    if not value:
+        return []
+
+    normalized: list[Dict[str, Optional[str]]] = []
+    if isinstance(value, list):
+        for candidate in value:
+            if not isinstance(candidate, dict):
+                continue
+            normalized.append(
+                {
+                    "provider_id": str(candidate.get("provider_id"))
+                    if candidate.get("provider_id") is not None
+                    else None,
+                    "provider_name": (
+                        str(candidate.get("provider_name"))
+                        if candidate.get("provider_name") is not None
+                        else None
+                    ),
+                }
+            )
+    return normalized
+
+
+def _coerce_int(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):  # pragma: no cover - defensive guard
+        return None
+
+
+def _build_dry_run_summary_from_payload(
+    payload: Dict[str, Any]
+) -> Optional[DryRunSimulationSummary]:
+    if not payload:
+        return None
+
+    estimated_cost = _coerce_int(payload.get("estimated_cost_minor"))
+    baseline_cost = _coerce_int(payload.get("baseline_cost_minor"))
+    if estimated_cost is None or baseline_cost is None:
+        return None
+
+    fallback_chain = _normalize_fallback_chain_payload(payload.get("fallback_chain"))
+    return DryRunSimulationSummary(
+        rule_id=coerce_uuid(payload.get("rule_id")),
+        rule_name=payload.get("rule_name"),
+        provider_id=coerce_uuid(payload.get("provider_id")),
+        provider_name=payload.get("provider_name"),
+        estimated_cost_minor=estimated_cost,
+        baseline_cost_minor=baseline_cost,
+        fallback_chain=fallback_chain,
+    )
+
+
+def _build_routing_chain_response(
+    *,
+    job_id: UUID,
+    actions: list[RoutedAction],
+    simulation_payload: Optional[Dict[str, Any]] = None,
+) -> RoutedActionChainResponse:
+    serialized: list[RoutedActionItem] = []
+    latest_simulation = simulation_payload
+
+    for action in actions:
+        item, payload = _serialize_routed_action(job_id=job_id, action=action)
+        if item is None:
+            continue
+        serialized.append(item)
+        if latest_simulation is None and action.dry_run and payload is not None:
+            latest_simulation = payload
+
+    summary = (
+        _build_dry_run_summary_from_payload(latest_simulation)
+        if latest_simulation
+        else None
+    )
+
+    return RoutedActionChainResponse(
+        job_id=job_id,
+        actions=serialized,
+        latest_simulation=summary,
+    )
+
+
+def _load_routed_actions(db: Session, job: MessageJob) -> list[RoutedAction]:
+    return (
+        db.query(RoutedAction)
+        .filter(RoutedAction.org_id == job.org_id)
+        .order_by(RoutedAction.created_at.asc())
+        .all()
     )
 
 @router.post(
@@ -498,21 +618,9 @@ def get_message_routing_chain(
     if job is None:
         raise HTTPException(status_code=404, detail="Message job not found")
 
-    actions = (
-        db.query(RoutedAction)
-        .filter(RoutedAction.org_id == job.org_id)
-        .order_by(RoutedAction.created_at.asc())
-        .all()
-    )
+    actions = _load_routed_actions(db, job)
 
-    filtered: list[RoutedActionItem] = []
-    for action in actions:
-        item = _serialize_routed_action(job_id=job_id, action=action)
-        if item is None:
-            continue
-        filtered.append(item)
-
-    return RoutedActionChainResponse(job_id=job_id, actions=filtered)
+    return _build_routing_chain_response(job_id=job_id, actions=actions)
 
 
 @router.post(
@@ -524,9 +632,6 @@ def simulate_message_delivery(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Validate access using existing routing chain endpoint
-    get_message_routing_chain(job_id=job_id, current_user=current_user, db=db)
-
     job = (
         db.query(MessageJob)
         .filter(
@@ -546,7 +651,7 @@ def simulate_message_delivery(
     )
 
     try:
-        dry_run_service.simulate(job=job)
+        result = dry_run_service.simulate(job=job)
     except ContactOptOutError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except RoutingPolicyViolation as exc:
@@ -560,7 +665,12 @@ def simulate_message_delivery(
         logger.exception("Failed to simulate delivery for job %s", job_id)
         raise HTTPException(status_code=500, detail="Failed to simulate delivery")
 
-    return get_message_routing_chain(job_id=job_id, current_user=current_user, db=db)
+    actions = _load_routed_actions(db, job)
+    return _build_routing_chain_response(
+        job_id=job_id,
+        actions=actions,
+        simulation_payload=result.payload,
+    )
 
 def _normalize_channel_address_value(
     channel: Optional[str],

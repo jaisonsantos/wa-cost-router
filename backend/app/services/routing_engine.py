@@ -320,6 +320,21 @@ class RoutingEngine:
                 .first()
             )
 
+        # If there is still no country-specific or GLOBAL rate, attempt a last-resort
+        # lookup for any RateCard for this provider and category. This helps in tests
+        # and in loosely-configured deployments where a provider may have a rate
+        # without a country scope defined. Prefer the most recent rate when found.
+        if not rate:
+            rate = (
+                self.db.query(RateCard)
+                .filter(
+                    RateCard.provider_id == provider_id,
+                    RateCard.category == category,
+                )
+                .order_by(RateCard.effective_from.desc())
+                .first()
+            )
+
         return rate.unit_cost_minor if rate else 0
     
     def _find_cheapest_provider(
@@ -425,6 +440,21 @@ class RoutingEngine:
             .order_by(RateCard.unit_cost_minor.desc())
             .first()
         )
+
+        # If no country-specific baseline rate exists, fall back to the highest
+        # available rate for the category across active providers in the org.
+        if not rate:
+            rate = (
+                self.db.query(RateCard)
+                .join(Provider, RateCard.provider_id == Provider.id)
+                .filter(
+                    Provider.org_id == self.org_id,
+                    RateCard.category == category,
+                    Provider.status == "active",
+                )
+                .order_by(RateCard.unit_cost_minor.desc())
+                .first()
+            )
 
         return rate.unit_cost_minor if rate else 0
 

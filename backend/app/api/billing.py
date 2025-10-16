@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, HttpUrl
 from sqlalchemy.orm import Session
 from stripe import error as stripe_error
+import logging
 
 from app.api.dependencies import get_current_user
 from app.core.config import settings
@@ -28,6 +29,14 @@ from app.services.billing import (
 from app.workers.billing_usage import enqueue_billing_usage_sync
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# lightweight metric for portal opens
+try:
+    from app.metrics import Counter as _Counter
+    BILLING_PORTAL_COUNTER = _Counter("billing_portal_open_total", "Total de aberturas do portal de cobrança", labelnames=["org_id"])
+except Exception:
+    BILLING_PORTAL_COUNTER = None
 
 
 class CheckoutRequest(BaseModel):
@@ -250,6 +259,76 @@ def _ensure_subscription(
     )
     db.add(subscription)
     return subscription
+
+
+class PortalResponse(BaseModel):
+    url: HttpUrl
+
+
+@router.get("/portal", response_model=PortalResponse)
+def open_billing_portal(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PortalResponse:
+    """Create a Stripe billing portal session and return the URL.
+
+    The route is authenticated and scoped to the current organization. We record
+    a lightweight audit via structured logs and increment a prometheus counter
+    labeled by org_id when available.
+    """
+    try:
+        gateway = get_stripe_gateway()
+    except StripeConfigurationError as exc:
+        logger.exception("Stripe configuration error when opening billing portal", extra={"action": "portal.opened", "org_id": str(current_user["org_id"]), "user_id": str(current_user["user_id"])})
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    org, user = _get_org_user(db, current_user["org_id"], current_user["user_id"])
+
+    # Resolve customer id from subscription record
+    subscription = _get_subscription_by_org(db, org.id)
+    customer_id = subscription.stripe_customer_id if subscription else None
+
+    if not customer_id:
+        # No customer exists: cannot open portal. Log and return 400.
+        logger.warning("Attempt to open billing portal without Stripe customer", extra={"action": "portal.opened", "org_id": str(org.id), "user_id": str(user.id)})
+        raise HTTPException(status_code=400, detail="No Stripe customer configured for this organization")
+
+    # try to build a return_url to internal summary route, fall back to frontend settings
+    return_url = None
+    try:
+        if hasattr(request, "url_for"):
+            return_url = str(request.url_for("get_billing_summary"))
+    except Exception:
+        return_url = None
+
+    if not return_url:
+        origin = request.headers.get("origin") or ""
+        return_url = f"{origin}/settings" if origin else "/settings"
+
+    try:
+        session = gateway.create_billing_portal_session(customer=customer_id, return_url=return_url)
+    except stripe_error.StripeError as exc:  # pragma: no cover
+        logger.exception("Stripe error creating billing portal session", extra={"action": "portal.opened", "org_id": str(org.id), "user_id": str(user.id)})
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    # Structured audit log
+    extra = {
+        "action": "portal.opened",
+        "org_id": str(org.id),
+        "user_id": str(user.id),
+        "ip": request.client.host if request.client else None,
+    }
+    logger.info("Billing portal opened", extra=extra)
+
+    # Metrics
+    try:
+        if BILLING_PORTAL_COUNTER is not None:
+            BILLING_PORTAL_COUNTER.labels(org_id=str(org.id)).inc()
+    except Exception:
+        logger.exception("Failed to increment billing portal metric", extra={"action": "metrics.error"})
+
+    return PortalResponse(url=session.url)
 
 
 @router.post("/checkout", response_model=CheckoutResponse)

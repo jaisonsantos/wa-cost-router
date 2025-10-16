@@ -212,6 +212,12 @@ class ApiClient {
     });
   }
 
+  async createBillingPortal(): Promise<{ url: string }> {
+    return this.request<{ url: string }>("/billing/portal", {
+      method: "GET",
+    });
+  }
+
   // Organizations
   async getCurrentOrg(): Promise<Organization> {
     return this.request<Organization>("/orgs/current");

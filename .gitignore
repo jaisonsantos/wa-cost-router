@@ -32,19 +32,24 @@ __pycache__/
 *.pyd
 *.egg-info/
 .eggs/
-.venv/
 venv/
+.venv/
 .venv*
 .venv-ci/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# ---- Coverage
 .coverage
+coverage/
 coverage.xml
 htmlcov/
 
-# Coverage report directory
-coverage/
+# ---- Cache / Build
+.cache/
+build/
+tmp/
 
 # ---- Env / Segredos
 .env

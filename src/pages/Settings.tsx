@@ -24,6 +24,7 @@ import {
   useTestConnection,
   useBillingSummary,
   useCreateBillingCheckout,
+  useCreateBillingPortal,
 } from "@/hooks/useApi";
 import { toast } from "@/hooks/use-toast";
 import type { IntegrationConnection } from "@/types/api";
@@ -66,6 +67,7 @@ const Settings = () => {
   const testConnection = useTestConnection();
   const { data: billingSummary, isLoading: billingLoading } = useBillingSummary();
   const createBillingCheckout = useCreateBillingCheckout();
+  const createBillingPortal = useCreateBillingPortal();
 
   const [waForm, setWaForm] = useState<WaConnectionForm>({
     business_id: "",
@@ -849,11 +851,32 @@ const Settings = () => {
                     )}
                     <Button
                       variant="outline"
-                      onClick={handleManagePlan}
-                      disabled={billingLoading || createBillingCheckout.isPending}
+                        onClick={handleManagePlan}
+                        disabled={billingLoading || createBillingCheckout.isPending}
                     >
                       {createBillingCheckout.isPending ? "Redirecionando..." : "Alterar Plano"}
                     </Button>
+                      <Button
+                        onClick={async () => {
+                          try {
+                            const resp = await createBillingPortal.mutateAsync();
+                            window.location.href = resp.url;
+                          } catch (err) {
+                            toast({
+                              title: "Não foi possível abrir o portal",
+                              description: (
+                                <span>
+                                  Contate o suporte: <a href="mailto:support@example.com">support@example.com</a>
+                                </span>
+                              ) as unknown as string,
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        disabled={billingLoading || createBillingPortal.isPending}
+                      >
+                        {createBillingPortal.isPending ? "Abrindo..." : "Gerenciar assinatura"}
+                      </Button>
                     <Button variant="outline" disabled>
                       Cancelar Assinatura
                     </Button>

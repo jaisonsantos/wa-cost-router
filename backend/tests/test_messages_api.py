@@ -157,8 +157,13 @@ DEFAULT_NUMBER = "+5511999999999"
 
 
 def _bootstrap_routing_stack(db_session, org_id, *, to_number: str = DEFAULT_NUMBER):
-    organization = Organization(id=org_id, name="Test Org")
-    db_session.add(organization)
+    # Ensure organization exists (some tests create it beforehand)
+    existing_org = (
+        db_session.query(Organization).filter(Organization.id == org_id).first()
+    )
+    if existing_org is None:
+        organization = Organization(id=org_id, name="Test Org")
+        db_session.add(organization)
 
     provider = Provider(
         org_id=org_id,
@@ -1041,6 +1046,27 @@ def test_dry_run_endpoint_creates_simulation_without_state_changes(
     assert simulated_action["status"] == "dry_run"
     assert simulated_action["provider_name"] == primary_seed["provider"].name
     assert simulated_action["attempt_number"] is None
+    assert simulated_action["estimated_cost_minor"] == 180
+    assert simulated_action["baseline_cost_minor"] == 200
+    assert simulated_action["fallback_chain"] == [
+        {
+            "provider_id": str(fallback_provider.id),
+            "provider_name": fallback_provider.name,
+        }
+    ]
+
+    summary = chain_payload.get("latest_simulation")
+    assert summary is not None
+    assert summary["provider_id"] == str(primary_seed["provider"].id)
+    assert summary["provider_name"] == primary_seed["provider"].name
+    assert summary["estimated_cost_minor"] == 180
+    assert summary["baseline_cost_minor"] == 200
+    assert summary["fallback_chain"] == [
+        {
+            "provider_id": str(fallback_provider.id),
+            "provider_name": fallback_provider.name,
+        }
+    ]
 
     job_after = db_session.get(MessageJob, uuid.UUID(job_id))
     assert job_after is not None
@@ -1064,6 +1090,47 @@ def test_dry_run_endpoint_creates_simulation_without_state_changes(
     if fallback_chain:
         assert fallback_chain[0].get("provider_id") == str(fallback_provider.id)
         assert fallback_chain[0].get("provider_name") == fallback_provider.name
+
+
+def test_dry_run_respects_template_metadata(client, db_session, organization_factory):
+    test_client, org_id = client
+    organization_factory(org_id=org_id)
+
+    provider, contact = _bootstrap_routing_stack(db_session, org_id)
+
+    template = WATemplate(
+        org_id=org_id,
+        name="blocked",
+        category="MARKETING",
+        language="pt_BR",
+        status="approved",
+        meta={"blocked_countries": ["BR"]},
+    )
+    db_session.add(template)
+    db_session.flush()
+
+    job = MessageJob(
+        id=uuid.uuid4(),
+        org_id=org_id,
+        idempotency_key="dry-run-policy",
+        to_number=contact.phone,
+        channel="whatsapp",
+        channel_address=contact.phone,
+        contact_id=contact.id,
+        template_id="blocked",
+        template_category="MARKETING",
+        variables={},
+        country_iso="BR",
+        status=JobStatusEnum.pending,
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    response = test_client.post(f"/messages/jobs/{job.id}/dry-run")
+
+    assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert detail["code"] == "template_blocked_country"
 
 
 def test_send_message_idempotency_with_contact_id(

@@ -76,6 +76,15 @@ export const useCreateBillingCheckout = () => {
   });
 };
 
+export const useCreateBillingPortal = () => {
+  return useMutation<{ url: string }, Error, void>({
+    mutationFn: () => api.createBillingPortal(),
+    onError: (error: Error) => {
+      toast({ title: "Erro ao abrir portal de cobrança", description: error.message, variant: "destructive" });
+    },
+  });
+};
+
 // Events
 export const useEvents = (params?: EventsQueryParams) => {
   const queryKey = [
